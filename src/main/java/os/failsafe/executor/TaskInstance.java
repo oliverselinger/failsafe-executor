@@ -23,8 +23,6 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
@@ -36,8 +34,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 
 class TaskInstance {
-
-    private static final Logger log = LoggerFactory.getLogger(TaskInstance.class);
 
     private static final String TAKE_TASK = "UPDATE TASK_INSTANCE SET VERSION=?, START_TIME=? WHERE VERSION=? AND ID=?";
     private static final String DELETE_TASK = "DELETE FROM TASK_INSTANCE WHERE ID = ?";
@@ -88,8 +84,6 @@ class TaskInstance {
     }
 
     void delete() {
-        log.info("delete: " + id);
-
         try (Connection con = dataSource.getConnection();
              PreparedStatement ps = con.prepareStatement(DELETE_TASK)) {
             ps.setString(1, this.id);
@@ -100,8 +94,6 @@ class TaskInstance {
     }
 
     void fail(Exception exception) {
-        log.error("Execution of task instance with id {} failed", id, exception);
-
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
 

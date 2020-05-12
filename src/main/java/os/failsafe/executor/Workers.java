@@ -23,8 +23,6 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import os.failsafe.executor.utils.NamedThreadFactory;
 
 import java.util.Map;
@@ -35,8 +33,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class Workers {
-
-    private static final Logger log = LoggerFactory.getLogger(Workers.class);
 
     private static final int FILL_UP_QUEUE_THRESHOLD = 3;
 
