@@ -22,7 +22,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
     <version>1.0-SNAPSHOT</version>
 </dependency>
 ```
-2. Create the tables in your database. See [sql](failsafe-executor/src/main/resources/tables.sql)
+2. Create the tables in your database. See [sql](src/main/resources/tables.sql)
 
 3. Instantiate and start the FailsafeExecutor, which then will start executing any defined tasks.
 
