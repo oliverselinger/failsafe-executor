@@ -1,5 +1,9 @@
 # failsafe-executor
 
+[![](https://jitpack.io/v/oliverselinger/failsafe-executor.svg)](https://jitpack.io/#oliverselinger/failsafe-executor)
+[![CircleCI](https://circleci.com/gh/oliverselinger/failsafe-executor.svg?style=svg)](https://circleci.com/gh/oliverselinger/failsafe-executor)
+
+
 **STILL WORK IN PROGRESS**
 
 Persistent executor service for Java that was inspired by the need for a reliable and multi-node compatible execution of processes simpler than BPMN workflow engines provide.
@@ -10,7 +14,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
 * **Multi-node compatible**. Guarantees at least once execution of a submitted task
 * **Lightweight**. Small code base.
-* **Minimal dependencies**. (slf4j)
+* **No dependencies**.
 
 ## Getting started
 

@@ -23,8 +23,6 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
 
@@ -37,8 +35,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class FailsafeExecutor {
-
-    private static final Logger log = LoggerFactory.getLogger(TaskInstance.class);
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final Workers workers;
@@ -89,7 +85,6 @@ public class FailsafeExecutor {
             }
 
             TaskInstance taskInstance = possibleTask.get();
-            log.info("findNextTask: " + taskInstance.id);
             boolean taken = taskInstance.take(connection);
 
             if (!taken) {
