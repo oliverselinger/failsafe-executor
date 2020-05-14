@@ -25,23 +25,25 @@ package os.failsafe.executor.db;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import os.failsafe.executor.utils.FileUtil;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-public class H2DbExtension implements BeforeAllCallback, AfterEachCallback {
+public class H2DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
 
-    private DataSource dataSource;
+    private HikariDataSource dataSource;
 
     @Override
     public void beforeAll(ExtensionContext extensionContext) {
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl("jdbc:h2:mem:taskdb;MODE=Oracle");
+        config.setJdbcUrl("jdbc:h2:mem:taskdb");
         config.setDriverClassName("org.h2.Driver");
         config.setUsername("sa");
         config.setPassword("");
@@ -52,7 +54,7 @@ public class H2DbExtension implements BeforeAllCallback, AfterEachCallback {
         try (Connection con = dataSource.getConnection();
              Statement statement = con.createStatement()) {
 
-            String createTablesSql = FileUtil.readResourceFile("tables.sql");
+            String createTablesSql = FileUtil.readResourceFile("table.sql");
             statement.execute(createTablesSql);
 
         } catch (SQLException e) {
@@ -64,8 +66,7 @@ public class H2DbExtension implements BeforeAllCallback, AfterEachCallback {
     public void afterEach(ExtensionContext extensionContext) {
         try (Connection con = dataSource.getConnection();
              Statement statement = con.createStatement()) {
-            statement.executeUpdate("TRUNCATE TABLE TASK_INCIDENT");
-            statement.executeUpdate("TRUNCATE TABLE TASK_INSTANCE");
+            statement.executeUpdate("TRUNCATE TABLE PERSISTENT_TASK");
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -73,5 +74,10 @@ public class H2DbExtension implements BeforeAllCallback, AfterEachCallback {
 
     public DataSource getDataSource() {
         return dataSource;
+    }
+
+    @Override
+    public void afterAll(ExtensionContext extensionContext) {
+        dataSource.close();
     }
 }

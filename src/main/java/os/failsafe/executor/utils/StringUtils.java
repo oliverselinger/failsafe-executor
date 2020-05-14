@@ -21,25 +21,21 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.utils;
 
-import java.time.Instant;
+public class StringUtils {
 
-public class Incident {
+    private StringUtils() {
+    }
 
-    private final String id;
-    private final String message;
-    private final String stackTrace;
-    private final Long taskId;
-    private final Instant lastModifiedDate;
-    private final Instant createdDate;
+    public static String abbreviate(String input, int maxLength) {
+        if (input == null) {
+            return null;
+        }
 
-    public Incident(String id, String message, String stackTrace, Long taskId, Instant lastModifiedDate, Instant createdDate) {
-        this.id = id;
-        this.message = message;
-        this.stackTrace = stackTrace;
-        this.taskId = taskId;
-        this.lastModifiedDate = lastModifiedDate;
-        this.createdDate = createdDate;
+        if (input.length() <= maxLength)
+            return input;
+        else
+            return input.substring(0, maxLength-3) + "...";
     }
 }

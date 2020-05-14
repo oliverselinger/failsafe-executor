@@ -21,21 +21,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.db;
+package os.failsafe.executor.utils;
 
-import java.net.URI;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
-public class FileUtil {
+public class ExceptionUtils {
 
-    public static String readResourceFile(String name) {
-        try {
-            URI uri = FileUtil.class.getClassLoader().getResource(name).toURI();
-            return Files.readString(Paths.get(uri), Charset.defaultCharset());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    private ExceptionUtils() {
     }
+
+    public static String stackTraceAsString(Exception exception) {
+        StringWriter sw = new StringWriter();
+        exception.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
 }

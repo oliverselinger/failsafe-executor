@@ -10,60 +10,74 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 
 ## Features
 
-* **Persistent** tasks. Requires only two database-tables for persistence.
+* **Failsafe** tasks. Requires only one database-table for persistence.
+* **Reliable** execution. Guarantees at least once execution of a submitted tasks
+* **Multi-node compatible**. Coordination between nodes with optimistic locking
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
-* **Multi-node compatible**. Guarantees at least once execution of a submitted task
 * **Lightweight**. Small code base.
 * **No dependencies**.
 
 ## Getting started
 
-1. Add maven dependency
+1. Add the JitPack repository to your build file
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+2. Add the dependency
 ```xml
 <dependency>
-    <groupId>os.failsafe.executor</groupId>
-    <artifactId>failsafe-scheduler</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <groupId>com.github.oliverselinger</groupId>
+    <artifactId>failsafe-executor</artifactId>
+    <version>1.0.0.RC1</version>
 </dependency>
 ```
-2. Create the tables in your database. See [sql](src/main/resources/tables.sql)
 
-3. Instantiate and start the FailsafeExecutor, which then will start executing any defined tasks.
+3. Create the table in your database. See [sql](src/main/resources/table.sql)
+
+3. Instantiate and start the FailsafeExecutor, which then will start executing any submitted tasks.
 
 ```java
-FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, 5, 1, 1);
+FailsafeExecutor failsafeExecutor = new FailsafeExecutor(dataSource);
 failsafeExecutor.start();
 ```
 
 ## Execute Tasks
 
-### Define a task
+### Define the execution logic
 
-The creation of a task requires an arbitrary chosen id that must be unique within the application. The actual task is defined via a consumer that accepts a String for state transfer.
-State transfer via complex objects through serialization is not recommended since it may lead to complex migration scenarios in case business logic changes.
-We recommend to us just an id that your business logic is able to interpret properly.
+You need to define the program that should be executed by the FailsafeExecutor. For that, create a taskDefinition. It consists of an arbitrary chosen id that must be
+unique application-wide. The actual logic is defined via a consumer that accepts a String as parameter, used for state transfer.
+The parameter can be anything but we recommend to use just a single ID that your business logic is able to interpret properly. Avoid using a complex object
+(through serialization) since it may lead to complex migration scenarios in case business logic changes.
 
 ```java
-Task task = Tasks.of("HelloWorldTask", parameter -> log.info("Hello {}", parameter));
-failsafeExecutor.register(task);
+TaskDefinition taskDefinition = TaskDefinitions.of("UniqueTaskName", parameter -> log.info("Hello {}", parameter));
+failsafeExecutor.defineTask(taskDefinition);
 ```
 
-### Execute a task
+### Create and execute a task
 
-The execution of a task is done by creation of an instance of the task that defines the parameter. The instance is then executed some time in the future by passing it to the FailsafeExecutor.
+To execute a task create a new instance by using the TaskDefinition. There you can define the parameter.
+The task is then executed some time in the future by passing it to the FailsafeExecutor.
 
 ```java
-Task.Instance instance = task.instance(" world!");
-String taskInstanceId = failsafeExecutor.execute(instance);
+Task task = taskDefinition.newTask(" world!");
+PersistentTask persistentTask = failsafeExecutor.execute(task);
 ```
 
 ## Monitoring the execution
 
-The end of an execution of a task instance can be observed by subscribing a ExecutionEndedListener at the FailsafeExecutor.
+The result of execution of a task can be observed by subscribing a listener at the TaskDefinition.
 
 ```java
-Task.ExecutionEndedListener executionEndedListener = new Task.ExecutionEndedListener() { ... };
-task.subscribe(executionEndedListener);
+TaskExecutionListener executionListener = new TaskExecutionListener() { ... };
+taskDefinition.subscribe(executionListener);
 ```
 
 The listener get called at the end of the execution in an at least once manner.

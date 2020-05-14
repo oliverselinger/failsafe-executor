@@ -21,11 +21,48 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
+package os.failsafe.executor.task;
 
-import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
-public interface SystemClock {
-    LocalDateTime now();
+public class TaskDefinitions {
 
+    public static TaskDefinition of(String name, Consumer<String> task) {
+        return new TaskDefinition() {
+
+            private final List<TaskExecutionListener> listeners = new ArrayList<>();
+
+            @Override
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public void execute(String parameter) {
+                task.accept(parameter);
+            }
+
+            @Override
+            public Task newTask(String parameter) {
+                return new Task(name, parameter);
+            }
+
+            @Override
+            public void subscribe(TaskExecutionListener listener) {
+                listeners.add(listener);
+            }
+
+            @Override
+            public void unsubscribe(TaskExecutionListener listener) {
+                listeners.remove(listener);
+            }
+
+            @Override
+            public List<TaskExecutionListener> allListeners() {
+                return listeners;
+            }
+        };
+    }
 }

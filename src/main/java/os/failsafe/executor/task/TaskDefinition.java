@@ -21,28 +21,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.task;
 
-import os.failsafe.executor.utils.SystemClock;
+import java.util.List;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.LocalDateTime;
+public interface TaskDefinition {
 
-public class TestSystemClock implements SystemClock {
+    String getName();
 
-    private Clock clock = Clock.systemDefaultZone();
+    void execute(String parameter);
 
-    @Override
-    public LocalDateTime now() {
-        return LocalDateTime.now(clock);
-    }
+    Task newTask(String parameter);
 
-    public void timeTravelBy(Duration duration) {
-        this.clock = Clock.offset(this.clock, duration);
-    }
+    void subscribe(TaskExecutionListener listener);
 
-    public void resetTime() {
-        this.clock = Clock.systemDefaultZone();
-    }
+    void unsubscribe(TaskExecutionListener listener);
+
+    List<TaskExecutionListener> allListeners();
+
 }

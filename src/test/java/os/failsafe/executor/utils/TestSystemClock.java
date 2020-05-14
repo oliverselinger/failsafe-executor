@@ -21,48 +21,28 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.utils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
+import os.failsafe.executor.utils.SystemClock;
 
-public class Tasks {
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
-    public static Task of(String name, Consumer<String> task) {
-        return new Task() {
+public class TestSystemClock implements SystemClock {
 
-            private final List<ExecutionEndedListener> listeners = new ArrayList<>();
+    private Clock clock = Clock.systemDefaultZone();
 
-            @Override
-            public String getName() {
-                return name;
-            }
+    @Override
+    public LocalDateTime now() {
+        return LocalDateTime.now(clock);
+    }
 
-            @Override
-            public void execute(String parameter) {
-                task.accept(parameter);
-            }
+    public void timeTravelBy(Duration duration) {
+        this.clock = Clock.offset(this.clock, duration);
+    }
 
-            @Override
-            public Instance instance(String parameter) {
-                return new Instance(name, parameter);
-            }
-
-            @Override
-            public void subscribe(ExecutionEndedListener listener) {
-                listeners.add(listener);
-            }
-
-            @Override
-            public void unsubscribe(ExecutionEndedListener listener) {
-                listeners.remove(listener);
-            }
-
-            @Override
-            public void notifyListeners(String taskId) {
-                listeners.forEach(listener -> listener.executed(name, taskId));
-            }
-        };
+    public void resetTime() {
+        this.clock = Clock.systemDefaultZone();
     }
 }

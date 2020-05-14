@@ -25,7 +25,10 @@ package os.failsafe.executor.utils;
 
 import java.time.LocalDateTime;
 
-public interface SystemClock {
-    LocalDateTime now();
+public class DefaultSystemClock implements SystemClock {
 
+    @Override
+    public LocalDateTime now() {
+        return LocalDateTime.now();
+    }
 }

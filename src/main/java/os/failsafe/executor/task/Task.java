@@ -21,35 +21,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.task;
 
-public interface Task {
+public class Task {
 
-    String getName();
+    public final String name;
+    public final String parameter;
 
-    void execute(String parameter);
-
-    Instance instance(String parameter);
-
-    void subscribe(ExecutionEndedListener listener);
-
-    void unsubscribe(ExecutionEndedListener listener);
-
-    void notifyListeners(String taskId);
-
-    class Instance {
-
-        final String name;
-        final String parameter;
-
-        public Instance(String name, String parameter) {
-            this.name = name;
-            this.parameter = parameter;
-        }
+    public Task(String name, String parameter) {
+        this.name = name;
+        this.parameter = parameter;
     }
-
-    interface ExecutionEndedListener {
-        void executed(String name, String taskInstanceId);
-    }
-
 }

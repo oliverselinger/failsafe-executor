@@ -21,11 +21,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
+package os.failsafe.executor.task;
 
-import java.time.LocalDateTime;
-
-public interface SystemClock {
-    LocalDateTime now();
-
+public interface TaskExecutionListener {
+    void succeeded(String name, String taskId);
+    void failed(String name, String taskId);
 }

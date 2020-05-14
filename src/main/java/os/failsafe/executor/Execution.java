@@ -21,11 +21,41 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
+package os.failsafe.executor;
 
-import java.time.LocalDateTime;
+import os.failsafe.executor.task.TaskDefinition;
 
-public interface SystemClock {
-    LocalDateTime now();
+class Execution {
 
+    private final TaskDefinition taskDefinition;
+    private final PersistentTask persistentTask;
+
+    Execution(TaskDefinition taskDefinition, PersistentTask persistentTask) {
+        this.taskDefinition = taskDefinition;
+        this.persistentTask = persistentTask;
+    }
+
+    public String perform() {
+        try {
+            taskDefinition.execute(persistentTask.getParameter());
+
+            notifySuccess();
+
+            persistentTask.remove();
+        } catch (Exception e) {
+            persistentTask.fail(e);
+
+            notifyFailed();
+        }
+
+        return persistentTask.getId();
+    }
+
+    private void notifySuccess() {
+        taskDefinition.allListeners().forEach(listener -> listener.succeeded(persistentTask.getName(), persistentTask.getId()));
+    }
+
+    private void notifyFailed() {
+        taskDefinition.allListeners().forEach(listener -> listener.failed(persistentTask.getName(), persistentTask.getId()));
+    }
 }

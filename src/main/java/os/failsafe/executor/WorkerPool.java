@@ -25,51 +25,34 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.utils.NamedThreadFactory;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-class Workers {
+class WorkerPool {
 
-    private static final int FILL_UP_QUEUE_THRESHOLD = 3;
+    static final int FILL_UP_QUEUE_THRESHOLD = 3;
 
-    private final Map<String, Task> tasksByIdentifier = new ConcurrentHashMap<>();
     private final AtomicInteger idleWorkerCount;
     private final ExecutorService workers;
 
-    Workers(int threadCount) {
+    WorkerPool(int threadCount) {
         idleWorkerCount = new AtomicInteger(threadCount + FILL_UP_QUEUE_THRESHOLD);
         workers = Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
     }
 
-    public void register(Task task) {
-        tasksByIdentifier.put(task.getName(), task);
-    }
-
-    public Future<String> execute(TaskInstance taskInstance) {
+    public Future<String> execute(Execution execution) {
         idleWorkerCount.decrementAndGet();
-        return workers.submit(() -> runTask(taskInstance));
+        return workers.submit(() -> runTask(execution));
     }
 
-    private String runTask(TaskInstance taskInstance) {
+    private String runTask(Execution execution) {
         try {
-            Task task = tasksByIdentifier.get(taskInstance.name);
-
-            task.execute(taskInstance.parameter);
-
-            task.notifyListeners(taskInstance.id);
-
-            taskInstance.delete();
-        } catch (Exception e) {
-            taskInstance.fail(e);
+            return execution.perform();
         } finally {
             idleWorkerCount.incrementAndGet();
         }
-
-        return taskInstance.id;
     }
 
     boolean allWorkersBusy() {
@@ -79,4 +62,5 @@ class Workers {
     public void stop() {
         this.workers.shutdown();
     }
+
 }

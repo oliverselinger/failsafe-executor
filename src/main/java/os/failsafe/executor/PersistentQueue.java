@@ -23,46 +23,49 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.Task;
+import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.UUID;
+import java.util.List;
 
-public class Incidents {
+class PersistentQueue {
 
-    private static final String INSERT_INCIDENT = "INSERT INTO TASK_INCIDENT (ID,MESSAGE,STACK_TRACE,TASK_ID,LAST_MODIFIED_DATE,CREATED_DATE) VALUES (?,?,?,?,?,?)";
+    private static final int DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES = 10;
+    private static final String QUERY_ALL_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (START_TIME IS NULL OR (START_TIME <= ?)) ORDER BY CREATED_DATE";
+    private static final String QUERY_NEXT_TASKS = QUERY_ALL_TASKS + " FETCH FIRST 3 ROWS ONLY";
 
     private final DataSource dataSource;
     private final SystemClock systemClock;
+    private final EnqueuedTasks enqueuedTasks;
 
-    public Incidents(DataSource dataSource, SystemClock systemClock) {
+    public PersistentQueue(DataSource dataSource, SystemClock systemClock) {
         this.dataSource = dataSource;
         this.systemClock = systemClock;
+        this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
     }
 
-    String create(Connection connection, String taskId, Exception e) {
-        try (PreparedStatement ps = connection.prepareStatement(INSERT_INCIDENT)) {
-            String id = UUID.randomUUID().toString();
-            ps.setString(1, id);
-            ps.setString(2, e.getMessage());
-            ps.setString(3, e.getStackTrace().toString());
-            ps.setString(4, taskId);
-            ps.setTimestamp(5, Timestamp.valueOf(systemClock.now()));
-            ps.setTimestamp(6, Timestamp.valueOf(systemClock.now()));
-
-            int insertedRows = ps.executeUpdate();
-
-            if (insertedRows != 1) {
-                throw new RuntimeException("Insertion failure");
-            }
-
-            return id;
-        } catch (SQLException sqlException) {
-            throw new RuntimeException(sqlException);
-        }
+    PersistentTask add(Task task) {
+        return enqueuedTasks.create(task);
     }
+
+    List<PersistentTask> allQueued() {
+        return Database.selectAll(dataSource, QUERY_ALL_TASKS, enqueuedTasks::map, deadExecutionTimeout());
+    }
+
+    PersistentTask peekAndLock() {
+        return Database.run(dataSource, connection ->
+
+                Database.selectAll(connection, QUERY_NEXT_TASKS, enqueuedTasks::map, deadExecutionTimeout()).stream()
+                        .map(enqueuedTask -> enqueuedTask.lock(connection))
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private Timestamp deadExecutionTimeout() {
+        return Timestamp.valueOf(systemClock.now().minusMinutes(DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES));
+    }
+
 }

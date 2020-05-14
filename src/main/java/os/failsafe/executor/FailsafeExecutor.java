@@ -23,12 +23,16 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.Task;
+import os.failsafe.executor.task.TaskDefinition;
+import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.util.Optional;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -36,64 +40,70 @@ import java.util.concurrent.TimeUnit;
 
 public class FailsafeExecutor {
 
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-    private final Workers workers;
-    private final DataSource dataSource;
-    private final int initialDelay;
-    private final int delay;
-    private final TaskInstances taskInstances;
+    private static final int DEFAULT_WORKER_THREAD_COUNT = 5;
+    private static final int DEFAULT_INITIAL_DELAY_IN_SECONDS = 10;
+    private static final int DEFAULT_POLLING_INTERVAL_IN_SECONDS = 10;
 
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int threadCount, int initialDelay, int delay) {
-        this.workers = new Workers(threadCount);
-        this.dataSource = dataSource;
-        this.initialDelay = initialDelay;
-        this.delay = delay;
-        this.taskInstances = new TaskInstances(dataSource, systemClock);
+    private final Map<String, TaskDefinition> tasksByIdentifier = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+    private final PersistentQueue persistentQueue;
+    private final WorkerPool workerPool;
+    private final EnqueuedTasks enqueuedTasks;
+    private final int initialDelayInSeconds;
+    private final int pollingIntervalInSeconds;
+
+    public FailsafeExecutor(DataSource dataSource) {
+        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_INITIAL_DELAY_IN_SECONDS, DEFAULT_POLLING_INTERVAL_IN_SECONDS);
     }
 
-    public void register(Task task) {
-        this.workers.register(task);
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int initialDelayInSeconds, int pollingIntervalInSeconds) {
+        this.persistentQueue = new PersistentQueue(dataSource, systemClock);
+        this.workerPool = new WorkerPool(workerThreadCount);
+        this.initialDelayInSeconds = initialDelayInSeconds;
+        this.pollingIntervalInSeconds = pollingIntervalInSeconds;
+        this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
     }
 
     public void start() {
         executor.scheduleWithFixedDelay(() -> {
-            while (submitNextExecution().isPresent()) {
+            while (executeNextTask() != null) {
             }
-        }, initialDelay, delay, TimeUnit.MILLISECONDS);
+        }, initialDelayInSeconds, pollingIntervalInSeconds, TimeUnit.SECONDS);
     }
 
     public void stop() {
-        this.workers.stop();
+        this.workerPool.stop();
         executor.shutdown();
     }
 
-    public String execute(Task.Instance instance) {
-        return taskInstances.create(instance.name, instance.parameter);
+    public void defineTask(TaskDefinition taskDefinition) {
+        tasksByIdentifier.put(taskDefinition.getName(), taskDefinition);
     }
 
-    Optional<Future<String>> submitNextExecution() {
-        if (workers.allWorkersBusy()) {
-            return Optional.empty();
+    public PersistentTask execute(Task task) {
+        if (!tasksByIdentifier.containsKey(task.name)) {
+            throw new IllegalArgumentException(String.format("Before executing task %s you need to define it. FailsafeExecutor#define", task.name));
+        }
+        return persistentQueue.add(task);
+    }
+
+    public List<PersistentTask> failedTasks() {
+        return enqueuedTasks.failedTasks();
+    }
+
+    private Future<String> executeNextTask() {
+        if (workerPool.allWorkersBusy()) {
+            return null;
         }
 
-        try (Connection connection = dataSource.getConnection()) {
+        PersistentTask toExecute = persistentQueue.peekAndLock();
 
-            Optional<TaskInstance> possibleTask = taskInstances.findNextTask(connection);
-
-            if (possibleTask.isEmpty()) {
-                return Optional.empty();
-            }
-
-            TaskInstance taskInstance = possibleTask.get();
-            boolean taken = taskInstance.take(connection);
-
-            if (!taken) {
-                return submitNextExecution();
-            }
-
-            return Optional.of(workers.execute(taskInstance));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        if (toExecute == null) {
+            return null;
         }
+
+        TaskDefinition taskDefinition = tasksByIdentifier.get(toExecute.getName());
+
+        return workerPool.execute(new Execution(taskDefinition, toExecute));
     }
 }
