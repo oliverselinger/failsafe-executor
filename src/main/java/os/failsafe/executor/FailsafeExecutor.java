@@ -30,6 +30,7 @@ import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,27 +41,28 @@ import java.util.concurrent.TimeUnit;
 
 public class FailsafeExecutor {
 
-    private static final int DEFAULT_WORKER_THREAD_COUNT = 5;
-    private static final int DEFAULT_INITIAL_DELAY_IN_SECONDS = 10;
-    private static final int DEFAULT_POLLING_INTERVAL_IN_SECONDS = 10;
+    public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
+    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 2;
+    public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
+    public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
 
     private final Map<String, TaskDefinition> tasksByIdentifier = new ConcurrentHashMap<>();
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
     private final EnqueuedTasks enqueuedTasks;
-    private final int initialDelayInSeconds;
-    private final int pollingIntervalInSeconds;
+    private final Duration initialDelay;
+    private final Duration pollingInterval;
 
     public FailsafeExecutor(DataSource dataSource) {
-        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_INITIAL_DELAY_IN_SECONDS, DEFAULT_POLLING_INTERVAL_IN_SECONDS);
+        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL);
     }
 
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int initialDelayInSeconds, int pollingIntervalInSeconds) {
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval) {
         this.persistentQueue = new PersistentQueue(dataSource, systemClock);
-        this.workerPool = new WorkerPool(workerThreadCount);
-        this.initialDelayInSeconds = initialDelayInSeconds;
-        this.pollingIntervalInSeconds = pollingIntervalInSeconds;
+        this.workerPool = new WorkerPool(workerThreadCount, queueSize);
+        this.initialDelay = initialDelay;
+        this.pollingInterval = pollingInterval;
         this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
     }
 
@@ -68,7 +70,7 @@ public class FailsafeExecutor {
         executor.scheduleWithFixedDelay(() -> {
             while (executeNextTask() != null) {
             }
-        }, initialDelayInSeconds, pollingIntervalInSeconds, TimeUnit.SECONDS);
+        }, initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void stop() {

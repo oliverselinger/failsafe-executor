@@ -27,12 +27,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,11 +38,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class WorkerPoolShould {
 
     private int threadCount = 2;
+    private int queueSize = threadCount * 2;
     private WorkerPool workerPool;
 
     @BeforeEach
     public void init() {
-        workerPool = new WorkerPool(threadCount);
+        workerPool = new WorkerPool(threadCount, queueSize);
     }
 
     @AfterEach
@@ -65,7 +63,7 @@ public class WorkerPoolShould {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
         Future<String> execution = workerPool.execute(firstBlockingExecution);
 
-        IntStream.range(1, threadCount + WorkerPool.FILL_UP_QUEUE_THRESHOLD)
+        IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingExecution())
                 .forEach(workerPool::execute);
 

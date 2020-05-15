@@ -32,13 +32,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 class WorkerPool {
 
-    static final int FILL_UP_QUEUE_THRESHOLD = 3;
-
     private final AtomicInteger idleWorkerCount;
     private final ExecutorService workers;
 
-    WorkerPool(int threadCount) {
-        idleWorkerCount = new AtomicInteger(threadCount + FILL_UP_QUEUE_THRESHOLD);
+    WorkerPool(int threadCount, int queueSize) {
+        idleWorkerCount = new AtomicInteger(queueSize);
         workers = Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
     }
 

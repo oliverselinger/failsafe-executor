@@ -31,21 +31,23 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import os.failsafe.executor.db.H2DbExtension;
-import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
+import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
+import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
 
 public class FailsafeExecutorShould {
 
@@ -77,7 +79,7 @@ public class FailsafeExecutorShould {
                 }
         );
 
-        failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, 5, 1, 1);
+        failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
         failsafeExecutor.defineTask(taskDefinition);
 
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
