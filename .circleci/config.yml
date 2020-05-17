@@ -11,7 +11,7 @@ commands:
           paths:
             - ~/.m2
           key: failsafe-executor-{{ checksum "pom.xml" }}
-      - run: mvn -o package
+      - run: mvn package
       - store_test_results:
           path: target/surefire-reports
 
