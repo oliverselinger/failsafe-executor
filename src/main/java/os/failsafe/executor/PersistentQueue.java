@@ -34,7 +34,7 @@ import java.util.List;
 class PersistentQueue {
 
     private static final int DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES = 10;
-    private static final String QUERY_ALL_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (START_TIME IS NULL OR (START_TIME <= ?)) ORDER BY CREATED_DATE";
+    private static final String QUERY_ALL_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?)) ORDER BY CREATED_DATE";
     private static final String QUERY_NEXT_TASKS = QUERY_ALL_TASKS + " FETCH FIRST 3 ROWS ONLY";
 
     private final DataSource dataSource;
@@ -56,7 +56,7 @@ class PersistentQueue {
     }
 
     PersistentTask peekAndLock() {
-        return Database.run(dataSource, connection ->
+        return Database.runAndReturn(dataSource, connection ->
 
                 Database.selectAll(connection, QUERY_NEXT_TASKS, enqueuedTasks::map, deadExecutionTimeout()).stream()
                         .map(enqueuedTask -> enqueuedTask.lock(connection))

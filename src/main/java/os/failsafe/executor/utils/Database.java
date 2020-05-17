@@ -28,8 +28,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Database {
@@ -38,9 +40,9 @@ public class Database {
     }
 
     public static <T> T selectOne(DataSource dataSource,
-                                        String sql,
-                                        Function<ResultSet, T> mapper,
-                                        Object... params) {
+                                  String sql,
+                                  Function<ResultSet, T> mapper,
+                                  Object... params) {
 
         try (Connection connection = dataSource.getConnection()) {
             List<T> selection = selectAll(connection, sql, mapper, params);
@@ -148,9 +150,27 @@ public class Database {
         }
     }
 
-    public static <T> T run(DataSource dataSource, Function<Connection, T> connectionConsumer) {
+    public static void execute(Connection connection, String... sqlStatements) {
+        try (Statement statement = connection.createStatement()) {
+            for (String sqlStatement : sqlStatements) {
+                statement.execute(sqlStatement);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static <T> T runAndReturn(DataSource dataSource, Function<Connection, T> connectionConsumer) {
         try (Connection connection = dataSource.getConnection()) {
             return connectionConsumer.apply(connection);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void run(DataSource dataSource, Consumer<Connection> connectionConsumer) {
+        try (Connection connection = dataSource.getConnection()) {
+            connectionConsumer.accept(connection);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

@@ -38,7 +38,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 </dependency>
 ```
 
-3. Create the table in your database. See [sql](src/main/resources/table.sql)
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql)
 
 3. Instantiate and start the FailsafeExecutor, which then will start executing any submitted tasks.
 

@@ -35,10 +35,10 @@ import java.time.LocalDateTime;
 
 class PersistentTask {
 
-    private static final String SET_START_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, START_TIME=? WHERE VERSION=? AND ID=?";
+    private static final String SET_LOCK_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
     private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
     private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
-    private static final String RETRY_TASK = "UPDATE PERSISTENT_TASK SET START_TIME=null, FAILED=0, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
+    private static final String RETRY_TASK = "UPDATE PERSISTENT_TASK SET LOCK_TIME=null, FAILED=0, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final String id;
     private final String parameter;
@@ -71,7 +71,7 @@ class PersistentTask {
     PersistentTask lock(Connection connection) {
         LocalDateTime startTime = systemClock.now();
 
-        int effectedRows = Database.update(connection, SET_START_TIME,
+        int effectedRows = Database.update(connection, SET_LOCK_TIME,
                 version + 1,
                 Timestamp.valueOf(startTime),
                 version,

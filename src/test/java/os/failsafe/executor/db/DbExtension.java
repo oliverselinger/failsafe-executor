@@ -29,47 +29,37 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import os.failsafe.executor.utils.FileUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import os.failsafe.executor.utils.Database;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
 
-public class H2DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
+public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
+
+    private final static Logger log = LoggerFactory.getLogger(DbExtension.class);
+
+    private final static DatabaseTestConfig databaseTestConfig = findDatabaseConfig();
 
     private HikariDataSource dataSource;
 
     @Override
     public void beforeAll(ExtensionContext extensionContext) {
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl("jdbc:h2:mem:taskdb");
-        config.setDriverClassName("org.h2.Driver");
-        config.setUsername("sa");
-        config.setPassword("");
-        config.setMaximumPoolSize(1);
+        config.setJdbcUrl(databaseTestConfig.jdbcUrl());
+        config.setDriverClassName(databaseTestConfig.driver());
+        config.setUsername(databaseTestConfig.user());
+        config.setPassword(databaseTestConfig.password());
+        config.setMaximumPoolSize(databaseTestConfig.maxPoolSize());
 
         dataSource = new HikariDataSource(config);
 
-        try (Connection con = dataSource.getConnection();
-             Statement statement = con.createStatement()) {
-
-            String createTablesSql = FileUtil.readResourceFile("table.sql");
-            statement.execute(createTablesSql);
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        Database.run(dataSource, databaseTestConfig::createTable);
     }
 
     @Override
     public void afterEach(ExtensionContext extensionContext) {
-        try (Connection con = dataSource.getConnection();
-             Statement statement = con.createStatement()) {
-            statement.executeUpdate("TRUNCATE TABLE PERSISTENT_TASK");
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        Database.run(dataSource, databaseTestConfig::truncateTable);
     }
 
     public DataSource getDataSource() {
@@ -79,5 +69,22 @@ public class H2DbExtension implements BeforeAllCallback, AfterEachCallback, Afte
     @Override
     public void afterAll(ExtensionContext extensionContext) {
         dataSource.close();
+    }
+
+    private static DatabaseTestConfig findDatabaseConfig() {
+        String testDB = System.getenv("TEST_DB");
+
+        if (testDB == null) {
+            log.info("Configuring H2 database");
+            return new H2DatabaseTestConfig();
+        }
+
+        switch (testDB) {
+            case "POSTGRES":
+                log.info("Configuring Postgres database");
+                return new PostgresDatabaseTestConfig();
+            default:
+                throw new IllegalArgumentException("Unknown test database");
+        }
     }
 }

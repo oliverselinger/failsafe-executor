@@ -26,7 +26,7 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import os.failsafe.executor.db.H2DbExtension;
+import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 public class PersistentQueueShould {
 
     @RegisterExtension
-    static final H2DbExtension h2DbExtension = new H2DbExtension();
+    static final DbExtension DB_EXTENSION = new DbExtension();
 
     private TestSystemClock systemClock = new TestSystemClock();
 
@@ -54,7 +54,7 @@ public class PersistentQueueShould {
 
     @BeforeEach
     public void init() {
-        dataSource = h2DbExtension.getDataSource();
+        dataSource = DB_EXTENSION.getDataSource();
         systemClock = new TestSystemClock();
         enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
         persistentQueue = new PersistentQueue(dataSource, systemClock);

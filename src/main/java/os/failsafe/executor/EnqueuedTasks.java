@@ -73,13 +73,13 @@ class EnqueuedTasks {
 
     PersistentTask map(ResultSet rs) {
         try {
-            Timestamp start_time = rs.getTimestamp("START_TIME");
+            Timestamp pickTime = rs.getTimestamp("LOCK_TIME");
 
             return new PersistentTask(
                     rs.getString("ID"),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
-                    start_time!=null ? start_time.toLocalDateTime() : null,
+                    pickTime!=null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
                     rs.getBoolean("FAILED"),
                     rs.getString("EXCEPTION_MESSAGE"),
