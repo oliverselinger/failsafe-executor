@@ -34,11 +34,11 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>1.0.0.RC1</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
-3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql)
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql](src/main/resources/mysql.sql)
 
 3. Instantiate and start the FailsafeExecutor, which then will start executing any submitted tasks.
 

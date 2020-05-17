@@ -35,9 +35,24 @@ jobs:
     steps:
       - maven-package
 
+  test-mysql:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+      - image: circleci/mysql:8.0.4
+        environment:
+          MYSQL_ROOT_PASSWORD: failsafe
+          MYSQL_DATABASE: failsafe
+          MYSQL_USER: failsafe
+          MYSQL_PASSWORD: failsafe
+    environment:
+      TEST_DB: MYSQL
+    steps:
+      - maven-package
+
 workflows:
   version: 2
   build_and_test:
     jobs:
       - build
       - test-postgres
+      - test-mysql

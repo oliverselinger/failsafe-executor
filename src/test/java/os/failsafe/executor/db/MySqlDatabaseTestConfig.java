@@ -28,10 +28,10 @@ import os.failsafe.executor.utils.FileUtil;
 
 import java.sql.Connection;
 
-class PostgresDatabaseTestConfig implements DatabaseTestConfig {
+class MySqlDatabaseTestConfig implements DatabaseTestConfig {
 
     public void createTable(Connection connection) {
-        String createTableSql = FileUtil.readResourceFile("mysql.sql");
+        String createTableSql = FileUtil.readResourceFile("postgres.sql");
 
         Database.execute(connection,
                 "DROP TABLE IF EXISTS PERSISTENT_TASK",
@@ -51,11 +51,11 @@ class PostgresDatabaseTestConfig implements DatabaseTestConfig {
     }
 
     public String driver() {
-        return "org.postgresql.Driver";
+        return "com.mysql.jdbc.Driver";
     }
 
     public String jdbcUrl() {
-        return "jdbc:postgresql://127.0.0.1:5432/failsafe";
+        return "jdbc:mysql://localhost:3306/failsafe";
     }
 
     public int maxPoolSize() {

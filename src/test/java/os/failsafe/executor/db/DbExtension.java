@@ -83,6 +83,9 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
             case "POSTGRES":
                 log.info("Configuring Postgres database");
                 return new PostgresDatabaseTestConfig();
+            case "MYSQL":
+                log.info("Configuring MySql database");
+                return new MySqlDatabaseTestConfig();
             default:
                 throw new IllegalArgumentException("Unknown test database");
         }
