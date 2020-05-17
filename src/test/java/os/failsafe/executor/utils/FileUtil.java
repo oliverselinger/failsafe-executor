@@ -33,7 +33,7 @@ public class FileUtil {
     public static String readResourceFile(String name) {
         try {
             URI uri = FileUtil.class.getClassLoader().getResource(name).toURI();
-            return Files.readString(Paths.get(uri), Charset.defaultCharset());
+            return new String(Files.readAllBytes(Paths.get(uri)), Charset.defaultCharset());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -39,26 +39,26 @@ class PersistentQueue {
 
     private final DataSource dataSource;
     private final SystemClock systemClock;
-    private final EnqueuedTasks enqueuedTasks;
+    private final PersistentTasks persistentTasks;
 
     public PersistentQueue(DataSource dataSource, SystemClock systemClock) {
         this.dataSource = dataSource;
         this.systemClock = systemClock;
-        this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        this.persistentTasks = new PersistentTasks(dataSource, systemClock);
     }
 
     PersistentTask add(Task task) {
-        return enqueuedTasks.create(task);
+        return persistentTasks.create(task);
     }
 
     List<PersistentTask> allQueued() {
-        return Database.selectAll(dataSource, QUERY_ALL_TASKS, enqueuedTasks::map, deadExecutionTimeout());
+        return Database.selectAll(dataSource, QUERY_ALL_TASKS, persistentTasks::map, deadExecutionTimeout());
     }
 
     PersistentTask peekAndLock() {
         return Database.runAndReturn(dataSource, connection ->
 
-                Database.selectAll(connection, QUERY_NEXT_TASKS, enqueuedTasks::map, deadExecutionTimeout()).stream()
+                Database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::map, deadExecutionTimeout()).stream()
                         .map(enqueuedTask -> enqueuedTask.lock(connection))
                         .findFirst()
                         .orElse(null));

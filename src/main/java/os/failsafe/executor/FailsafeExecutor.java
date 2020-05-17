@@ -50,7 +50,7 @@ public class FailsafeExecutor {
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
-    private final EnqueuedTasks enqueuedTasks;
+    private final PersistentTasks persistentTasks;
     private final Duration initialDelay;
     private final Duration pollingInterval;
 
@@ -63,7 +63,7 @@ public class FailsafeExecutor {
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
-        this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        this.persistentTasks = new PersistentTasks(dataSource, systemClock);
     }
 
     public void start() {
@@ -90,7 +90,7 @@ public class FailsafeExecutor {
     }
 
     public List<PersistentTask> failedTasks() {
-        return enqueuedTasks.failedTasks();
+        return persistentTasks.failedTasks();
     }
 
     private Future<String> executeNextTask() {

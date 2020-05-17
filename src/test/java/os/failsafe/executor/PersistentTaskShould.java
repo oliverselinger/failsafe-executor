@@ -50,13 +50,13 @@ public class PersistentTaskShould {
     static final DbExtension DB_EXTENSION = new DbExtension();
 
     DataSource dataSource;
-    EnqueuedTasks enqueuedTasks;
+    PersistentTasks persistentTasks;
 
     @BeforeEach
     public void init() {
         dataSource = DB_EXTENSION.getDataSource();
         systemClock.resetTime();
-        enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        persistentTasks = new PersistentTasks(dataSource, systemClock);
     }
 
     @Test public void
@@ -65,7 +65,7 @@ public class PersistentTaskShould {
 
         Database.runAndReturn(dataSource, persistentTask::lock);
 
-        PersistentTask locked = enqueuedTasks.findOne(persistentTask.getId());
+        PersistentTask locked = persistentTasks.findOne(persistentTask.getId());
         assertNotNull(locked.startTime);
     }
 
@@ -75,7 +75,7 @@ public class PersistentTaskShould {
 
         persistentTask.remove();
 
-        assertNull(enqueuedTasks.findOne(persistentTask.getId()));
+        assertNull(persistentTasks.findOne(persistentTask.getId()));
     }
 
     @Test public void
@@ -87,7 +87,7 @@ public class PersistentTaskShould {
 
         persistentTask.fail(exception);
 
-        List<PersistentTask> failedTasks = enqueuedTasks.failedTasks();
+        List<PersistentTask> failedTasks = persistentTasks.failedTasks();
         assertEquals(1, failedTasks.size());
 
         PersistentTask failedTask = failedTasks.get(0);
@@ -102,7 +102,7 @@ public class PersistentTaskShould {
 
         persistentTask.retry();
 
-        PersistentTask task = enqueuedTasks.findOne(persistentTask.getId());
+        PersistentTask task = persistentTasks.findOne(persistentTask.getId());
         assertFalse(task.failed);
         assertNull(task.exceptionMessage);
         assertNull(task.stackTrace);
@@ -111,6 +111,6 @@ public class PersistentTaskShould {
     }
 
     private PersistentTask createEnqueuedTask() {
-        return enqueuedTasks.create(new Task("TestTask", "parameter"));
+        return persistentTasks.create(new Task("TestTask", "parameter"));
     }
 }

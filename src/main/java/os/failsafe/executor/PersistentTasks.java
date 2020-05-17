@@ -34,7 +34,7 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
-class EnqueuedTasks {
+class PersistentTasks {
 
     private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,LAST_MODIFIED_DATE,CREATED_DATE) VALUES (?,?,?,?,?,?)";
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
@@ -44,7 +44,7 @@ class EnqueuedTasks {
     private final DataSource dataSource;
     private final SystemClock systemClock;
 
-    public EnqueuedTasks(DataSource dataSource, SystemClock systemClock) {
+    public PersistentTasks(DataSource dataSource, SystemClock systemClock) {
         this.dataSource = dataSource;
         this.systemClock = systemClock;
     }

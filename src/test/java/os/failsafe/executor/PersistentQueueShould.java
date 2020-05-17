@@ -50,13 +50,13 @@ public class PersistentQueueShould {
 
     private DataSource dataSource;
     private PersistentQueue persistentQueue;
-    private EnqueuedTasks enqueuedTasks;
+    private PersistentTasks persistentTasks;
 
     @BeforeEach
     public void init() {
         dataSource = DB_EXTENSION.getDataSource();
         systemClock = new TestSystemClock();
-        enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        persistentTasks = new PersistentTasks(dataSource, systemClock);
         persistentQueue = new PersistentQueue(dataSource, systemClock);
     }
 
