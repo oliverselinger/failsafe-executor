@@ -84,7 +84,9 @@ public class PersistentQueueShould {
     dequeue_tasks_in_fifo_sequence() {
         Task task = createTask();
         PersistentTask persistentTask1 = persistentQueue.add(task);
+        systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
         PersistentTask persistentTask2 = persistentQueue.add(task);
+        systemClock.timeTravelBy(Duration.ofMillis(1));
         PersistentTask persistentTask3 =  persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
