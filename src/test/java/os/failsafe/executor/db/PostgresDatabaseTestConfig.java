@@ -31,7 +31,7 @@ import java.sql.Connection;
 class PostgresDatabaseTestConfig implements DatabaseTestConfig {
 
     public void createTable(Database database) {
-        String createTableSql = FileUtil.readResourceFile("mysql.sql");
+        String createTableSql = FileUtil.readResourceFile("postgres.sql");
 
         database.execute("DROP TABLE IF EXISTS PERSISTENT_TASK",
                 createTableSql);
