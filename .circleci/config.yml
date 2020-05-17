@@ -11,10 +11,10 @@ jobs:
     docker:
       - image: circleci/openjdk:8-jdk-stretch
       - image: circleci/postgres:12-alpine
-          environment:
-            POSTGRES_USER: failsafe
-            POSTGRES_PASSWORD: failsafe
-            POSTGRES_DB: failsafe
+        environment:
+          POSTGRES_USER: failsafe
+          POSTGRES_PASSWORD: failsafe
+          POSTGRES_DB: failsafe
     environment:
       TEST_DB: POSTGRES
     steps:
