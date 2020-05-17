@@ -32,8 +32,6 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import javax.sql.DataSource;
-
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,21 +47,21 @@ public class PersistentTaskShould {
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
 
-    DataSource dataSource;
+    Database database;
     PersistentTasks persistentTasks;
 
     @BeforeEach
     public void init() {
-        dataSource = DB_EXTENSION.getDataSource();
+        database = DB_EXTENSION.database();
         systemClock.resetTime();
-        persistentTasks = new PersistentTasks(dataSource, systemClock);
+        persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     @Test public void
     lock_itself() {
         PersistentTask persistentTask = createEnqueuedTask();
 
-        Database.runAndReturn(dataSource, persistentTask::lock);
+        database.connect(persistentTask::lock);
 
         PersistentTask locked = persistentTasks.findOne(persistentTask.getId());
         assertNotNull(locked.startTime);

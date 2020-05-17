@@ -23,12 +23,14 @@
  ******************************************************************************/
 package os.failsafe.executor.db;
 
+import os.failsafe.executor.utils.Database;
+
 import java.sql.Connection;
 
 interface DatabaseTestConfig {
-    void createTable(Connection connection);
+    void createTable(Database database);
 
-    void truncateTable(Connection connection);
+    void truncateTable(Database database);
 
     String user();
 

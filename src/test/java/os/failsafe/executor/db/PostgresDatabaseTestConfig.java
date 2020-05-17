@@ -30,16 +30,15 @@ import java.sql.Connection;
 
 class PostgresDatabaseTestConfig implements DatabaseTestConfig {
 
-    public void createTable(Connection connection) {
+    public void createTable(Database database) {
         String createTableSql = FileUtil.readResourceFile("mysql.sql");
 
-        Database.execute(connection,
-                "DROP TABLE IF EXISTS PERSISTENT_TASK",
+        database.execute("DROP TABLE IF EXISTS PERSISTENT_TASK",
                 createTableSql);
     }
 
-    public void truncateTable(Connection connection) {
-        Database.update(connection, "TRUNCATE TABLE PERSISTENT_TASK");
+    public void truncateTable(Database database) {
+        database.update("TRUNCATE TABLE PERSISTENT_TASK");
     }
 
     public String user() {

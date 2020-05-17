@@ -67,7 +67,7 @@ public class FailsafeExecutorShould {
 
     @BeforeEach
     public void init() {
-        dataSource = DB_EXTENSION.getDataSource();
+        dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
         taskDefinition = TaskDefinitions.of("TestTask", parameter -> {

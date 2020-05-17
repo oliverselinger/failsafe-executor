@@ -27,7 +27,6 @@ import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
-import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -35,16 +34,21 @@ class PersistentQueue {
 
     private static final int DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES = 10;
     private static final String QUERY_ALL_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?)) ORDER BY CREATED_DATE";
-    private static final String QUERY_NEXT_TASKS = QUERY_ALL_TASKS + " FETCH FIRST 3 ROWS ONLY";
+    private static final String QUERY_LIMIT = " FETCH FIRST 3 ROWS ONLY";
+    private static final String QUERY_LIMIT_MYSQL = " LIMIT 3";
 
-    private final DataSource dataSource;
+    private final String QUERY_NEXT_TASKS;
+
+    private final Database database;
     private final SystemClock systemClock;
     private final PersistentTasks persistentTasks;
 
-    public PersistentQueue(DataSource dataSource, SystemClock systemClock) {
-        this.dataSource = dataSource;
+    public PersistentQueue(Database database, SystemClock systemClock) {
+        this.database = database;
         this.systemClock = systemClock;
-        this.persistentTasks = new PersistentTasks(dataSource, systemClock);
+        this.persistentTasks = new PersistentTasks(database, systemClock);
+
+        this.QUERY_NEXT_TASKS = constructNextTaskQuery();
     }
 
     PersistentTask add(Task task) {
@@ -52,13 +56,13 @@ class PersistentQueue {
     }
 
     List<PersistentTask> allQueued() {
-        return Database.selectAll(dataSource, QUERY_ALL_TASKS, persistentTasks::map, deadExecutionTimeout());
+        return database.selectAll(QUERY_ALL_TASKS, persistentTasks::map, deadExecutionTimeout());
     }
 
     PersistentTask peekAndLock() {
-        return Database.runAndReturn(dataSource, connection ->
+        return database.connect(connection ->
 
-                Database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::map, deadExecutionTimeout()).stream()
+                database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::map, deadExecutionTimeout()).stream()
                         .map(enqueuedTask -> enqueuedTask.lock(connection))
                         .findFirst()
                         .orElse(null));
@@ -66,6 +70,10 @@ class PersistentQueue {
 
     private Timestamp deadExecutionTimeout() {
         return Timestamp.valueOf(systemClock.now().minusMinutes(DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES));
+    }
+
+    private String constructNextTaskQuery() {
+        return QUERY_ALL_TASKS + (database.isMysql() ? QUERY_LIMIT_MYSQL : QUERY_LIMIT);
     }
 
 }

@@ -41,6 +41,7 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
     private final static DatabaseTestConfig databaseTestConfig = findDatabaseConfig();
 
+    private Database database;
     private HikariDataSource dataSource;
 
     @Override
@@ -54,16 +55,22 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
         dataSource = new HikariDataSource(config);
 
-        Database.run(dataSource, databaseTestConfig::createTable);
+        database = new Database(dataSource);
+
+        databaseTestConfig.createTable(database);
     }
 
     @Override
     public void afterEach(ExtensionContext extensionContext) {
-        Database.run(dataSource, databaseTestConfig::truncateTable);
+        databaseTestConfig.truncateTable(database);
     }
 
-    public DataSource getDataSource() {
+    public DataSource dataSource() {
         return dataSource;
+    }
+
+    public Database database() {
+        return database;
     }
 
     @Override

@@ -26,20 +26,17 @@ package os.failsafe.executor.db;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.FileUtil;
 
-import java.sql.Connection;
-
 class H2DatabaseTestConfig implements DatabaseTestConfig {
 
-    public void createTable(Connection connection) {
+    public void createTable(Database database) {
         String createTableSql = FileUtil.readResourceFile("oracle.sql");
 
-        Database.execute(connection,
-                "DROP TABLE IF EXISTS PERSISTENT_TASK",
+        database.execute("DROP TABLE IF EXISTS PERSISTENT_TASK",
                 createTableSql);
     }
 
-    public void truncateTable(Connection connection) {
-        Database.update(connection, "TRUNCATE TABLE PERSISTENT_TASK");
+    public void truncateTable(Database database) {
+        database.update("TRUNCATE TABLE PERSISTENT_TASK");
     }
 
     public String user() {

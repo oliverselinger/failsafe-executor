@@ -31,20 +31,26 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Database {
 
-    private Database() {
+    public final boolean mysqlDatabase;
+    private final DataSource dataSource;
+
+    public Database(DataSource dataSource) {
+        this.dataSource = dataSource;
+        this.mysqlDatabase = determineDatabase();
     }
 
-    public static <T> T selectOne(DataSource dataSource,
-                                  String sql,
-                                  Function<ResultSet, T> mapper,
-                                  Object... params) {
+    public boolean isMysql() {
+        return mysqlDatabase;
+    }
 
-        try (Connection connection = dataSource.getConnection()) {
+    public <T> T selectOne(String sql,
+                           Function<ResultSet, T> mapper,
+                           Object... params) {
+        return connect(connection -> {
             List<T> selection = selectAll(connection, sql, mapper, params);
 
             if (selection.isEmpty()) {
@@ -56,27 +62,19 @@ public class Database {
             }
 
             return selection.get(0);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        });
     }
 
-    public static <T> List<T> selectAll(DataSource dataSource,
-                                        String sql,
-                                        Function<ResultSet, T> mapper,
-                                        Object... params) {
-
-        try (Connection connection = dataSource.getConnection()) {
-            return selectAll(connection, sql, mapper, params);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+    public <T> List<T> selectAll(String sql,
+                                 Function<ResultSet, T> mapper,
+                                 Object... params) {
+        return connect(connection -> selectAll(connection, sql, mapper, params));
     }
 
-    public static <T> List<T> selectAll(Connection connection,
-                                        String sql,
-                                        Function<ResultSet, T> resultSetConsumer,
-                                        Object... params) {
+    public <T> List<T> selectAll(Connection connection,
+                                 String sql,
+                                 Function<ResultSet, T> resultSetConsumer,
+                                 Object... params) {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int cnt = 0;
@@ -96,47 +94,39 @@ public class Database {
         }
     }
 
-    public static <T> void insert(DataSource dataSource,
-                                  String sql,
-                                  Object... params) {
-        int effectedRows = executeUpdate(dataSource, sql, params);
+    public <T> void insert(String sql,
+                           Object... params) {
+        int effectedRows = executeUpdate(sql, params);
 
         if (effectedRows != 1) {
             throw new RuntimeException("Insertion failure");
         }
     }
 
-    public static <T> int update(Connection connection,
-                                 String sql,
-                                 Object... params) {
+    public <T> int update(Connection connection,
+                          String sql,
+                          Object... params) {
         return executeUpdate(connection, sql, params);
     }
 
-    public static <T> int update(DataSource dataSource,
+    public <T> int update(String sql,
+                          Object... params) {
+        return executeUpdate(sql, params);
+    }
+
+    public <T> int delete(String sql,
+                          Object... params) {
+        return executeUpdate(sql, params);
+    }
+
+    public <T> int executeUpdate(String sql,
+                                 Object... params) {
+        return connect(connection -> executeUpdate(connection, sql, params));
+    }
+
+    public <T> int executeUpdate(Connection connection,
                                  String sql,
                                  Object... params) {
-        return executeUpdate(dataSource, sql, params);
-    }
-
-    public static <T> int delete(DataSource dataSource,
-                                 String sql,
-                                 Object... params) {
-        return executeUpdate(dataSource, sql, params);
-    }
-
-    public static <T> int executeUpdate(DataSource dataSource,
-                                        String sql,
-                                        Object... params) {
-        try (Connection connection = dataSource.getConnection()) {
-            return executeUpdate(connection, sql, params);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static <T> int executeUpdate(Connection connection,
-                                        String sql,
-                                        Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             int cnt = 0;
@@ -150,8 +140,9 @@ public class Database {
         }
     }
 
-    public static void execute(Connection connection, String... sqlStatements) {
-        try (Statement statement = connection.createStatement()) {
+    public void execute(String... sqlStatements) {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
             for (String sqlStatement : sqlStatements) {
                 statement.execute(sqlStatement);
             }
@@ -160,7 +151,7 @@ public class Database {
         }
     }
 
-    public static <T> T runAndReturn(DataSource dataSource, Function<Connection, T> connectionConsumer) {
+    public <T> T connect(Function<Connection, T> connectionConsumer) {
         try (Connection connection = dataSource.getConnection()) {
             return connectionConsumer.apply(connection);
         } catch (SQLException e) {
@@ -168,11 +159,11 @@ public class Database {
         }
     }
 
-    public static void run(DataSource dataSource, Consumer<Connection> connectionConsumer) {
+    private boolean determineDatabase() {
         try (Connection connection = dataSource.getConnection()) {
-            connectionConsumer.accept(connection);
+            return connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Unable to determine database product name", e);
         }
     }
 }
