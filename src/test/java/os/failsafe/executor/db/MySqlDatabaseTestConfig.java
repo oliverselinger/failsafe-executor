@@ -50,7 +50,7 @@ class MySqlDatabaseTestConfig implements DatabaseTestConfig {
     }
 
     public String driver() {
-        return "com.mysql.jdbc.Driver";
+        return "com.mysql.cj.jdbc.Driver";
     }
 
     public String jdbcUrl() {
