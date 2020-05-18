@@ -34,7 +34,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
@@ -68,7 +68,7 @@ The task is then executed some time in the future by passing it to the FailsafeE
 
 ```java
 Task task = taskDefinition.newTask(" world!");
-PersistentTask persistentTask = failsafeExecutor.execute(task);
+TaskId taskId = failsafeExecutor.execute(task);
 ```
 
 ## Monitoring the execution
@@ -81,6 +81,29 @@ taskDefinition.subscribe(executionListener);
 ```
 
 The listener get called at the end of the execution in an at least once manner.
+
+## Task failures
+
+Any exceptions occurring during the execution of a task are captured. The exception's message and stacktrace are saved to the task. The task itself is marked as failed.
+Thus the FailsafeExecutor does not execute the task anymore. To find failed tasks use the following:
+
+```java
+List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
+```
+
+Two options are offered to handle a failed task. Either retry it:
+
+```java
+failedTask.retry();
+```
+
+Or cancel it:
+
+```java
+failedTask.cancel();
+```
+
+Cancel deletes the task from database.
 
 ## Shutdown of the executor
 
