@@ -23,13 +23,22 @@
  ******************************************************************************/
 package os.failsafe.executor.task;
 
+import java.util.UUID;
+
 public class Task {
 
+    public final String id;
     public final String name;
     public final String parameter;
 
     public Task(String name, String parameter) {
+        this(UUID.randomUUID().toString(), name, parameter);
+    }
+
+    public Task(String id, String name, String parameter) {
+        this.id = id;
         this.name = name;
         this.parameter = parameter;
     }
+
 }

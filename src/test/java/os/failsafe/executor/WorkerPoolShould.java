@@ -26,6 +26,7 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import os.failsafe.executor.task.TaskId;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -61,7 +62,7 @@ public class WorkerPoolShould {
     public void
     not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
-        Future<String> execution = workerPool.execute(firstBlockingExecution);
+        Future<TaskId> execution = workerPool.execute(firstBlockingExecution);
 
         IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingExecution())
@@ -88,9 +89,9 @@ public class WorkerPoolShould {
         }
 
         @Override
-        public String perform() {
+        public TaskId perform() {
             phaser.arriveAndAwaitAdvance();
-            return "id";
+            return new TaskId("id");
         }
 
         public void release() {

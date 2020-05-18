@@ -50,6 +50,11 @@ public class TaskDefinitions {
             }
 
             @Override
+            public Task newTask(String id, String parameter) {
+                return new Task(name, parameter);
+            }
+
+            @Override
             public void subscribe(TaskExecutionListener listener) {
                 listeners.add(listener);
             }

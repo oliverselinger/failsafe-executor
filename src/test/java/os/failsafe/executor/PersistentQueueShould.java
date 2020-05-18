@@ -30,6 +30,7 @@ import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
@@ -65,7 +66,7 @@ public class PersistentQueueShould {
     store_and_enqueue_a_task() {
         Task task = createTask();
 
-        PersistentTask persistentTask = persistentQueue.add(task);
+        TaskId persistentTask = persistentQueue.add(task);
 
         List<PersistentTask> all = persistentQueue.allQueued();
         assertEquals(1, all.size());
@@ -73,25 +74,28 @@ public class PersistentQueueShould {
         PersistentTask actual = all.get(0);
         assertEquals(task.name, actual.getName());
         assertEquals(task.parameter, actual.getParameter());
-        assertEquals(persistentTask.getId(), actual.getId());
+        assertEquals(persistentTask, actual.getId());
     }
 
     @Test public void
     dequeue_tasks_in_fifo_sequence() {
-        Task task = createTask();
-        PersistentTask persistentTask1 = persistentQueue.add(task);
+        Task task1 = createTask();
+        Task task2 = createTask();
+        Task task3 = createTask();
+
+        TaskId persistentTask1 = persistentQueue.add(task1);
         systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
-        PersistentTask persistentTask2 = persistentQueue.add(task);
+        TaskId persistentTask2 = persistentQueue.add(task2);
         systemClock.timeTravelBy(Duration.ofMillis(1));
-        PersistentTask persistentTask3 =  persistentQueue.add(task);
+        TaskId persistentTask3 =  persistentQueue.add(task3);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
         PersistentTask dequedTask2 = persistentQueue.peekAndLock();
         PersistentTask dequedTask3 = persistentQueue.peekAndLock();
 
-        assertEquals(persistentTask1.getId(), dequedTask1.getId());
-        assertEquals(persistentTask2.getId(), dequedTask2.getId());
-        assertEquals(persistentTask3.getId(), dequedTask3.getId());
+        assertEquals(persistentTask1, dequedTask1.getId());
+        assertEquals(persistentTask2, dequedTask2.getId());
+        assertEquals(persistentTask3, dequedTask3.getId());
     }
 
     @Test public void

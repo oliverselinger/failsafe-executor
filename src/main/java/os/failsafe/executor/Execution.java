@@ -23,6 +23,7 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.TaskDefinition;
 
 class Execution {
@@ -35,7 +36,7 @@ class Execution {
         this.persistentTask = persistentTask;
     }
 
-    public String perform() {
+    public TaskId perform() {
         try {
             taskDefinition.execute(persistentTask.getParameter());
 
@@ -52,10 +53,10 @@ class Execution {
     }
 
     private void notifySuccess() {
-        taskDefinition.allListeners().forEach(listener -> listener.succeeded(persistentTask.getName(), persistentTask.getId()));
+        taskDefinition.allListeners().forEach(listener -> listener.succeeded(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter()));
     }
 
     private void notifyFailed() {
-        taskDefinition.allListeners().forEach(listener -> listener.failed(persistentTask.getName(), persistentTask.getId()));
+        taskDefinition.allListeners().forEach(listener -> listener.failed(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter()));
     }
 }

@@ -23,6 +23,8 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.utils.Database;
@@ -31,9 +33,11 @@ import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -54,13 +58,14 @@ public class FailsafeExecutor {
     private final PersistentTasks persistentTasks;
     private final Duration initialDelay;
     private final Duration pollingInterval;
+    private final Database database;
 
     public FailsafeExecutor(DataSource dataSource) {
         this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL);
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval) {
-        Database database = new Database(dataSource);
+        database = new Database(dataSource);
         this.persistentQueue = new PersistentQueue(database, systemClock);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
@@ -84,18 +89,26 @@ public class FailsafeExecutor {
         tasksByIdentifier.put(taskDefinition.getName(), taskDefinition);
     }
 
-    public PersistentTask execute(Task task) {
+    public TaskId execute(Task task) {
+        return database.connect(connection -> execute(connection, task));
+    }
+
+    public TaskId execute(Connection connection, Task task) {
         if (!tasksByIdentifier.containsKey(task.name)) {
             throw new IllegalArgumentException(String.format("Before executing task %s you need to define it. FailsafeExecutor#define", task.name));
         }
-        return persistentQueue.add(task);
+        return persistentQueue.add(connection, task);
     }
 
-    public List<PersistentTask> failedTasks() {
+    public List<FailedTask> failedTasks() {
         return persistentTasks.failedTasks();
     }
 
-    private Future<String> executeNextTask() {
+    public Optional<FailedTask> failedTask(TaskId taskId) {
+        return persistentTasks.failedTask(taskId);
+    }
+
+    private Future<TaskId> executeNextTask() {
         if (workerPool.allWorkersBusy()) {
             return null;
         }

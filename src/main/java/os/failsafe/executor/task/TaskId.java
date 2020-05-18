@@ -23,22 +23,33 @@
  ******************************************************************************/
 package os.failsafe.executor.task;
 
-import java.util.List;
+import java.util.Objects;
 
-public interface TaskDefinition {
+public class TaskId {
 
-    String getName();
+    public final String id;
 
-    void execute(String parameter);
+    public TaskId(String id) {
+        this.id = id;
+    }
 
-    Task newTask(String parameter);
+    @Override
+    public String toString() {
+        return "PersistentTaskId{" +
+                "id='" + id + '\'' +
+                '}';
+    }
 
-    Task newTask(String id, String parameter);
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TaskId that = (TaskId) o;
+        return id.equals(that.id);
+    }
 
-    void subscribe(TaskExecutionListener listener);
-
-    void unsubscribe(TaskExecutionListener listener);
-
-    List<TaskExecutionListener> allListeners();
-
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
 }

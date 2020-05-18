@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.it;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +30,10 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import os.failsafe.executor.FailsafeExecutor;
 import os.failsafe.executor.db.DbExtension;
+import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
@@ -40,6 +43,7 @@ import os.failsafe.executor.utils.TestSystemClock;
 import javax.sql.DataSource;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,6 +68,7 @@ public class FailsafeExecutorShould {
     TaskExecutionListener taskExecutionListener;
 
     boolean executionShouldFail;
+    private final String parameter = " world!";
 
     @BeforeEach
     public void init() {
@@ -94,7 +99,7 @@ public class FailsafeExecutorShould {
     @Test()
     public void
     throw_an_exception_if_task_is_not_defined() {
-        Task undefinedTask = new Task("TaskName", "parameter");
+        Task undefinedTask = new Task("TaskName", parameter);
 
         assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.execute(undefinedTask));
     }
@@ -102,33 +107,36 @@ public class FailsafeExecutorShould {
     @Test
     public void
     execute_a_task() {
-        Task task = taskDefinition.newTask(" world!");
+        Task task = taskDefinition.newTask(parameter);
 
-        PersistentTask persistentTask = failsafeExecutor.execute(task);
+        TaskId taskId = failsafeExecutor.execute(task);
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), persistentTask.getId());
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), taskId, parameter);
     }
 
     @Test
     public void
     retry_a_failed_task_on_demand() {
-        Task task = taskDefinition.newTask(" world!");
+        Task task = taskDefinition.newTask(parameter);
         executionShouldFail = true;
 
-        PersistentTask persistentTask = failsafeExecutor.execute(task);
+        TaskId taskId = failsafeExecutor.execute(task);
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(taskDefinition.getName(), persistentTask.getId());
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(taskDefinition.getName(), taskId, parameter);
 
-        List<PersistentTask> failedTasks = failsafeExecutor.failedTasks();
+        List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
 
-        PersistentTask failedTask = failedTasks.get(0);
+        FailedTask failedTask = failedTasks.get(0);
+        assertEquals(1, failedTasks.size());
+
+        failsafeExecutor.failedTask(failedTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
 
         executionShouldFail = false;
         failedTask.retry();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), persistentTask.getId());
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), taskId, parameter);
     }
 }

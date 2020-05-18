@@ -23,14 +23,18 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 class PersistentTasks {
@@ -39,6 +43,7 @@ class PersistentTasks {
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
+    private static final String QUERY_ONE_FAILED = QUERY_ONE + " AND FAILED=1";
 
     private final Database database;
     private final SystemClock systemClock;
@@ -49,33 +54,39 @@ class PersistentTasks {
     }
 
     PersistentTask create(Task task) {
-        String id = generateId();
+        return database.connect(connection -> this.create(connection, task));
+    }
 
-        database.insert(INSERT_TASK,
-                id,
+    PersistentTask create(Connection connection, Task task) {
+        database.insert(connection, INSERT_TASK,
+                task.id,
                 task.name,
                 task.parameter,
                 0,
                 Timestamp.valueOf(systemClock.now()),
                 Timestamp.valueOf(systemClock.now()));
 
-        return new PersistentTask(id, task.parameter, task.name, database, systemClock);
+        return new PersistentTask(task.id, task.parameter, task.name, database, systemClock);
     }
 
-    PersistentTask findOne(String id) {
-        return database.selectOne(QUERY_ONE, this::map, id);
+    PersistentTask findOne(TaskId id) {
+        return database.selectOne(QUERY_ONE, this::mapToPersistentTask, id.id);
     }
 
-    List<PersistentTask> failedTasks() {
-        return database.selectAll(QUERY_ALL_FAILED, this::map);
+    List<FailedTask> failedTasks() {
+        return database.selectAll(QUERY_ALL_FAILED, this::mapToFailedTask);
     }
 
-    PersistentTask map(ResultSet rs) {
+    Optional<FailedTask> failedTask(TaskId taskId) {
+        return Optional.ofNullable(database.selectOne(QUERY_ONE_FAILED, this::mapToFailedTask, taskId.id));
+    }
+
+    PersistentTask mapToPersistentTask(ResultSet rs) {
         try {
             Timestamp pickTime = rs.getTimestamp("LOCK_TIME");
 
             return new PersistentTask(
-                    rs.getString("ID"),
+                    new TaskId(rs.getString("ID")),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
                     pickTime != null ? pickTime.toLocalDateTime() : null,
@@ -90,8 +101,21 @@ class PersistentTasks {
         }
     }
 
-    private String generateId() {
-        return UUID.randomUUID().toString();
-    }
+    FailedTask mapToFailedTask(ResultSet rs) {
+        try {
+            Timestamp pickTime = rs.getTimestamp("LOCK_TIME");
 
+            return new FailedTask(
+                    new TaskId(rs.getString("ID")),
+                    rs.getString("PARAMETER"),
+                    rs.getString("NAME"),
+                    pickTime != null ? pickTime.toLocalDateTime() : null,
+                    rs.getLong("VERSION"),
+                    rs.getString("EXCEPTION_MESSAGE"),
+                    rs.getString("STACK_TRACE"),
+                    database);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

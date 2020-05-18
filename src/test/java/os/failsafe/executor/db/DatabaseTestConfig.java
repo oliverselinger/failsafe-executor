@@ -25,8 +25,6 @@ package os.failsafe.executor.db;
 
 import os.failsafe.executor.utils.Database;
 
-import java.sql.Connection;
-
 interface DatabaseTestConfig {
     void createTable(Database database);
 

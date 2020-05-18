@@ -23,6 +23,7 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.NamedThreadFactory;
 
 import java.util.concurrent.ExecutorService;
@@ -40,12 +41,12 @@ class WorkerPool {
         workers = Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
     }
 
-    public Future<String> execute(Execution execution) {
+    public Future<TaskId> execute(Execution execution) {
         idleWorkerCount.decrementAndGet();
         return workers.submit(() -> runTask(execution));
     }
 
-    private String runTask(Execution execution) {
+    private TaskId runTask(Execution execution) {
         try {
             return execution.perform();
         } finally {

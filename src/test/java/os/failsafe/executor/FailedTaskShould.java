@@ -30,17 +30,13 @@ import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
-import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class PersistentTaskShould {
+public class FailedTaskShould {
+
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -56,40 +52,38 @@ public class PersistentTaskShould {
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
-    @Test public void
-    lock_itself() {
+    @Test
+    public void
+    on_retry_clear_failed_status_and_unlock_itself() {
         PersistentTask persistentTask = createTask();
-
-        database.connect(persistentTask::lock);
-
-        PersistentTask locked = persistentTasks.findOne(persistentTask.getId());
-        assertNotNull(locked.startTime);
-    }
-
-    @Test public void
-    remove_itself() {
-        PersistentTask persistentTask = createTask();
-
-        persistentTask.remove();
-
-        assertNull(persistentTasks.findOne(persistentTask.getId()));
-    }
-
-    @Test public void
-    save_exception_details_and_mark_itself_as_failed() {
-        PersistentTask persistentTask = createTask();
-
-        String exceptionMessage = "Exception message";
-        Exception exception = new Exception(exceptionMessage);
-
+        RuntimeException exception = new RuntimeException("Sorry");
         persistentTask.fail(exception);
 
-        List<FailedTask> failedTasks = persistentTasks.failedTasks();
-        assertEquals(1, failedTasks.size());
+        FailedTask failedTask = persistentTasks.failedTask(persistentTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
 
-        FailedTask failedTask = failedTasks.get(0);
-        assertEquals(exceptionMessage, failedTask.getExceptionMessage());
-        assertEquals(ExceptionUtils.stackTraceAsString(exception), failedTask.getStackTrace());
+        failedTask.retry();
+
+        PersistentTask task = persistentTasks.findOne(persistentTask.getId());
+        assertFalse(task.failed);
+        assertNull(task.exceptionMessage);
+        assertNull(task.stackTrace);
+
+        assertNull(task.startTime);
+    }
+
+    @Test
+    public void
+    remove_itself_on_cancel() {
+        PersistentTask persistentTask = createTask();
+        RuntimeException exception = new RuntimeException("Sorry");
+        persistentTask.fail(exception);
+
+        FailedTask failedTask = persistentTasks.failedTask(persistentTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
+
+        failedTask.cancel();
+
+        PersistentTask task = persistentTasks.findOne(persistentTask.getId());
+        assertNull(task);
     }
 
     private PersistentTask createTask() {

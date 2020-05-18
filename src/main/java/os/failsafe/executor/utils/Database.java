@@ -94,9 +94,10 @@ public class Database {
         }
     }
 
-    public <T> void insert(String sql,
+    public <T> void insert(Connection connection,
+                           String sql,
                            Object... params) {
-        int effectedRows = executeUpdate(sql, params);
+        int effectedRows = executeUpdate(connection, sql, params);
 
         if (effectedRows != 1) {
             throw new RuntimeException("Insertion failure");

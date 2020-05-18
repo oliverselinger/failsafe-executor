@@ -30,17 +30,20 @@ import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
-import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class PersistentTaskShould {
+public class PersistentTasksShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -48,6 +51,8 @@ public class PersistentTaskShould {
     private final TestSystemClock systemClock = new TestSystemClock();
     private Database database;
     private PersistentTasks persistentTasks;
+    private String taskName = "TestTask";
+    private final String taskParameter = "parameter";
 
     @BeforeEach
     public void init() {
@@ -56,43 +61,65 @@ public class PersistentTaskShould {
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
-    @Test public void
-    lock_itself() {
-        PersistentTask persistentTask = createTask();
+    @Test
+    public void
+    persist_and_find_a_task() {
+        PersistentTask task = createTask();
 
-        database.connect(persistentTask::lock);
-
-        PersistentTask locked = persistentTasks.findOne(persistentTask.getId());
-        assertNotNull(locked.startTime);
+        PersistentTask actual = persistentTasks.findOne(task.getId());
+        assertDoesNotThrow(() -> UUID.fromString(actual.getId().id));
+        assertEquals(task.getId(), actual.getId());
+        assertEquals(taskName, actual.getName());
+        assertEquals(taskParameter, actual.getParameter());
+        assertEquals(0L, actual.version);
+        assertNull(actual.startTime);
+        assertFalse(actual.failed);
+        assertNull(actual.exceptionMessage);
+        assertNull(actual.stackTrace);
     }
 
-    @Test public void
-    remove_itself() {
-        PersistentTask persistentTask = createTask();
+    @Test
+    public void
+    persist_a_task_with_given_id() {
+        String id = "id";
+        PersistentTask task = createTask(id);
 
-        persistentTask.remove();
-
-        assertNull(persistentTasks.findOne(persistentTask.getId()));
+        PersistentTask actual = persistentTasks.findOne(task.getId());
+        assertEquals(id, task.getId().id);
+        assertEquals(id, actual.getId().id);
     }
 
-    @Test public void
-    save_exception_details_and_mark_itself_as_failed() {
-        PersistentTask persistentTask = createTask();
+    @Test
+    public void
+    raise_and_exception_if_id_is_not_unique() {
+        String id = "id";
+        createTask(id);
+        assertThrows(RuntimeException.class, () -> createTask(id));
+    }
 
-        String exceptionMessage = "Exception message";
-        Exception exception = new Exception(exceptionMessage);
-
-        persistentTask.fail(exception);
+    @Test
+    public void
+    return_empty_list_if_no_task_is_failed() {
+        createTask();
 
         List<FailedTask> failedTasks = persistentTasks.failedTasks();
-        assertEquals(1, failedTasks.size());
+        assertTrue(failedTasks.isEmpty());
+    }
 
-        FailedTask failedTask = failedTasks.get(0);
-        assertEquals(exceptionMessage, failedTask.getExceptionMessage());
-        assertEquals(ExceptionUtils.stackTraceAsString(exception), failedTask.getStackTrace());
+    @Test
+    public void
+    return_empty_optional_if_task_is_not_failed() {
+        PersistentTask persistentTask = createTask();
+
+        Optional<FailedTask> failedTasks = persistentTasks.failedTask(persistentTask.getId());
+        assertFalse(failedTasks.isPresent());
     }
 
     private PersistentTask createTask() {
-        return persistentTasks.create(new Task("TestTask", "parameter"));
+        return persistentTasks.create(new Task(taskName, taskParameter));
+    }
+
+    private PersistentTask createTask(String id) {
+        return persistentTasks.create(new Task(id, taskName, taskParameter));
     }
 }

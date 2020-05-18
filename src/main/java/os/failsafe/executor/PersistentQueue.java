@@ -23,10 +23,12 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
+import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
+import java.sql.Connection;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -51,18 +53,22 @@ class PersistentQueue {
         this.QUERY_NEXT_TASKS = constructNextTaskQuery();
     }
 
-    PersistentTask add(Task task) {
-        return persistentTasks.create(task);
+    TaskId add(Task task) {
+        return persistentTasks.create(task).getId();
+    }
+
+    TaskId add(Connection connection, Task task) {
+        return persistentTasks.create(connection, task).getId();
     }
 
     List<PersistentTask> allQueued() {
-        return database.selectAll(QUERY_ALL_TASKS, persistentTasks::map, deadExecutionTimeout());
+        return database.selectAll(QUERY_ALL_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout());
     }
 
     PersistentTask peekAndLock() {
         return database.connect(connection ->
 
-                database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::map, deadExecutionTimeout()).stream()
+                database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout()).stream()
                         .map(enqueuedTask -> enqueuedTask.lock(connection))
                         .findFirst()
                         .orElse(null));

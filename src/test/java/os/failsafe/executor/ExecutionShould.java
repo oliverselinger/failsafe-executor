@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskDefinition;
+import os.failsafe.executor.task.TaskId;
 
 import java.util.Collections;
 
@@ -42,7 +43,7 @@ public class ExecutionShould {
     private TaskDefinition taskDefinition;
 
     private PersistentTask persistentTask;
-    private final String taskId = "123";
+    private final TaskId taskId = new TaskId("123");
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
 
@@ -72,7 +73,7 @@ public class ExecutionShould {
 
         execution.perform();
 
-        verify(listener).succeeded(taskName, taskId);
+        verify(listener).succeeded(taskName, taskId, parameter);
     }
 
     @Test public void
@@ -92,7 +93,7 @@ public class ExecutionShould {
 
         execution.perform();
 
-        verify(listener).failed(taskName, taskId);
+        verify(listener).failed(taskName, taskId, parameter);
     }
 
 }
