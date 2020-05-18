@@ -27,32 +27,31 @@ import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
-import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
-class EnqueuedTasks {
+class PersistentTasks {
 
     private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,LAST_MODIFIED_DATE,CREATED_DATE) VALUES (?,?,?,?,?,?)";
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
 
-    private final DataSource dataSource;
+    private final Database database;
     private final SystemClock systemClock;
 
-    public EnqueuedTasks(DataSource dataSource, SystemClock systemClock) {
-        this.dataSource = dataSource;
+    public PersistentTasks(Database database, SystemClock systemClock) {
+        this.database = database;
         this.systemClock = systemClock;
     }
 
     PersistentTask create(Task task) {
         String id = generateId();
 
-        Database.insert(dataSource, INSERT_TASK,
+        database.insert(INSERT_TASK,
                 id,
                 task.name,
                 task.parameter,
@@ -60,31 +59,31 @@ class EnqueuedTasks {
                 Timestamp.valueOf(systemClock.now()),
                 Timestamp.valueOf(systemClock.now()));
 
-        return new PersistentTask(id, task.parameter, task.name, dataSource, systemClock);
+        return new PersistentTask(id, task.parameter, task.name, database, systemClock);
     }
 
     PersistentTask findOne(String id) {
-        return Database.selectOne(dataSource, QUERY_ONE, this::map, id);
+        return database.selectOne(QUERY_ONE, this::map, id);
     }
 
     List<PersistentTask> failedTasks() {
-        return Database.selectAll(dataSource, QUERY_ALL_FAILED, this::map);
+        return database.selectAll(QUERY_ALL_FAILED, this::map);
     }
 
     PersistentTask map(ResultSet rs) {
         try {
-            Timestamp start_time = rs.getTimestamp("START_TIME");
+            Timestamp pickTime = rs.getTimestamp("LOCK_TIME");
 
             return new PersistentTask(
                     rs.getString("ID"),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
-                    start_time!=null ? start_time.toLocalDateTime() : null,
+                    pickTime != null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
                     rs.getBoolean("FAILED"),
                     rs.getString("EXCEPTION_MESSAGE"),
                     rs.getString("STACK_TRACE"),
-                    dataSource,
+                    database,
                     systemClock);
         } catch (SQLException e) {
             throw new RuntimeException(e);

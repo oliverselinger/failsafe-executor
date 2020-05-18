@@ -1,9 +1,58 @@
 version: 2.1
 
-orbs:
-  maven: circleci/maven@1.0.1
+commands:
+  maven-package:
+    steps:
+      - checkout
+      - restore_cache:
+          key: failsafe-executor-{{ checksum "pom.xml" }}
+      - run: mvn dependency:go-offline
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: failsafe-executor-{{ checksum "pom.xml" }}
+      - run: mvn package
+      - store_test_results:
+          path: target/surefire-reports
+
+jobs:
+  build:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+    steps:
+      - maven-package
+
+  test-postgres:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+      - image: circleci/postgres:12-alpine
+        environment:
+          POSTGRES_USER: failsafe
+          POSTGRES_PASSWORD: failsafe
+          POSTGRES_DB: failsafe
+    environment:
+      TEST_DB: POSTGRES
+    steps:
+      - maven-package
+
+  test-mysql:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+      - image: circleci/mysql:8.0.4
+        environment:
+          MYSQL_ROOT_PASSWORD: failsafe
+          MYSQL_DATABASE: failsafe
+          MYSQL_USER: failsafe
+          MYSQL_PASSWORD: failsafe
+    environment:
+      TEST_DB: MYSQL
+    steps:
+      - maven-package
 
 workflows:
-  maven_test:
+  version: 2
+  build_and_test:
     jobs:
-      - maven/test # checkout, build, test, and upload test results
+      - build
+      - test-postgres
+      - test-mysql

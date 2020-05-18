@@ -21,21 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
-
-import java.net.URI;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-
-public class FileUtil {
-
-    public static String readResourceFile(String name) {
-        try {
-            URI uri = FileUtil.class.getClassLoader().getResource(name).toURI();
-            return new String(Files.readAllBytes(Paths.get(uri)), Charset.defaultCharset());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-}
+CREATE TABLE PERSISTENT_TASK (
+    ID VARCHAR(36) NOT NULL,
+    PARAMETER VARCHAR(200),
+    NAME VARCHAR(200) NOT NULL,
+    LOCK_TIME DATETIME(3),
+    FAILED SMALLINT DEFAULT 0,
+    EXCEPTION_MESSAGE VARCHAR(1000),
+    STACK_TRACE TEXT,
+    VERSION INT DEFAULT 0,
+    LAST_MODIFIED_DATE DATETIME(3),
+    CREATED_DATE DATETIME(3),
+    PRIMARY KEY (ID,NAME)
+);

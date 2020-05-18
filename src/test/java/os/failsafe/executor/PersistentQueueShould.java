@@ -26,7 +26,7 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import os.failsafe.executor.db.H2DbExtension;
+import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
@@ -44,20 +44,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 public class PersistentQueueShould {
 
     @RegisterExtension
-    static final H2DbExtension h2DbExtension = new H2DbExtension();
+    static final DbExtension DB_EXTENSION = new DbExtension();
 
     private TestSystemClock systemClock = new TestSystemClock();
 
-    private DataSource dataSource;
     private PersistentQueue persistentQueue;
-    private EnqueuedTasks enqueuedTasks;
 
     @BeforeEach
     public void init() {
-        dataSource = h2DbExtension.getDataSource();
         systemClock = new TestSystemClock();
-        enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
-        persistentQueue = new PersistentQueue(dataSource, systemClock);
+        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock);
     }
 
     @Test public void
@@ -84,7 +80,9 @@ public class PersistentQueueShould {
     dequeue_tasks_in_fifo_sequence() {
         Task task = createTask();
         PersistentTask persistentTask1 = persistentQueue.add(task);
+        systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
         PersistentTask persistentTask2 = persistentQueue.add(task);
+        systemClock.timeTravelBy(Duration.ofMillis(1));
         PersistentTask persistentTask3 =  persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();

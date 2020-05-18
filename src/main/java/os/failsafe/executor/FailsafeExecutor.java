@@ -25,6 +25,7 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
+import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
@@ -50,7 +51,7 @@ public class FailsafeExecutor {
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
-    private final EnqueuedTasks enqueuedTasks;
+    private final PersistentTasks persistentTasks;
     private final Duration initialDelay;
     private final Duration pollingInterval;
 
@@ -59,11 +60,12 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval) {
-        this.persistentQueue = new PersistentQueue(dataSource, systemClock);
+        Database database = new Database(dataSource);
+        this.persistentQueue = new PersistentQueue(database, systemClock);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
-        this.enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        this.persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     public void start() {
@@ -90,7 +92,7 @@ public class FailsafeExecutor {
     }
 
     public List<PersistentTask> failedTasks() {
-        return enqueuedTasks.failedTasks();
+        return persistentTasks.failedTasks();
     }
 
     private Future<String> executeNextTask() {

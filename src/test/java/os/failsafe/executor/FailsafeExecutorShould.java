@@ -30,7 +30,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import os.failsafe.executor.db.H2DbExtension;
+import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskDefinitions;
@@ -56,7 +56,7 @@ public class FailsafeExecutorShould {
     private final TestSystemClock systemClock = new TestSystemClock();
 
     @RegisterExtension
-    static final H2DbExtension h2DbExtension = new H2DbExtension();
+    static final DbExtension DB_EXTENSION = new DbExtension();
 
     DataSource dataSource;
     FailsafeExecutor failsafeExecutor;
@@ -67,7 +67,7 @@ public class FailsafeExecutorShould {
 
     @BeforeEach
     public void init() {
-        dataSource = h2DbExtension.getDataSource();
+        dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
         taskDefinition = TaskDefinitions.of("TestTask", parameter -> {

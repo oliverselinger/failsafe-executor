@@ -28,17 +28,16 @@ import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.StringUtils;
 import os.failsafe.executor.utils.SystemClock;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 class PersistentTask {
 
-    private static final String SET_START_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, START_TIME=? WHERE VERSION=? AND ID=?";
+    private static final String SET_LOCK_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
     private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
     private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
-    private static final String RETRY_TASK = "UPDATE PERSISTENT_TASK SET START_TIME=null, FAILED=0, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
+    private static final String RETRY_TASK = "UPDATE PERSISTENT_TASK SET LOCK_TIME=null, FAILED=0, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final String id;
     private final String parameter;
@@ -48,14 +47,14 @@ class PersistentTask {
     final boolean failed;
     final String exceptionMessage;
     final String stackTrace;
-    private final DataSource dataSource;
+    private final Database database;
     private final SystemClock systemClock;
 
-    public PersistentTask(String id, String parameter, String name, DataSource dataSource, SystemClock systemClock) {
-        this(id, parameter, name, null, 0L, false, null, null, dataSource, systemClock);
+    public PersistentTask(String id, String parameter, String name, Database database, SystemClock systemClock) {
+        this(id, parameter, name, null, 0L, false, null, null, database, systemClock);
     }
 
-    public PersistentTask(String id, String parameter, String name, LocalDateTime startTime, Long version, boolean failed, String exceptionMessage, String stackTrace, DataSource dataSource, SystemClock systemClock) {
+    public PersistentTask(String id, String parameter, String name, LocalDateTime startTime, Long version, boolean failed, String exceptionMessage, String stackTrace, Database database, SystemClock systemClock) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
@@ -64,34 +63,34 @@ class PersistentTask {
         this.failed = failed;
         this.exceptionMessage = exceptionMessage;
         this.stackTrace = stackTrace;
-        this.dataSource = dataSource;
+        this.database = database;
         this.systemClock = systemClock;
     }
 
     PersistentTask lock(Connection connection) {
         LocalDateTime startTime = systemClock.now();
 
-        int effectedRows = Database.update(connection, SET_START_TIME,
+        int effectedRows = database.update(connection, SET_LOCK_TIME,
                 version + 1,
                 Timestamp.valueOf(startTime),
                 version,
                 id);
         if (effectedRows == 1) {
-            return new PersistentTask(id, parameter, name, startTime, version + 1, false, null, null, dataSource, systemClock);
+            return new PersistentTask(id, parameter, name, startTime, version + 1, false, null, null, database, systemClock);
         }
 
         return null;
     }
 
     void remove() {
-        Database.delete(dataSource, DELETE_TASK, id, version);
+        database.delete(DELETE_TASK, id, version);
     }
 
     void fail(Exception exception) {
         String message = StringUtils.abbreviate(exception.getMessage(), 1000);
         String stackTrace = ExceptionUtils.stackTraceAsString(exception);
 
-        int updateCount = Database.update(dataSource, FAIL_TASK, message, stackTrace, version+1, id, version);
+        int updateCount = database.update(FAIL_TASK, message, stackTrace, version+1, id, version);
 
         if (updateCount != 1) {
             throw new RuntimeException("Couldn't set task to failed.");
@@ -99,7 +98,7 @@ class PersistentTask {
     }
 
     public void retry() {
-        int updateCount = Database.update(dataSource, RETRY_TASK, version+1, id, version);
+        int updateCount = database.update(RETRY_TASK, version+1, id, version);
 
         if (updateCount != 1) {
             throw new RuntimeException("Couldn't retry task.");

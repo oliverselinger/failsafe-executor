@@ -26,13 +26,11 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import os.failsafe.executor.db.H2DbExtension;
+import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
-
-import javax.sql.DataSource;
 
 import java.util.List;
 
@@ -47,25 +45,25 @@ public class PersistentTaskShould {
     private final TestSystemClock systemClock = new TestSystemClock();
 
     @RegisterExtension
-    static final H2DbExtension h2DbExtension = new H2DbExtension();
+    static final DbExtension DB_EXTENSION = new DbExtension();
 
-    DataSource dataSource;
-    EnqueuedTasks enqueuedTasks;
+    Database database;
+    PersistentTasks persistentTasks;
 
     @BeforeEach
     public void init() {
-        dataSource = h2DbExtension.getDataSource();
+        database = DB_EXTENSION.database();
         systemClock.resetTime();
-        enqueuedTasks = new EnqueuedTasks(dataSource, systemClock);
+        persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     @Test public void
     lock_itself() {
         PersistentTask persistentTask = createEnqueuedTask();
 
-        Database.run(dataSource, persistentTask::lock);
+        database.connect(persistentTask::lock);
 
-        PersistentTask locked = enqueuedTasks.findOne(persistentTask.getId());
+        PersistentTask locked = persistentTasks.findOne(persistentTask.getId());
         assertNotNull(locked.startTime);
     }
 
@@ -75,7 +73,7 @@ public class PersistentTaskShould {
 
         persistentTask.remove();
 
-        assertNull(enqueuedTasks.findOne(persistentTask.getId()));
+        assertNull(persistentTasks.findOne(persistentTask.getId()));
     }
 
     @Test public void
@@ -87,7 +85,7 @@ public class PersistentTaskShould {
 
         persistentTask.fail(exception);
 
-        List<PersistentTask> failedTasks = enqueuedTasks.failedTasks();
+        List<PersistentTask> failedTasks = persistentTasks.failedTasks();
         assertEquals(1, failedTasks.size());
 
         PersistentTask failedTask = failedTasks.get(0);
@@ -102,7 +100,7 @@ public class PersistentTaskShould {
 
         persistentTask.retry();
 
-        PersistentTask task = enqueuedTasks.findOne(persistentTask.getId());
+        PersistentTask task = persistentTasks.findOne(persistentTask.getId());
         assertFalse(task.failed);
         assertNull(task.exceptionMessage);
         assertNull(task.stackTrace);
@@ -111,6 +109,6 @@ public class PersistentTaskShould {
     }
 
     private PersistentTask createEnqueuedTask() {
-        return enqueuedTasks.create(new Task("TestTask", "parameter"));
+        return persistentTasks.create(new Task("TestTask", "parameter"));
     }
 }

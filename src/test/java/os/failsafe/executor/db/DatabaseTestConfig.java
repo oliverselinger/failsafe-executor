@@ -21,21 +21,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
+package os.failsafe.executor.db;
 
-import java.net.URI;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import os.failsafe.executor.utils.Database;
 
-public class FileUtil {
+import java.sql.Connection;
 
-    public static String readResourceFile(String name) {
-        try {
-            URI uri = FileUtil.class.getClassLoader().getResource(name).toURI();
-            return new String(Files.readAllBytes(Paths.get(uri)), Charset.defaultCharset());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+interface DatabaseTestConfig {
+    void createTable(Database database);
+
+    void truncateTable(Database database);
+
+    String user();
+
+    String password();
+
+    String driver();
+
+    String jdbcUrl();
+
+    int maxPoolSize();
 }
