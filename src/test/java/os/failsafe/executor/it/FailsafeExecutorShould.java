@@ -156,7 +156,7 @@ public class FailsafeExecutorShould {
         DataSource failingDataSource = Mockito.mock(DataSource.class);
         when(failingDataSource.getConnection()).thenReturn(connection);
 
-        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofSeconds(10));
         failsafeExecutor.start();
 
         verify(connection, timeout(TimeUnit.SECONDS.toMillis(5))).prepareStatement(any());
