@@ -41,6 +41,7 @@ public class ExecutionShould {
 
     private Execution execution;
     private TaskDefinition taskDefinition;
+    private TaskExecutionListener globalListener;
 
     private PersistentTask persistentTask;
     private final TaskId taskId = new TaskId("123");
@@ -56,7 +57,9 @@ public class ExecutionShould {
         when(persistentTask.getParameter()).thenReturn(parameter);
         when(persistentTask.getName()).thenReturn(taskName);
 
-        execution = new Execution(taskDefinition, persistentTask);
+        globalListener = Mockito.mock(TaskExecutionListener.class);
+
+        execution = new Execution(taskDefinition, persistentTask, Collections.singletonList(globalListener));
     }
 
     @Test public void
@@ -73,6 +76,7 @@ public class ExecutionShould {
 
         execution.perform();
 
+        verify(globalListener).succeeded(taskName, taskId, parameter);
         verify(listener).succeeded(taskName, taskId, parameter);
     }
 
@@ -93,6 +97,7 @@ public class ExecutionShould {
 
         execution.perform();
 
+        verify(globalListener).failed(taskName, taskId, parameter);
         verify(listener).failed(taskName, taskId, parameter);
     }
 

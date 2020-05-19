@@ -73,14 +73,23 @@ TaskId taskId = failsafeExecutor.execute(task);
 
 ## Monitoring the execution
 
-The result of execution of a task can be observed by subscribing a listener at the TaskDefinition.
+The result of execution of a task can be observed by subscribing a listener either at the TaskDefinition:
 
 ```java
 TaskExecutionListener executionListener = new TaskExecutionListener() { ... };
 taskDefinition.subscribe(executionListener);
 ```
 
-The listener get called at the end of the execution in an at least once manner.
+or globally at the FailsafeExecutor:
+
+```java
+failsafeExecutor.subscribe(executionListener);
+```
+
+Listeners subscribed at TaskDefinitions get called only if a corresponding task gets executed.
+A global listener gets called each time an execution is performed.
+
+The listener gets called at the end of the execution in an at least once manner.
 
 ## Task failures
 
@@ -104,6 +113,20 @@ failedTask.cancel();
 ```
 
 Cancel deletes the task from database.
+
+## Monitoring
+
+The FailsafeExecutor provides a health check through two methods. One that returns if last run of FailsafeExecutor was successful.
+
+```java
+failsafeExecutor.isLastRunFailed();
+```
+
+And another method to retrieve the exception of the last run.
+
+```java
+Exception e = failsafeExecutor.lastRunException();
+```
 
 ## Shutdown of the executor
 

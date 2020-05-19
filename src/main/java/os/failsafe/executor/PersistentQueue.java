@@ -31,6 +31,7 @@ import os.failsafe.executor.utils.SystemClock;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Optional;
 
 class PersistentQueue {
 
@@ -66,12 +67,30 @@ class PersistentQueue {
     }
 
     PersistentTask peekAndLock() {
-        return database.connect(connection ->
+        return database.connect(connection -> {
 
-                database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout()).stream()
+            List<PersistentTask> nextTasksToLock = findNextTasks(connection);
+
+            if (nextTasksToLock.isEmpty()) {
+                return null;
+            }
+
+            do {
+                Optional<PersistentTask> locked = nextTasksToLock.stream()
                         .map(enqueuedTask -> enqueuedTask.lock(connection))
-                        .findFirst()
-                        .orElse(null));
+                        .findFirst();
+
+                if (locked.isPresent()) {
+                    return locked.get();
+                }
+            } while((nextTasksToLock = findNextTasks(connection)).isEmpty());
+
+            return null;
+        });
+    }
+
+    private List<PersistentTask> findNextTasks(Connection connection) {
+        return database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout());
     }
 
     private Timestamp deadExecutionTimeout() {

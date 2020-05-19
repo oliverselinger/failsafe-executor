@@ -41,6 +41,8 @@ import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -48,8 +50,12 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
 
@@ -88,7 +94,7 @@ public class FailsafeExecutorShould {
         failsafeExecutor.defineTask(taskDefinition);
 
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
-        taskDefinition.subscribe(taskExecutionListener);
+        failsafeExecutor.subscribe(taskExecutionListener);
     }
 
     @AfterEach
@@ -138,5 +144,31 @@ public class FailsafeExecutorShould {
         failedTask.retry();
 
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), taskId, parameter);
+    }
+
+    @Test
+    public void
+    report_failures() throws SQLException {
+        RuntimeException e = new RuntimeException("Error");
+
+        Connection connection = createFailingJdbcConnection(e);
+
+        DataSource failingDataSource = Mockito.mock(DataSource.class);
+        when(failingDataSource.getConnection()).thenReturn(connection);
+
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
+        failsafeExecutor.start();
+
+        verify(connection, timeout(TimeUnit.SECONDS.toMillis(5))).prepareStatement(any());
+
+        assertTrue(failsafeExecutor.isLastRunFailed());
+        assertEquals(e, failsafeExecutor.lastRunException());
+    }
+
+    private Connection createFailingJdbcConnection(RuntimeException e) throws SQLException {
+        Connection connection = Mockito.mock(Connection.class, RETURNS_DEEP_STUBS);
+        when(connection.getMetaData().getDatabaseProductName()).thenReturn("H2");
+        when(connection.prepareStatement(any())).thenThrow(e);
+        return connection;
     }
 }

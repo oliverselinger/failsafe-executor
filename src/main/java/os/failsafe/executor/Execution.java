@@ -23,17 +23,22 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.TaskDefinition;
+import os.failsafe.executor.task.TaskExecutionListener;
+import os.failsafe.executor.task.TaskId;
+
+import java.util.List;
 
 class Execution {
 
     private final TaskDefinition taskDefinition;
     private final PersistentTask persistentTask;
+    private final List<TaskExecutionListener> globalListeners;
 
-    Execution(TaskDefinition taskDefinition, PersistentTask persistentTask) {
+    Execution(TaskDefinition taskDefinition, PersistentTask persistentTask, List<TaskExecutionListener> globalListeners) {
         this.taskDefinition = taskDefinition;
         this.persistentTask = persistentTask;
+        this.globalListeners = globalListeners;
     }
 
     public TaskId perform() {
@@ -53,10 +58,20 @@ class Execution {
     }
 
     private void notifySuccess() {
-        taskDefinition.allListeners().forEach(listener -> listener.succeeded(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter()));
+        globalListeners.forEach(this::notifySuccess);
+        taskDefinition.allListeners().forEach(this::notifySuccess);
+    }
+
+    private void notifySuccess(TaskExecutionListener listener) {
+        listener.succeeded(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter());
     }
 
     private void notifyFailed() {
-        taskDefinition.allListeners().forEach(listener -> listener.failed(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter()));
+        globalListeners.forEach(this::notifyFailed);
+        taskDefinition.allListeners().forEach(this::notifyFailed);
+    }
+
+    private void notifyFailed(TaskExecutionListener listener) {
+        listener.failed(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter());
     }
 }

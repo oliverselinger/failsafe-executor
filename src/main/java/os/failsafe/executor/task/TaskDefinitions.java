@@ -23,8 +23,8 @@
  ******************************************************************************/
 package os.failsafe.executor.task;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 public class TaskDefinitions {
@@ -32,7 +32,7 @@ public class TaskDefinitions {
     public static TaskDefinition of(String name, Consumer<String> task) {
         return new TaskDefinition() {
 
-            private final List<TaskExecutionListener> listeners = new ArrayList<>();
+            private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
             @Override
             public String getName() {

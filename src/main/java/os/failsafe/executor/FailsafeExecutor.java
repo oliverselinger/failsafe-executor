@@ -24,6 +24,7 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskDefinition;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,6 +54,8 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
 
     private final Map<String, TaskDefinition> tasksByIdentifier = new ConcurrentHashMap<>();
+    private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
+
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
@@ -59,6 +63,8 @@ public class FailsafeExecutor {
     private final Duration initialDelay;
     private final Duration pollingInterval;
     private final Database database;
+
+    private volatile Exception lastRunException;
 
     public FailsafeExecutor(DataSource dataSource) {
         this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL);
@@ -108,19 +114,53 @@ public class FailsafeExecutor {
         return persistentTasks.failedTask(taskId);
     }
 
+    public void subscribe(TaskExecutionListener listener) {
+        listeners.add(listener);
+    }
+
+    public void unsubscribe(TaskExecutionListener listener) {
+        listeners.remove(listener);
+    }
+
+    public boolean isLastRunFailed() {
+        return lastRunException != null;
+    }
+
+    public Exception lastRunException() {
+        return lastRunException;
+    }
+
     private Future<TaskId> executeNextTask() {
-        if (workerPool.allWorkersBusy()) {
-            return null;
+        try {
+            if (workerPool.allWorkersBusy()) {
+                return null;
+            }
+
+            PersistentTask toExecute = persistentQueue.peekAndLock();
+
+            if (toExecute == null) {
+                return null;
+            }
+
+            TaskDefinition taskDefinition = tasksByIdentifier.get(toExecute.getName());
+
+            Future<TaskId> execution = workerPool.execute(new Execution(taskDefinition, toExecute, listeners));
+
+            clearException();
+
+            return execution;
+        } catch (Exception e) {
+            storeException(e);
         }
 
-        PersistentTask toExecute = persistentQueue.peekAndLock();
+        return null;
+    }
 
-        if (toExecute == null) {
-            return null;
-        }
+    private void storeException(Exception e) {
+        lastRunException = e;
+    }
 
-        TaskDefinition taskDefinition = tasksByIdentifier.get(toExecute.getName());
-
-        return workerPool.execute(new Execution(taskDefinition, toExecute));
+    private void clearException() {
+        lastRunException = null;
     }
 }

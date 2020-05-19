@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import os.failsafe.executor.task.TaskId;
 
+import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
@@ -84,7 +85,7 @@ public class WorkerPoolShould {
         Phaser phaser;
 
         BlockingExecution() {
-            super(null, null);
+            super(null, null, Collections.emptyList());
             phaser = new Phaser(2);
         }
 
