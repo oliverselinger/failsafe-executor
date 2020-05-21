@@ -40,7 +40,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 
 3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql](src/main/resources/mysql.sql)
 
-3. Instantiate and start the FailsafeExecutor, which then will start executing any submitted tasks.
+3. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
 
 ```java
 FailsafeExecutor failsafeExecutor = new FailsafeExecutor(dataSource);
@@ -51,7 +51,7 @@ failsafeExecutor.start();
 
 ### Define the execution logic
 
-You need to define the program that should be executed by the FailsafeExecutor. For that, create a taskDefinition. It consists of an arbitrary chosen id that must be
+You need to define the logic that should be executed by the `FailsafeExecutor`. For that, create a `TaskDefinition`. It consists of an arbitrary chosen id that must be
 unique application-wide. The actual logic is defined via a consumer that accepts a String as parameter, used for state transfer.
 The parameter can be anything but we recommend to use just a single ID that your business logic is able to interpret properly. Avoid using a complex object
 (through serialization) since it may lead to complex migration scenarios in case business logic changes.
@@ -63,8 +63,8 @@ failsafeExecutor.defineTask(taskDefinition);
 
 ### Create and execute a task
 
-To execute a task create a new instance by using the TaskDefinition. There you can define the parameter.
-The task is then executed some time in the future by passing it to the FailsafeExecutor.
+To execute a task create a new instance by using the `TaskDefinition`. There you can define the parameter.
+The task is then executed some time in the future by passing it to the `FailsafeExecutor`.
 
 ```java
 Task task = taskDefinition.newTask(" world!");
@@ -73,20 +73,20 @@ TaskId taskId = failsafeExecutor.execute(task);
 
 ## Monitoring the execution
 
-The result of execution of a task can be observed by subscribing a listener either at the TaskDefinition:
+The result of execution of a task can be observed by subscribing a listener either at the `TaskDefinition`:
 
 ```java
 TaskExecutionListener executionListener = new TaskExecutionListener() { ... };
 taskDefinition.subscribe(executionListener);
 ```
 
-or globally at the FailsafeExecutor:
+or globally at the `FailsafeExecutor`:
 
 ```java
 failsafeExecutor.subscribe(executionListener);
 ```
 
-Listeners subscribed at TaskDefinitions get called only if a corresponding task gets executed.
+Listeners subscribed at a `TaskDefinition` get called only if a corresponding task gets executed.
 A global listener gets called each time an execution is performed.
 
 The listener gets called at the end of the execution in an at least once manner.
@@ -94,7 +94,7 @@ The listener gets called at the end of the execution in an at least once manner.
 ## Task failures
 
 Any exceptions occurring during the execution of a task are captured. The exception's message and stacktrace are saved to the task. The task itself is marked as failed.
-Thus the FailsafeExecutor does not execute the task anymore. To find failed tasks use the following:
+Thus the `FailsafeExecutor` does not execute the task anymore. To find failed tasks use the following:
 
 ```java
 List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
@@ -116,7 +116,7 @@ Cancel deletes the task from database.
 
 ## Monitoring
 
-The FailsafeExecutor provides a health check through two methods. One that returns if last run of FailsafeExecutor was successful.
+The `FailsafeExecutor` provides a health check through two methods. One that returns if last run of `FailsafeExecutor` was successful.
 
 ```java
 failsafeExecutor.isLastRunFailed();
@@ -140,3 +140,15 @@ Runtime.getRuntime().addShutdownHook(new Thread() {
     }
 });
 ```
+
+## Configuration
+
+The `FailsafeExecutor` can be created using the all-args constructor. The following options are configurable:
+
+| Option  | Type | Default | Description |
+| ------------- | ---- | ---- | ------------- |
+| `systemClock` | `SystemClock`  | LocalDateTime.now() | Clock to retrieve the current time. |
+| `workerThreadCount` | `int`  | 5  | Number of threads executing tasks. |
+| `queueSize` | `int`  |  2 * `<worker-thread-count>`  | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
+| `initialDelay` | `Duration`  |  10 sec  | The time to delay first execution to fetch tasks of the 'FailsafeExecutor'. |
+| `pollingInterval` | `Duration`  |  5 sec  | How often the 'FailsafeExecutor' checks for tasks to execute. |

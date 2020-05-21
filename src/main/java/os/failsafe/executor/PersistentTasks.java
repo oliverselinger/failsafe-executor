@@ -35,11 +35,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 class PersistentTasks {
 
-    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,LAST_MODIFIED_DATE,CREATED_DATE) VALUES (?,?,?,?,?,?)";
+    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,CREATED_DATE) VALUES (?,?,?,?,?)";
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
@@ -63,7 +62,6 @@ class PersistentTasks {
                 task.name,
                 task.parameter,
                 0,
-                Timestamp.valueOf(systemClock.now()),
                 Timestamp.valueOf(systemClock.now()));
 
         return new PersistentTask(task.id, task.parameter, task.name, database, systemClock);
@@ -91,9 +89,6 @@ class PersistentTasks {
                     rs.getString("NAME"),
                     pickTime != null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
-                    rs.getBoolean("FAILED"),
-                    rs.getString("EXCEPTION_MESSAGE"),
-                    rs.getString("STACK_TRACE"),
                     database,
                     systemClock);
         } catch (SQLException e) {
@@ -104,6 +99,7 @@ class PersistentTasks {
     FailedTask mapToFailedTask(ResultSet rs) {
         try {
             Timestamp pickTime = rs.getTimestamp("LOCK_TIME");
+            Timestamp failTime = rs.getTimestamp("FAIL_TIME");
 
             return new FailedTask(
                     new TaskId(rs.getString("ID")),
@@ -111,6 +107,7 @@ class PersistentTasks {
                     rs.getString("NAME"),
                     pickTime != null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
+                    failTime != null ? failTime.toLocalDateTime() : null,
                     rs.getString("EXCEPTION_MESSAGE"),
                     rs.getString("STACK_TRACE"),
                     database);

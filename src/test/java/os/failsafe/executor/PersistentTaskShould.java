@@ -88,6 +88,7 @@ public class PersistentTaskShould {
         assertEquals(1, failedTasks.size());
 
         FailedTask failedTask = failedTasks.get(0);
+        assertNotNull(failedTask.getFailTime());
         assertEquals(exceptionMessage, failedTask.getExceptionMessage());
         assertEquals(ExceptionUtils.stackTraceAsString(exception), failedTask.getStackTrace());
     }

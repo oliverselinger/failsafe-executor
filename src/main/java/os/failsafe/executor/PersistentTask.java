@@ -37,32 +37,26 @@ class PersistentTask {
 
     private static final String SET_LOCK_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
     private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
-    private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
+    private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final TaskId id;
     private final String parameter;
     private final String name;
     final LocalDateTime startTime;
     final Long version;
-    final boolean failed;
-    final String exceptionMessage;
-    final String stackTrace;
     private final Database database;
     private final SystemClock systemClock;
 
     public PersistentTask(String id, String parameter, String name, Database database, SystemClock systemClock) {
-        this(new TaskId(id), parameter, name, null, 0L, false, null, null, database, systemClock);
+        this(new TaskId(id), parameter, name, null, 0L, database, systemClock);
     }
 
-    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime startTime, Long version, boolean failed, String exceptionMessage, String stackTrace, Database database, SystemClock systemClock) {
+    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime startTime, Long version, Database database, SystemClock systemClock) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
         this.startTime = startTime;
         this.version = version;
-        this.failed = failed;
-        this.exceptionMessage = exceptionMessage;
-        this.stackTrace = stackTrace;
         this.database = database;
         this.systemClock = systemClock;
     }
@@ -76,7 +70,7 @@ class PersistentTask {
                 version,
                 id.id);
         if (effectedRows == 1) {
-            return new PersistentTask(id, parameter, name, startTime, version + 1, false, null, null, database, systemClock);
+            return new PersistentTask(id, parameter, name, startTime, version + 1, database, systemClock);
         }
 
         return null;
@@ -90,7 +84,7 @@ class PersistentTask {
         String message = StringUtils.abbreviate(exception.getMessage(), 1000);
         String stackTrace = ExceptionUtils.stackTraceAsString(exception);
 
-        int updateCount = database.update(FAIL_TASK, message, stackTrace, version+1, id.id, version);
+        int updateCount = database.update(FAIL_TASK, Timestamp.valueOf(systemClock.now()), message, stackTrace, version+1, id.id, version);
 
         if (updateCount != 1) {
             throw new RuntimeException("Couldn't set task to failed.");

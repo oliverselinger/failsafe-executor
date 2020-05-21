@@ -32,6 +32,8 @@ import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -63,12 +65,8 @@ public class FailedTaskShould {
 
         failedTask.retry();
 
-        PersistentTask task = persistentTasks.findOne(persistentTask.getId());
-        assertFalse(task.failed);
-        assertNull(task.exceptionMessage);
-        assertNull(task.stackTrace);
-
-        assertNull(task.startTime);
+        Optional<FailedTask> task = persistentTasks.failedTask(persistentTask.getId());
+        assertFalse(task.isPresent());
     }
 
     @Test

@@ -73,9 +73,6 @@ public class PersistentTasksShould {
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.version);
         assertNull(actual.startTime);
-        assertFalse(actual.failed);
-        assertNull(actual.exceptionMessage);
-        assertNull(actual.stackTrace);
     }
 
     @Test
