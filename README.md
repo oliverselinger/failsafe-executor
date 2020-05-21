@@ -130,7 +130,7 @@ Exception e = failsafeExecutor.lastRunException();
 
 ## Shutdown of the executor
 
-It is important to shutdown the FailsafeExecutor properly by calling the shutdown method. E.g. create a shutdownHook
+It is important to shutdown the FailsafeExecutor properly by calling the `stop` method. E.g. create a shutdownHook
 
 ```java
 Runtime.getRuntime().addShutdownHook(new Thread() {
