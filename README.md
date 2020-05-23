@@ -152,3 +152,18 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `queueSize` | `int`  |  2 * `<worker-thread-count>`  | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
 | `initialDelay` | `Duration`  |  10 sec  | The time to delay first execution to fetch tasks of the 'FailsafeExecutor'. |
 | `pollingInterval` | `Duration`  |  5 sec  | How often the 'FailsafeExecutor' checks for tasks to execute. |
+
+## FAQ
+
+#### Can method `execute` take part in a Spring-managed transaction?
+
+Yes. Wrap your `dataSource` object with a `TransactionAwareDataSourceProxy` before passing it to FailsafeExecutor's constructor. The proxy adds awareness of Spring-managed transactions.
+
+```java
+@Bean(destroyMethod = "stop")
+public FailsafeExecutor failsafeExecutor(DataSource dataSource) {
+    FailsafeExecutor failsafeExecutor = new FailsafeExecutor(new TransactionAwareDataSourceProxy(dataSource));
+    failsafeExecutor.start();
+    return failsafeExecutor;
+}
+```
