@@ -110,6 +110,12 @@ public class FailsafeExecutorShould {
         assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.execute(undefinedTask));
     }
 
+    @Test()
+    public void
+    throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
+        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1)));
+    }
+
     @Test
     public void
     execute_a_task() {

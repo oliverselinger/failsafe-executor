@@ -71,6 +71,10 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval) {
+        if (queueSize < workerThreadCount) {
+            throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
+        }
+
         database = new Database(dataSource);
         this.persistentQueue = new PersistentQueue(database, systemClock);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
