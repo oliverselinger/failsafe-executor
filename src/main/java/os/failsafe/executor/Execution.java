@@ -23,31 +23,44 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.TaskDefinition;
+import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.utils.SystemClock;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 class Execution {
 
-    private final TaskDefinition taskDefinition;
+    private final FailsafeTask failsafeTask;
     private final PersistentTask persistentTask;
-    private final List<TaskExecutionListener> globalListeners;
+    private final List<TaskExecutionListener> listeners;
+    private final Schedule schedule;
+    private final SystemClock systemClock;
 
-    Execution(TaskDefinition taskDefinition, PersistentTask persistentTask, List<TaskExecutionListener> globalListeners) {
-        this.taskDefinition = taskDefinition;
+    Execution(FailsafeTask failsafeTask, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock) {
+        this.failsafeTask = failsafeTask;
         this.persistentTask = persistentTask;
-        this.globalListeners = globalListeners;
+        this.listeners = listeners;
+        this.schedule = schedule;
+        this.systemClock = systemClock;
     }
 
     public TaskId perform() {
         try {
-            taskDefinition.execute(persistentTask.getParameter());
+            failsafeTask.run(persistentTask.getParameter());
 
             notifySuccess();
 
-            persistentTask.remove();
+            Optional<LocalDateTime> nextExecutionTime = schedule.nextExecutionTime(systemClock.now());
+            if (nextExecutionTime.isPresent()) {
+                persistentTask.nextExecution(nextExecutionTime.get());
+            } else {
+                persistentTask.remove();
+            }
         } catch (Exception e) {
             persistentTask.fail(e);
 
@@ -58,8 +71,7 @@ class Execution {
     }
 
     private void notifySuccess() {
-        globalListeners.forEach(this::notifySuccess);
-        taskDefinition.allListeners().forEach(this::notifySuccess);
+        listeners.forEach(this::notifySuccess);
     }
 
     private void notifySuccess(TaskExecutionListener listener) {
@@ -67,8 +79,7 @@ class Execution {
     }
 
     private void notifyFailed() {
-        globalListeners.forEach(this::notifyFailed);
-        taskDefinition.allListeners().forEach(this::notifyFailed);
+        listeners.forEach(this::notifyFailed);
     }
 
     private void notifyFailed(TaskExecutionListener listener) {

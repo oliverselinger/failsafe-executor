@@ -27,6 +27,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.utils.OneTimeSchedule;
+import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
@@ -38,6 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WorkerPoolShould {
+
+    private static final TestSystemClock systemClock = new TestSystemClock();
 
     private int threadCount = 2;
     private int queueSize = threadCount * 2;
@@ -85,7 +89,7 @@ public class WorkerPoolShould {
         Phaser phaser;
 
         BlockingExecution() {
-            super(null, null, Collections.emptyList());
+            super(null, null, Collections.emptyList(), new OneTimeSchedule(), systemClock);
             phaser = new Phaser(2);
         }
 

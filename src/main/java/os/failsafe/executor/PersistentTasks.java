@@ -25,7 +25,6 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
@@ -38,7 +37,7 @@ import java.util.Optional;
 
 class PersistentTasks {
 
-    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,CREATED_DATE) VALUES (?,?,?,?,?)";
+    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?)";
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
@@ -52,19 +51,19 @@ class PersistentTasks {
         this.systemClock = systemClock;
     }
 
-    PersistentTask create(Task task) {
+    PersistentTask create(TaskInstance task) {
         return database.connect(connection -> this.create(connection, task));
     }
 
-    PersistentTask create(Connection connection, Task task) {
+    PersistentTask create(Connection connection, TaskInstance task) {
         database.insert(connection, INSERT_TASK,
                 task.id,
                 task.name,
                 task.parameter,
-                0,
+                task.plannedExecutionTime,
                 Timestamp.valueOf(systemClock.now()));
 
-        return new PersistentTask(task.id, task.parameter, task.name, database, systemClock);
+        return new PersistentTask(task.id, task.parameter, task.name, task.plannedExecutionTime, database, systemClock);
     }
 
     PersistentTask findOne(TaskId id) {
@@ -87,6 +86,7 @@ class PersistentTasks {
                     new TaskId(rs.getString("ID")),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
+                    rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                     pickTime != null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
                     database,

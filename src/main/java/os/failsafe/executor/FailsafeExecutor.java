@@ -24,18 +24,21 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
+import os.failsafe.executor.utils.OneTimeSchedule;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,8 +56,11 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
 
-    private final Map<String, TaskDefinition> tasksByIdentifier = new ConcurrentHashMap<>();
+    private final Map<String, FailsafeTask> tasksByIdentifier = new ConcurrentHashMap<>();
+    private final Map<String, Schedule> scheduleByIdentifier = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
+
+    private final OneTimeSchedule oneTimeSchedule = new OneTimeSchedule();
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
@@ -63,6 +69,7 @@ public class FailsafeExecutor {
     private final Duration initialDelay;
     private final Duration pollingInterval;
     private final Database database;
+    private final SystemClock systemClock;
 
     private volatile Exception lastRunException;
 
@@ -75,7 +82,8 @@ public class FailsafeExecutor {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
 
-        database = new Database(dataSource);
+        this.database = new Database(dataSource);
+        this.systemClock = systemClock;
         this.persistentQueue = new PersistentQueue(database, systemClock);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
@@ -95,19 +103,47 @@ public class FailsafeExecutor {
         executor.shutdown();
     }
 
-    public void defineTask(TaskDefinition taskDefinition) {
-        tasksByIdentifier.put(taskDefinition.getName(), taskDefinition);
+    public TaskId execute(FailsafeTask task) {
+        return execute(task, null);
     }
 
-    public TaskId execute(Task task) {
-        return database.connect(connection -> execute(connection, task));
+    public TaskId execute(FailsafeTask task, String parameter) {
+        return database.connect(connection -> execute(connection, task, parameter));
     }
 
-    public TaskId execute(Connection connection, Task task) {
-        if (!tasksByIdentifier.containsKey(task.name)) {
-            throw new IllegalArgumentException(String.format("Before executing task %s you need to define it. FailsafeExecutor#define", task.name));
+    public TaskId execute(Connection connection, FailsafeTask task) {
+        return execute(connection, task, null);
+    }
+
+    public TaskId execute(Connection connection, FailsafeTask task, String parameter) {
+        TaskInstance taskInstance = new TaskInstance(task.getName(), parameter, systemClock.now());
+        return enqueue(connection, task, taskInstance);
+    }
+
+    public TaskId schedule(FailsafeTask task, Schedule schedule) {
+        return database.connect(connection -> schedule(connection, task, schedule));
+    }
+
+    public TaskId schedule(Connection connection, FailsafeTask task, Schedule schedule) {
+        if (scheduleByIdentifier.containsKey(task.getName())) {
+            throw new IllegalArgumentException(String.format("Task %s already scheduled", task.getName()));
         }
-        return persistentQueue.add(connection, task);
+
+        scheduleByIdentifier.put(task.getName(), schedule);
+        LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
+                .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
+
+        TaskInstance taskInstance = new TaskInstance(task.getName(), task.getName(), null, plannedExecutionTime);
+        try {
+            return enqueue(connection, task, taskInstance);
+        } catch (Exception e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SQLIntegrityConstraintViolationException) {
+                // ignore
+                return new TaskId(task.getName());
+            }
+            throw e;
+        }
     }
 
     public List<FailedTask> failedTasks() {
@@ -134,6 +170,14 @@ public class FailsafeExecutor {
         return lastRunException;
     }
 
+    private TaskId enqueue(Connection connection, FailsafeTask task, TaskInstance taskInstance) {
+        if (!tasksByIdentifier.containsKey(task.getName())) {
+            tasksByIdentifier.put(task.getName(), task);
+        }
+
+        return persistentQueue.add(connection, taskInstance);
+    }
+
     private Future<TaskId> executeNextTask() {
         try {
             if (workerPool.allWorkersBusy()) {
@@ -146,13 +190,15 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            TaskDefinition taskDefinition = tasksByIdentifier.get(toExecute.getName());
+            FailsafeTask failsafeTask = tasksByIdentifier.get(toExecute.getName());
+            Schedule schedule = scheduleByIdentifier.getOrDefault(failsafeTask.getName(), oneTimeSchedule);
+            Execution execution = new Execution(failsafeTask, toExecute, listeners, schedule, systemClock);
 
-            Future<TaskId> execution = workerPool.execute(new Execution(taskDefinition, toExecute, listeners));
+            Future<TaskId> taskIdFuture = workerPool.execute(execution);
 
             clearException();
 
-            return execution;
+            return taskIdFuture;
         } catch (Exception e) {
             storeException(e);
         }

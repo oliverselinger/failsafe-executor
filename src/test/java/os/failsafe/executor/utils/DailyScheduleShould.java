@@ -23,31 +23,36 @@
  ******************************************************************************/
 package os.failsafe.executor.utils;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.LocalTime;
 
-public class TestSystemClock implements SystemClock {
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-    private Clock clock = Clock.systemDefaultZone();
+public class DailyScheduleShould {
 
-    @Override
-    public LocalDateTime now() {
-        return LocalDateTime.now(clock);
+    private final LocalTime dailyTime = LocalTime.of(22, 0);
+    private final DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+    private final LocalDate currentDay = LocalDate.now();
+    private final LocalDateTime beforeDailyTime = LocalDateTime.of(currentDay, dailyTime.minusMinutes(1));
+    private final LocalDateTime afterDailyTime = LocalDateTime.of(currentDay, dailyTime.plusMinutes(1));
+
+    @Test public void
+    return_current_day_if_daily_time_is_on_same_day_in_future() {
+        LocalDateTime nextExecutionTime = dailySchedule.nextExecutionTime(beforeDailyTime).get();
+
+        assertEquals(currentDay, nextExecutionTime.toLocalDate());
+        assertEquals(dailyTime, nextExecutionTime.toLocalTime());
     }
 
-    public void timeTravelBy(Duration duration) {
-        this.clock = Clock.offset(this.clock, duration);
-    }
+    @Test public void
+    return_next_day_if_daily_time_is_already_past_on_same_day() {
+        LocalDateTime nextExecutionTime = dailySchedule.nextExecutionTime(afterDailyTime).get();
 
-    public void fixedTime(LocalDateTime now) {
-        Instant instant = now.atZone(ZoneId.systemDefault()).toInstant();
-        this.clock = Clock.fixed(instant, ZoneId.systemDefault());
-    }
-
-    public void resetTime() {
-        this.clock = Clock.systemDefaultZone();
+        assertEquals(currentDay.plusDays(1), nextExecutionTime.toLocalDate());
+        assertEquals(dailyTime, nextExecutionTime.toLocalTime());
     }
 }

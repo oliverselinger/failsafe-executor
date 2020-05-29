@@ -27,15 +27,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskDefinition;
-import os.failsafe.executor.task.TaskDefinitions;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import javax.sql.DataSource;
-
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,7 +60,8 @@ public class PersistentQueueShould {
 
     @Test public void
     store_and_enqueue_a_task() {
-        Task task = createTask();
+        LocalDateTime plannedExecutionTime = systemClock.now();
+        TaskInstance task = createTask(plannedExecutionTime);
 
         TaskId persistentTask = persistentQueue.add(task);
 
@@ -74,14 +71,15 @@ public class PersistentQueueShould {
         PersistentTask actual = all.get(0);
         assertEquals(task.name, actual.getName());
         assertEquals(task.parameter, actual.getParameter());
+        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertEquals(persistentTask, actual.getId());
     }
 
     @Test public void
-    dequeue_tasks_in_fifo_sequence() {
-        Task task1 = createTask();
-        Task task2 = createTask();
-        Task task3 = createTask();
+    peek_tasks_in_fifo_sequence() {
+        TaskInstance task1 = createTask();
+        TaskInstance task2 = createTask();
+        TaskInstance task3 = createTask();
 
         TaskId persistentTask1 = persistentQueue.add(task1);
         systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
@@ -99,8 +97,8 @@ public class PersistentQueueShould {
     }
 
     @Test public void
-    retrieve_a_task_again_after_lock_times_out() {
-        Task task = createTask();
+    peek_a_task_again_after_lock_times_out() {
+        TaskInstance task = createTask();
         persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
@@ -115,8 +113,8 @@ public class PersistentQueueShould {
     }
 
     @Test public void
-    never_retrieve_a_failed_task() {
-        Task task = createTask();
+    never_peek_a_failed_task() {
+        TaskInstance task = createTask();
         persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
@@ -131,9 +129,33 @@ public class PersistentQueueShould {
         assertNull(dequedTask2);
     }
 
-    private Task createTask() {
-        TaskDefinition taskDefinition = TaskDefinitions.of("TaskName", parameter -> {
-        });
-        return taskDefinition.newTask("Hello world!");
+    @Test public void
+    never_peek_a_planned_future_task() {
+        TaskInstance task = createTask(systemClock.now().plusDays(1));
+        persistentQueue.add(task);
+
+        PersistentTask peekedTask = persistentQueue.peekAndLock();
+        assertNull(peekedTask);
+    }
+
+    @Test public void
+    store_and_enqueue_a_task_with_future_execution() {
+        TaskInstance task = createTask(systemClock.now().plusDays(1));
+
+        persistentQueue.add(task);
+
+        List<PersistentTask> all = persistentQueue.allQueued();
+        assertEquals(1, all.size());
+
+        PersistentTask actual = all.get(0);
+        assertEquals(task.name, actual.getName());
+    }
+
+    private TaskInstance createTask() {
+        return createTask(systemClock.now());
+    }
+
+    private TaskInstance createTask(LocalDateTime plannedExecutionTime) {
+        return new TaskInstance("TaskName", "Hello world!", plannedExecutionTime);
     }
 }

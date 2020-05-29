@@ -36,25 +36,28 @@ import java.time.LocalDateTime;
 class PersistentTask {
 
     private static final String SET_LOCK_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
+    private static final String CLEAR_LOCK_TIME_AND_SET_NEXT_EXECUTION_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=null, PLANNED_EXECUTION_TIME=? WHERE VERSION=? AND ID=?";
     private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
     private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final TaskId id;
     private final String parameter;
     private final String name;
+    private final LocalDateTime plannedExecutionTime;
     final LocalDateTime startTime;
     final Long version;
     private final Database database;
     private final SystemClock systemClock;
 
-    public PersistentTask(String id, String parameter, String name, Database database, SystemClock systemClock) {
-        this(new TaskId(id), parameter, name, null, 0L, database, systemClock);
+    public PersistentTask(String id, String parameter, String name, LocalDateTime plannedExecutionTime, Database database, SystemClock systemClock) {
+        this(new TaskId(id), parameter, name, plannedExecutionTime, null, 0L, database, systemClock);
     }
 
-    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime startTime, Long version, Database database, SystemClock systemClock) {
+    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime startTime, Long version, Database database, SystemClock systemClock) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
+        this.plannedExecutionTime = plannedExecutionTime;
         this.startTime = startTime;
         this.version = version;
         this.database = database;
@@ -70,7 +73,7 @@ class PersistentTask {
                 version,
                 id.id);
         if (effectedRows == 1) {
-            return new PersistentTask(id, parameter, name, startTime, version + 1, database, systemClock);
+            return new PersistentTask(id, parameter, name, plannedExecutionTime, startTime, version + 1, database, systemClock);
         }
 
         return null;
@@ -91,6 +94,17 @@ class PersistentTask {
         }
     }
 
+    void nextExecution(LocalDateTime time) {
+        int effectedRows = database.update(CLEAR_LOCK_TIME_AND_SET_NEXT_EXECUTION_TIME,
+                version + 1,
+                Timestamp.valueOf(time),
+                version,
+                id.id);
+        if (effectedRows != 1) {
+            throw new RuntimeException("Unable to set next planned execution time");
+        }
+    }
+
     public TaskId getId() {
         return id;
     }
@@ -102,4 +116,9 @@ class PersistentTask {
     public String getParameter() {
         return parameter;
     }
+
+    public LocalDateTime getPlannedExecutionTime() {
+        return plannedExecutionTime;
+    }
+
 }

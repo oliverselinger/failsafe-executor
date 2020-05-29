@@ -23,51 +23,16 @@
  ******************************************************************************/
 package os.failsafe.executor.task;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
-public class TaskDefinitions {
+public class Tasks {
 
-    public static TaskDefinition of(String name, Consumer<String> task) {
-        return new TaskDefinition() {
-
-            private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
-
-            @Override
-            public String getName() {
-                return name;
-            }
-
-            @Override
-            public void execute(String parameter) {
-                task.accept(parameter);
-            }
-
-            @Override
-            public Task newTask(String parameter) {
-                return new Task(name, parameter);
-            }
-
-            @Override
-            public Task newTask(String id, String parameter) {
-                return new Task(name, parameter);
-            }
-
-            @Override
-            public void subscribe(TaskExecutionListener listener) {
-                listeners.add(listener);
-            }
-
-            @Override
-            public void unsubscribe(TaskExecutionListener listener) {
-                listeners.remove(listener);
-            }
-
-            @Override
-            public List<TaskExecutionListener> allListeners() {
-                return listeners;
-            }
-        };
+    public static FailsafeTask runnable(String name, Runnable runnable) {
+        return new FailsafeTask(name, runnable);
     }
+
+    public static FailsafeTask parameterized(String name, Consumer<String> parameterConsumer) {
+        return new FailsafeTask(name, parameterConsumer);
+    }
+
 }

@@ -24,7 +24,6 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
@@ -36,10 +35,13 @@ import java.util.Optional;
 class PersistentQueue {
 
     private static final int DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES = 10;
-    private static final String QUERY_ALL_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?)) ORDER BY CREATED_DATE";
+    private static final String QUERY_ALL_QUEUED_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?))";
+    private static final String QUERY_ORDER_BY_CREATED_DATE = " ORDER BY CREATED_DATE";
+    private static final String QUERY_PLANNED_EXECUTION_TIME = " AND PLANNED_EXECUTION_TIME <= ?";
     private static final String QUERY_LIMIT = " FETCH FIRST 3 ROWS ONLY";
     private static final String QUERY_LIMIT_MYSQL = " LIMIT 3";
 
+    private static final String QUERY_ALL_TASKS_ORDERED = QUERY_ALL_QUEUED_TASKS + QUERY_ORDER_BY_CREATED_DATE;
     private final String QUERY_NEXT_TASKS;
 
     private final Database database;
@@ -54,16 +56,16 @@ class PersistentQueue {
         this.QUERY_NEXT_TASKS = constructNextTaskQuery();
     }
 
-    TaskId add(Task task) {
+    TaskId add(TaskInstance task) {
         return persistentTasks.create(task).getId();
     }
 
-    TaskId add(Connection connection, Task task) {
+    TaskId add(Connection connection, TaskInstance task) {
         return persistentTasks.create(connection, task).getId();
     }
 
     List<PersistentTask> allQueued() {
-        return database.selectAll(QUERY_ALL_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout());
+        return database.selectAll(QUERY_ALL_TASKS_ORDERED, persistentTasks::mapToPersistentTask, deadExecutionTimeout());
     }
 
     PersistentTask peekAndLock() {
@@ -90,15 +92,19 @@ class PersistentQueue {
     }
 
     private List<PersistentTask> findNextTasks(Connection connection) {
-        return database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout());
+        return database.selectAll(connection, QUERY_NEXT_TASKS, persistentTasks::mapToPersistentTask, deadExecutionTimeout(), expectedPlannedExecutionTime());
     }
 
     private Timestamp deadExecutionTimeout() {
         return Timestamp.valueOf(systemClock.now().minusMinutes(DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES));
     }
 
+    private Timestamp expectedPlannedExecutionTime() {
+        return Timestamp.valueOf(systemClock.now());
+    }
+
     private String constructNextTaskQuery() {
-        return QUERY_ALL_TASKS + (database.isMysql() ? QUERY_LIMIT_MYSQL : QUERY_LIMIT);
+        return QUERY_ALL_QUEUED_TASKS + QUERY_PLANNED_EXECUTION_TIME + QUERY_ORDER_BY_CREATED_DATE + (database.isMysql() ? QUERY_LIMIT_MYSQL : QUERY_LIMIT);
     }
 
 }

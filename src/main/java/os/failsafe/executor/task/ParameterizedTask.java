@@ -23,22 +23,16 @@
  ******************************************************************************/
 package os.failsafe.executor.task;
 
-import java.util.List;
+import java.util.function.Consumer;
 
-public interface TaskDefinition {
+public class ParameterizedTask {
 
-    String getName();
+    final String name;
+    final Consumer<String> parameterConsumer;
 
-    void execute(String parameter);
-
-    Task newTask(String parameter);
-
-    Task newTask(String id, String parameter);
-
-    void subscribe(TaskExecutionListener listener);
-
-    void unsubscribe(TaskExecutionListener listener);
-
-    List<TaskExecutionListener> allListeners();
+    ParameterizedTask(String name, Consumer<String> parameterConsumer) {
+        this.name = name;
+        this.parameterConsumer = parameterConsumer;
+    }
 
 }

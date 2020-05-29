@@ -21,48 +21,33 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor;
+package os.failsafe.executor.utils;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import os.failsafe.executor.task.TaskDefinition;
-import os.failsafe.executor.task.TaskDefinitions;
-import os.failsafe.executor.task.TaskExecutionListener;
+import os.failsafe.executor.task.Schedule;
 
-import java.util.List;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+public class DailySchedule implements Schedule {
 
-public class TaskDefinitionShould {
+    private final LocalTime dailyTime;
 
-    private TaskDefinition taskDefinition;
-    private TaskExecutionListener taskExecutionListener;
-
-    @BeforeEach
-    public void init() {
-        taskDefinition = TaskDefinitions.of("TaskName", p -> {
-        });
-        taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
+    public DailySchedule(LocalTime dailyTime) {
+        this.dailyTime = dailyTime;
     }
 
-    @Test
-    public void
-    store_and_offer_a_listener() {
-        taskDefinition.subscribe(taskExecutionListener);
+    @Override
+    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+        LocalDate nextExecutionDate;
 
-        List<TaskExecutionListener> listeners = taskDefinition.allListeners();
-        assertEquals(1, listeners.size());
-        assertEquals(taskExecutionListener, listeners.get(0));
-    }
+        if(dailyTime.isAfter(currentTime.toLocalTime())) {
+            nextExecutionDate = currentTime.toLocalDate();
+        } else {
+            nextExecutionDate = currentTime.toLocalDate().plusDays(1);
+        }
 
-    @Test
-    public void
-    remove_a_listener() {
-        taskDefinition.subscribe(taskExecutionListener);
-        taskDefinition.unsubscribe(taskExecutionListener);
-
-        List<TaskExecutionListener> listeners = taskDefinition.allListeners();
-        assertEquals(0, listeners.size());
+        return Optional.of(LocalDateTime.of(nextExecutionDate, dailyTime));
     }
 }

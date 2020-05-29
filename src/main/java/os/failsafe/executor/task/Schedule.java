@@ -21,17 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-CREATE TABLE PERSISTENT_TASK (
-    ID VARCHAR(36) NOT NULL,
-    PARAMETER VARCHAR(200),
-    NAME VARCHAR(200) NOT NULL,
-    PLANNED_EXECUTION_TIME DATETIME(3),
-    LOCK_TIME DATETIME(3),
-    FAILED SMALLINT DEFAULT 0,
-    FAIL_TIME DATETIME(3),
-    EXCEPTION_MESSAGE VARCHAR(1000),
-    STACK_TRACE TEXT,
-    VERSION INT DEFAULT 0,
-    CREATED_DATE DATETIME(3),
-    PRIMARY KEY (ID,NAME)
-);
+package os.failsafe.executor.task;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+public interface Schedule {
+
+    Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime);
+}

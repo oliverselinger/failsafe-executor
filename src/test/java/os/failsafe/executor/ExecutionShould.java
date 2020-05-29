@@ -26,57 +26,62 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import os.failsafe.executor.task.FailsafeTask;
 import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.utils.OneTimeSchedule;
+import os.failsafe.executor.utils.TestSystemClock;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ExecutionShould {
 
+    private final TestSystemClock systemClock = new TestSystemClock();
     private Execution execution;
-    private TaskDefinition taskDefinition;
-    private TaskExecutionListener globalListener;
-
+    private TaskExecutionListener listener;
+    private FailsafeTask failsafeTask;
     private PersistentTask persistentTask;
+    private OneTimeSchedule oneTimeSchedule;
     private final TaskId taskId = new TaskId("123");
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
 
     @BeforeEach
     public void init() {
-        taskDefinition = Mockito.mock(TaskDefinition.class);
+        failsafeTask = Mockito.mock(FailsafeTask.class);
+
+        oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
+        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.empty());
 
         persistentTask = Mockito.mock(PersistentTask.class);
         when(persistentTask.getId()).thenReturn(taskId);
         when(persistentTask.getParameter()).thenReturn(parameter);
         when(persistentTask.getName()).thenReturn(taskName);
 
-        globalListener = Mockito.mock(TaskExecutionListener.class);
+        listener = Mockito.mock(TaskExecutionListener.class);
 
-        execution = new Execution(taskDefinition, persistentTask, Collections.singletonList(globalListener));
+        execution = new Execution(failsafeTask, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
     }
 
     @Test public void
     execute_task_with_parameter() {
         execution.perform();
 
-        verify(taskDefinition).execute(parameter);
+        verify(failsafeTask).run(parameter);
     }
 
     @Test public void
     notify_listeners_after_successful_execution() {
-        TaskExecutionListener listener = Mockito.mock(TaskExecutionListener.class);
-        when(taskDefinition.allListeners()).thenReturn(Collections.singletonList(listener));
-
         execution.perform();
 
-        verify(globalListener).succeeded(taskName, taskId, parameter);
         verify(listener).succeeded(taskName, taskId, parameter);
     }
 
@@ -89,16 +94,23 @@ public class ExecutionShould {
 
     @Test public void
     notify_listeners_after_failed_execution() {
-        TaskExecutionListener listener = Mockito.mock(TaskExecutionListener.class);
-        when(taskDefinition.allListeners()).thenReturn(Collections.singletonList(listener));
-
         RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(taskDefinition).execute(any());
+        doThrow(exception).when(failsafeTask).run(any());
 
         execution.perform();
 
-        verify(globalListener).failed(taskName, taskId, parameter);
         verify(listener).failed(taskName, taskId, parameter);
+    }
+
+    @Test public void
+    not_remove_but_set_next_execution_time_of_the_task_if_one_is_available() {
+        LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
+        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
+
+        execution.perform();
+
+        verify(persistentTask).nextExecution(nextPlannedExecutionTime);
+        verify(persistentTask, never()).remove();
     }
 
 }

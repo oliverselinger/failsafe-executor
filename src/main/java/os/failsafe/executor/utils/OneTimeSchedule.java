@@ -21,24 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.task;
+package os.failsafe.executor.utils;
 
-import java.util.UUID;
+import os.failsafe.executor.task.Schedule;
 
-public class Task {
+import java.time.LocalDateTime;
+import java.util.Optional;
 
-    public final String id;
-    public final String name;
-    public final String parameter;
-
-    public Task(String name, String parameter) {
-        this(UUID.randomUUID().toString(), name, parameter);
+public class OneTimeSchedule implements Schedule {
+    @Override
+    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+        return Optional.empty();
     }
-
-    public Task(String id, String name, String parameter) {
-        this.id = id;
-        this.name = name;
-        this.parameter = parameter;
-    }
-
 }

@@ -33,21 +33,24 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.FailsafeExecutor;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskDefinition;
-import os.failsafe.executor.task.TaskDefinitions;
+import os.failsafe.executor.task.FailsafeTask;
 import os.failsafe.executor.task.TaskExecutionListener;
+import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.task.Tasks;
+import os.failsafe.executor.utils.DailySchedule;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,7 +73,7 @@ public class FailsafeExecutorShould {
 
     DataSource dataSource;
     FailsafeExecutor failsafeExecutor;
-    TaskDefinition taskDefinition;
+    FailsafeTask task;
     TaskExecutionListener taskExecutionListener;
 
     boolean executionShouldFail;
@@ -81,17 +84,15 @@ public class FailsafeExecutorShould {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
-        taskDefinition = TaskDefinitions.of("TestTask", parameter -> {
-                    if (executionShouldFail) {
-                        throw new RuntimeException();
-                    }
+        task = Tasks.parameterized("TestTask", parameter -> {
+            if (executionShouldFail) {
+                throw new RuntimeException();
+            }
 
-                    log.info("Hello {}", parameter);
-                }
-        );
+            log.info("Hello {}", parameter);
+        });
 
         failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
-        failsafeExecutor.defineTask(taskDefinition);
 
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
         failsafeExecutor.subscribe(taskExecutionListener);
@@ -102,13 +103,6 @@ public class FailsafeExecutorShould {
         failsafeExecutor.stop();
     }
 
-    @Test()
-    public void
-    throw_an_exception_if_task_is_not_defined() {
-        Task undefinedTask = new Task("TaskName", parameter);
-
-        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.execute(undefinedTask));
-    }
 
     @Test()
     public void
@@ -119,24 +113,68 @@ public class FailsafeExecutorShould {
     @Test
     public void
     execute_a_task() {
-        Task task = taskDefinition.newTask(parameter);
-
-        TaskId taskId = failsafeExecutor.execute(task);
+        TaskId taskId = failsafeExecutor.execute(task, parameter);
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
+    }
+
+    @Test
+    public void
+    execute_a_daily_scheduled_task_every_day() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+
+        TaskId taskId = failsafeExecutor.schedule(task, dailySchedule);
+
+        failsafeExecutor.start();
+
+        systemClock.timeTravelBy(Duration.ofSeconds(1));
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, null);
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5)).times(2)).succeeded(task.getName(), taskId, null);
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5)).times(3)).succeeded(task.getName(), taskId, null);
+    }
+
+    @Test
+    public void
+    not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
+        DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
+        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+
+        failsafeExecutor.schedule(task, dailySchedule);
+
+        FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
+        assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(task, dailySchedule));
+    }
+
+    @Test()
+    public void
+    not_throw_an_exception_if_task_is_already_scheduled() {
+        DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
+        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+
+        failsafeExecutor.schedule(task, dailySchedule);
+        assertDoesNotThrow(() -> failsafeExecutor.schedule(task, dailySchedule));
     }
 
     @Test
     public void
     retry_a_failed_task_on_demand() {
-        Task task = taskDefinition.newTask(parameter);
         executionShouldFail = true;
 
-        TaskId taskId = failsafeExecutor.execute(task);
+        TaskId taskId = failsafeExecutor.execute(task, parameter);
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(taskDefinition.getName(), taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(task.getName(), taskId, parameter);
 
         List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
@@ -149,7 +187,7 @@ public class FailsafeExecutorShould {
         executionShouldFail = false;
         failedTask.retry();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(taskDefinition.getName(), taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
     }
 
     @Test

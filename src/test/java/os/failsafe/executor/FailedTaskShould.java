@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
@@ -85,6 +84,6 @@ public class FailedTaskShould {
     }
 
     private PersistentTask createTask() {
-        return persistentTasks.create(new Task("TestTask", "parameter"));
+        return persistentTasks.create(new TaskInstance("TestTask", "parameter", systemClock.now()));
     }
 }

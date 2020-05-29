@@ -28,15 +28,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.sql.Connection;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -76,6 +76,21 @@ public class PersistentTaskShould {
     }
 
     @Test public void
+    unlock_itself_and_set_next_planned_execution_time() {
+        PersistentTask persistentTask = createTask();
+
+        database.connect(persistentTask::lock);
+
+        LocalDateTime nextExecutionTime = systemClock.now().plusDays(1);
+        PersistentTask lockedTask = persistentTasks.findOne(persistentTask.getId());
+        lockedTask.nextExecution(nextExecutionTime);
+
+        PersistentTask unlockedAndPlannedForNextExecution = persistentTasks.findOne(persistentTask.getId());
+        assertNull(unlockedAndPlannedForNextExecution.startTime);
+        assertEquals(nextExecutionTime, unlockedAndPlannedForNextExecution.getPlannedExecutionTime());
+    }
+
+    @Test public void
     save_exception_details_and_mark_itself_as_failed() {
         PersistentTask persistentTask = createTask();
 
@@ -94,6 +109,6 @@ public class PersistentTaskShould {
     }
 
     private PersistentTask createTask() {
-        return persistentTasks.create(new Task("TestTask", "parameter"));
+        return persistentTasks.create(new TaskInstance("TestTask", "parameter", systemClock.now()));
     }
 }

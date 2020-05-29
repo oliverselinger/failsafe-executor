@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +53,7 @@ public class PersistentTasksShould {
     private PersistentTasks persistentTasks;
     private String taskName = "TestTask";
     private final String taskParameter = "parameter";
+    private final LocalDateTime plannedExecutionTime = systemClock.now();
 
     @BeforeEach
     public void init() {
@@ -72,6 +73,7 @@ public class PersistentTasksShould {
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.version);
+        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertNull(actual.startTime);
     }
 
@@ -113,10 +115,10 @@ public class PersistentTasksShould {
     }
 
     private PersistentTask createTask() {
-        return persistentTasks.create(new Task(taskName, taskParameter));
+        return persistentTasks.create(new TaskInstance(taskName, taskParameter, plannedExecutionTime));
     }
 
     private PersistentTask createTask(String id) {
-        return persistentTasks.create(new Task(id, taskName, taskParameter));
+        return persistentTasks.create(new TaskInstance(id, taskName, taskParameter, plannedExecutionTime));
     }
 }
