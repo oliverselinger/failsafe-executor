@@ -58,6 +58,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
@@ -101,6 +102,7 @@ public class FailsafeExecutorShould {
     @AfterEach
     public void stop() {
         failsafeExecutor.stop();
+        verifyNoMoreInteractions(taskExecutionListener);
     }
 
 

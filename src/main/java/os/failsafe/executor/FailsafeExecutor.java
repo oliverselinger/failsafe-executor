@@ -130,16 +130,7 @@ public class FailsafeExecutor {
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
         TaskInstance taskInstance = new TaskInstance(task.getName(), task.getName(), null, plannedExecutionTime);
-        try {
-            return enqueue(connection, task, taskInstance);
-        } catch (Exception e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof SQLIntegrityConstraintViolationException) {
-                // ignore
-                return new TaskId(task.getName());
-            }
-            throw e;
-        }
+        return enqueue(connection, task, taskInstance);
     }
 
     public List<FailedTask> failedTasks() {
