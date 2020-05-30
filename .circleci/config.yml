@@ -4,10 +4,10 @@ commands:
   install-dockerize:
     steps:
       - run:
-        name: install dockerize
-        command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
-        environment:
-          DOCKERIZE_VERSION: v0.3.0
+          name: install dockerize
+          command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+          environment:
+            DOCKERIZE_VERSION: v0.3.0
   maven-package:
     steps:
       - checkout
@@ -42,8 +42,8 @@ jobs:
     steps:
       - install-dockerize
       - run:
-        name: Wait for db
-        command: dockerize -wait tcp://localhost:5432 -timeout 1m
+          name: Wait for db
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
       - maven-package
 
   test-mysql:
@@ -60,8 +60,8 @@ jobs:
     steps:
       - install-dockerize
       - run:
-        name: Wait for db
-        command: dockerize -wait tcp://localhost:3306 -timeout 1m
+          name: Wait for db
+          command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
 
 workflows:
