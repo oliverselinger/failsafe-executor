@@ -1,6 +1,13 @@
 version: 2.1
 
 commands:
+  install-dockerize:
+    steps:
+      - run:
+        name: install dockerize
+        command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+        environment:
+          DOCKERIZE_VERSION: v0.3.0
   maven-package:
     steps:
       - checkout
@@ -33,6 +40,10 @@ jobs:
     environment:
       TEST_DB: POSTGRES
     steps:
+      - install-dockerize
+      - run:
+        name: Wait for db
+        command: dockerize -wait tcp://localhost:5432 -timeout 1m
       - maven-package
 
   test-mysql:
@@ -47,6 +58,10 @@ jobs:
     environment:
       TEST_DB: MYSQL
     steps:
+      - install-dockerize
+      - run:
+        name: Wait for db
+        command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
 
 workflows:
