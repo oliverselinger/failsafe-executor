@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class PersistentTasksShould {
+class PersistentTasksShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -56,14 +56,14 @@ public class PersistentTasksShould {
     private final LocalDateTime plannedExecutionTime = systemClock.now();
 
     @BeforeEach
-    public void init() {
+    void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     @Test
-    public void
+    void
     persist_and_find_a_task() {
         PersistentTask task = createTask();
 
@@ -78,7 +78,7 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
+    void
     persist_a_task_with_given_id() {
         String id = "id";
         PersistentTask task = createTask(id);
@@ -89,7 +89,7 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
+    void
     do_nothing_if_id_is_not_unique() {
         String id = "id";
         createTask(id);
@@ -97,7 +97,7 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
+    void
     return_empty_list_if_no_task_is_failed() {
         createTask();
 
@@ -106,7 +106,7 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
+    void
     return_empty_optional_if_task_is_not_failed() {
         PersistentTask persistentTask = createTask();
 

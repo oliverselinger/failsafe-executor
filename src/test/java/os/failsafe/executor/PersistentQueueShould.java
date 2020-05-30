@@ -48,17 +48,17 @@ public class PersistentQueueShould {
     private PersistentQueue persistentQueue;
 
     @BeforeEach
-    public void init() {
+    void init() {
         systemClock = new TestSystemClock();
         persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock);
     }
 
-    @Test public void
+    @Test void
     return_null_if_queue_is_empty() {
         assertNull(persistentQueue.peekAndLock());
     }
 
-    @Test public void
+    @Test void
     store_and_enqueue_a_task() {
         LocalDateTime plannedExecutionTime = systemClock.now();
         TaskInstance task = createTask(plannedExecutionTime);
@@ -75,7 +75,7 @@ public class PersistentQueueShould {
         assertEquals(persistentTask, actual.getId());
     }
 
-    @Test public void
+    @Test void
     peek_tasks_in_fifo_sequence() {
         TaskInstance task1 = createTask();
         TaskInstance task2 = createTask();
@@ -96,7 +96,7 @@ public class PersistentQueueShould {
         assertEquals(persistentTask3, dequedTask3.getId());
     }
 
-    @Test public void
+    @Test void
     peek_a_task_again_after_lock_times_out() {
         TaskInstance task = createTask();
         persistentQueue.add(task);
@@ -112,7 +112,7 @@ public class PersistentQueueShould {
         assertEquals(dequedTask1.getId(), dequedTask2.getId());
     }
 
-    @Test public void
+    @Test void
     never_peek_a_failed_task() {
         TaskInstance task = createTask();
         persistentQueue.add(task);
@@ -129,7 +129,7 @@ public class PersistentQueueShould {
         assertNull(dequedTask2);
     }
 
-    @Test public void
+    @Test void
     never_peek_a_planned_future_task() {
         TaskInstance task = createTask(systemClock.now().plusDays(1));
         persistentQueue.add(task);
@@ -138,7 +138,7 @@ public class PersistentQueueShould {
         assertNull(peekedTask);
     }
 
-    @Test public void
+    @Test void
     store_and_enqueue_a_task_with_future_execution() {
         TaskInstance task = createTask(systemClock.now().plusDays(1));
 

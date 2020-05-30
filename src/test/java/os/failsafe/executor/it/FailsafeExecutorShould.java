@@ -37,7 +37,7 @@ import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Tasks;
-import os.failsafe.executor.utils.DailySchedule;
+import os.failsafe.executor.schedule.DailySchedule;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
@@ -63,7 +63,7 @@ import static org.mockito.Mockito.when;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
 
-public class FailsafeExecutorShould {
+class FailsafeExecutorShould {
 
     private static final Logger log = LoggerFactory.getLogger(FailsafeExecutorShould.class);
 
@@ -81,7 +81,7 @@ public class FailsafeExecutorShould {
     private final String parameter = " world!";
 
     @BeforeEach
-    public void init() {
+    void init() {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
@@ -106,14 +106,12 @@ public class FailsafeExecutorShould {
     }
 
 
-    @Test()
-    public void
+    @Test void
     throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1)));
     }
 
-    @Test
-    public void
+    @Test void
     execute_a_task() {
         TaskId taskId = failsafeExecutor.execute(task, parameter);
         failsafeExecutor.start();
@@ -121,8 +119,7 @@ public class FailsafeExecutorShould {
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
     }
 
-    @Test
-    public void
+    @Test void
     execute_a_daily_scheduled_task_every_day() {
         LocalTime dailyTime = LocalTime.of(1, 0);
 
@@ -158,8 +155,7 @@ public class FailsafeExecutorShould {
         assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(task, dailySchedule));
     }
 
-    @Test()
-    public void
+    @Test void
     not_throw_an_exception_if_task_is_already_scheduled() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
         Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
@@ -168,8 +164,7 @@ public class FailsafeExecutorShould {
         assertDoesNotThrow(() -> failsafeExecutor.schedule(task, dailySchedule));
     }
 
-    @Test
-    public void
+    @Test void
     retry_a_failed_task_on_demand() {
         executionShouldFail = true;
 
@@ -192,8 +187,7 @@ public class FailsafeExecutorShould {
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
     }
 
-    @Test
-    public void
+    @Test void
     report_failures() throws SQLException {
         RuntimeException e = new RuntimeException("Error");
 

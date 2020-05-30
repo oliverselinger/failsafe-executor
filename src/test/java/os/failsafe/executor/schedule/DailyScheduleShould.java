@@ -21,33 +21,39 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
+package os.failsafe.executor.schedule;
 
-import os.failsafe.executor.task.Schedule;
+import org.junit.jupiter.api.Test;
+import os.failsafe.executor.schedule.DailySchedule;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.Optional;
 
-public class DailySchedule implements Schedule {
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-    private final LocalTime dailyTime;
+public class DailyScheduleShould {
 
-    public DailySchedule(LocalTime dailyTime) {
-        this.dailyTime = dailyTime;
+    private final LocalTime dailyTime = LocalTime.of(22, 0);
+    private final DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+    private final LocalDate currentDay = LocalDate.now();
+    private final LocalDateTime beforeDailyTime = LocalDateTime.of(currentDay, dailyTime.minusMinutes(1));
+    private final LocalDateTime afterDailyTime = LocalDateTime.of(currentDay, dailyTime.plusMinutes(1));
+
+    @Test void
+    return_current_day_if_daily_time_is_on_same_day_in_future() {
+        LocalDateTime nextExecutionTime = dailySchedule.nextExecutionTime(beforeDailyTime).get();
+
+        assertEquals(currentDay, nextExecutionTime.toLocalDate());
+        assertEquals(dailyTime, nextExecutionTime.toLocalTime());
     }
 
-    @Override
-    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
-        LocalDate nextExecutionDate;
+    @Test void
+    return_next_day_if_daily_time_is_already_past_on_same_day() {
+        LocalDateTime nextExecutionTime = dailySchedule.nextExecutionTime(afterDailyTime).get();
 
-        if(dailyTime.isAfter(currentTime.toLocalTime())) {
-            nextExecutionDate = currentTime.toLocalDate();
-        } else {
-            nextExecutionDate = currentTime.toLocalDate().plusDays(1);
-        }
-
-        return Optional.of(LocalDateTime.of(nextExecutionDate, dailyTime));
+        assertEquals(currentDay.plusDays(1), nextExecutionTime.toLocalDate());
+        assertEquals(dailyTime, nextExecutionTime.toLocalTime());
     }
 }

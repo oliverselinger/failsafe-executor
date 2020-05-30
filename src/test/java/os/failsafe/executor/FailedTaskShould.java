@@ -36,8 +36,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class FailedTaskShould {
-
+class FailedTaskShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -47,14 +46,14 @@ public class FailedTaskShould {
     private PersistentTasks persistentTasks;
 
     @BeforeEach
-    public void init() {
+    void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     @Test
-    public void
+    void
     on_retry_clear_failed_status_and_unlock_itself() {
         PersistentTask persistentTask = createTask();
         RuntimeException exception = new RuntimeException("Sorry");
@@ -69,7 +68,7 @@ public class FailedTaskShould {
     }
 
     @Test
-    public void
+    void
     remove_itself_on_cancel() {
         PersistentTask persistentTask = createTask();
         RuntimeException exception = new RuntimeException("Sorry");

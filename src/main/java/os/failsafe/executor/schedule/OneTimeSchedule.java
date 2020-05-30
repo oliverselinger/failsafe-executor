@@ -21,16 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.task;
+package os.failsafe.executor.schedule;
 
-public class RunnableTask {
+import java.time.LocalDateTime;
+import java.util.Optional;
 
-    private final String name;
-    private final Runnable runnable;
-
-    RunnableTask(String name, Runnable runnable) {
-        this.name = name;
-        this.runnable = runnable;
+public class OneTimeSchedule implements Schedule {
+    @Override
+    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+        return Optional.empty();
     }
-
 }

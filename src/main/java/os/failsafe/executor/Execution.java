@@ -24,7 +24,7 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.Schedule;
+import os.failsafe.executor.schedule.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.SystemClock;

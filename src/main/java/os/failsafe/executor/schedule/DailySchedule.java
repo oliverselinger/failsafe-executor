@@ -21,18 +21,31 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.task;
+package os.failsafe.executor.schedule;
 
-import java.util.function.Consumer;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.Optional;
 
-public class ParameterizedTask {
+public class DailySchedule implements Schedule {
 
-    final String name;
-    final Consumer<String> parameterConsumer;
+    private final LocalTime dailyTime;
 
-    ParameterizedTask(String name, Consumer<String> parameterConsumer) {
-        this.name = name;
-        this.parameterConsumer = parameterConsumer;
+    public DailySchedule(LocalTime dailyTime) {
+        this.dailyTime = dailyTime;
     }
 
+    @Override
+    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+        LocalDate nextExecutionDate;
+
+        if(dailyTime.isAfter(currentTime.toLocalTime())) {
+            nextExecutionDate = currentTime.toLocalDate();
+        } else {
+            nextExecutionDate = currentTime.toLocalDate().plusDays(1);
+        }
+
+        return Optional.of(LocalDateTime.of(nextExecutionDate, dailyTime));
+    }
 }

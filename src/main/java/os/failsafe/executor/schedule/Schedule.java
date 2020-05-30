@@ -21,16 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  ******************************************************************************/
-package os.failsafe.executor.utils;
-
-import os.failsafe.executor.task.Schedule;
+package os.failsafe.executor.schedule;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-public class OneTimeSchedule implements Schedule {
-    @Override
-    public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
-        return Optional.empty();
-    }
+public interface Schedule {
+
+    Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime);
 }

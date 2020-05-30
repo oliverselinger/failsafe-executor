@@ -27,7 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.utils.OneTimeSchedule;
+import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.Collections;
@@ -48,23 +48,23 @@ public class WorkerPoolShould {
     private WorkerPool workerPool;
 
     @BeforeEach
-    public void init() {
+    void init() {
         workerPool = new WorkerPool(threadCount, queueSize);
     }
 
     @AfterEach
-    public void stop() {
+    void stop() {
         workerPool.stop();
     }
 
     @Test
-    public void
+    void
     accept_more_tasks_if_workers_are_idle() {
         assertFalse(workerPool.allWorkersBusy());
     }
 
     @Test
-    public void
+    void
     not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
         Future<TaskId> execution = workerPool.execute(firstBlockingExecution);

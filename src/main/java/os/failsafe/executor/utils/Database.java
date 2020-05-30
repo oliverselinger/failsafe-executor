@@ -35,10 +35,10 @@ import java.util.function.Function;
 
 public class Database {
 
-    public final boolean oracleDatabase;
-    public final boolean mysqlDatabase;
-    public final boolean postgresDatabase;
-    public final boolean h2Database;
+    private final boolean oracleDatabase;
+    private final boolean mysqlDatabase;
+    private final boolean postgresDatabase;
+    private final boolean h2Database;
     private final DataSource dataSource;
 
     public Database(DataSource dataSource) {
@@ -114,36 +114,36 @@ public class Database {
         }
     }
 
-    public <T> void insert(Connection connection,
+    public void insert(Connection connection,
                            String sql,
                            Object... params) {
         executeUpdate(connection, sql, params);
     }
 
-    public <T> int update(Connection connection,
+    public int update(Connection connection,
                           String sql,
                           Object... params) {
         return executeUpdate(connection, sql, params);
     }
 
-    public <T> int update(String sql,
+    public int update(String sql,
                           Object... params) {
         return executeUpdate(sql, params);
     }
 
-    public <T> int delete(String sql,
+    public int delete(String sql,
                           Object... params) {
         return executeUpdate(sql, params);
     }
 
-    public <T> int executeUpdate(String sql,
+    public int executeUpdate(String sql,
                                  Object... params) {
         return connect(connection -> executeUpdate(connection, sql, params));
     }
 
-    public <T> int executeUpdate(Connection connection,
-                                 String sql,
-                                 Object... params) {
+    private int executeUpdate(Connection connection,
+                              String sql,
+                              Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             int cnt = 0;

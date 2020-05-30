@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class PersistentTaskShould {
+class PersistentTaskShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -50,13 +50,13 @@ public class PersistentTaskShould {
     private PersistentTasks persistentTasks;
 
     @BeforeEach
-    public void init() {
+    void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
-    @Test public void
+    @Test void
     lock_itself() {
         PersistentTask persistentTask = createTask();
 
@@ -66,7 +66,7 @@ public class PersistentTaskShould {
         assertNotNull(locked.startTime);
     }
 
-    @Test public void
+    @Test void
     remove_itself() {
         PersistentTask persistentTask = createTask();
 
@@ -75,7 +75,7 @@ public class PersistentTaskShould {
         assertNull(persistentTasks.findOne(persistentTask.getId()));
     }
 
-    @Test public void
+    @Test void
     unlock_itself_and_set_next_planned_execution_time() {
         PersistentTask persistentTask = createTask();
 
@@ -90,7 +90,7 @@ public class PersistentTaskShould {
         assertEquals(nextExecutionTime, unlockedAndPlannedForNextExecution.getPlannedExecutionTime());
     }
 
-    @Test public void
+    @Test void
     save_exception_details_and_mark_itself_as_failed() {
         PersistentTask persistentTask = createTask();
 

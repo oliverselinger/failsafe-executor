@@ -25,13 +25,13 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
 import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.Schedule;
+import os.failsafe.executor.schedule.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
-import os.failsafe.executor.utils.OneTimeSchedule;
+import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
@@ -91,10 +91,13 @@ public class FailsafeExecutor {
     }
 
     public void start() {
-        executor.scheduleWithFixedDelay(() -> {
-            while (executeNextTask() != null) {
-            }
-        }, initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(
+                this::executeNextTasks,
+                initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    private void executeNextTasks() {
+        for (;;) if (executeNextTask() == null) break;
     }
 
     public void stop() {

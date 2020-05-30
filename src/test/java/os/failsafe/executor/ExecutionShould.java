@@ -29,7 +29,7 @@ import org.mockito.Mockito;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.utils.OneTimeSchedule;
+import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.LocalDateTime;
@@ -55,7 +55,7 @@ public class ExecutionShould {
     private final String taskName = "TestTask";
 
     @BeforeEach
-    public void init() {
+    void init() {
         task = Mockito.mock(Task.class);
 
         oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
@@ -71,28 +71,30 @@ public class ExecutionShould {
         execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
     }
 
-    @Test public void
+    @Test
+    void
     execute_task_with_parameter() {
         execution.perform();
 
         verify(task).run(parameter);
     }
 
-    @Test public void
+    @Test
+    void
     notify_listeners_after_successful_execution() {
         execution.perform();
 
         verify(listener).succeeded(taskName, taskId, parameter);
     }
 
-    @Test public void
+    @Test void
     remove_task_after_successful_execution() {
         execution.perform();
 
         verify(persistentTask).remove();
     }
 
-    @Test public void
+    @Test void
     notify_listeners_after_failed_execution() {
         RuntimeException exception = new RuntimeException();
         doThrow(exception).when(task).run(any());
@@ -102,7 +104,7 @@ public class ExecutionShould {
         verify(listener).failed(taskName, taskId, parameter);
     }
 
-    @Test public void
+    @Test void
     not_remove_but_set_next_execution_time_of_the_task_if_one_is_available() {
         LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
         when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
