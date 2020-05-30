@@ -24,7 +24,7 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -36,7 +36,6 @@ import os.failsafe.executor.utils.SystemClock;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,7 +55,7 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
 
-    private final Map<String, FailsafeTask> tasksByIdentifier = new ConcurrentHashMap<>();
+    private final Map<String, Task> tasksByIdentifier = new ConcurrentHashMap<>();
     private final Map<String, Schedule> scheduleByIdentifier = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -103,28 +102,28 @@ public class FailsafeExecutor {
         executor.shutdown();
     }
 
-    public TaskId execute(FailsafeTask task) {
+    public TaskId execute(Task task) {
         return execute(task, null);
     }
 
-    public TaskId execute(FailsafeTask task, String parameter) {
+    public TaskId execute(Task task, String parameter) {
         return database.connect(connection -> execute(connection, task, parameter));
     }
 
-    public TaskId execute(Connection connection, FailsafeTask task) {
+    public TaskId execute(Connection connection, Task task) {
         return execute(connection, task, null);
     }
 
-    public TaskId execute(Connection connection, FailsafeTask task, String parameter) {
+    public TaskId execute(Connection connection, Task task, String parameter) {
         TaskInstance taskInstance = new TaskInstance(task.getName(), parameter, systemClock.now());
         return enqueue(connection, task, taskInstance);
     }
 
-    public TaskId schedule(FailsafeTask task, Schedule schedule) {
+    public TaskId schedule(Task task, Schedule schedule) {
         return database.connect(connection -> schedule(connection, task, schedule));
     }
 
-    public TaskId schedule(Connection connection, FailsafeTask task, Schedule schedule) {
+    public TaskId schedule(Connection connection, Task task, Schedule schedule) {
         scheduleByIdentifier.put(task.getName(), schedule);
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
@@ -157,7 +156,7 @@ public class FailsafeExecutor {
         return lastRunException;
     }
 
-    private TaskId enqueue(Connection connection, FailsafeTask task, TaskInstance taskInstance) {
+    private TaskId enqueue(Connection connection, Task task, TaskInstance taskInstance) {
         if (!tasksByIdentifier.containsKey(task.getName())) {
             tasksByIdentifier.put(task.getName(), task);
         }
@@ -177,9 +176,9 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            FailsafeTask failsafeTask = tasksByIdentifier.get(toExecute.getName());
-            Schedule schedule = scheduleByIdentifier.getOrDefault(failsafeTask.getName(), oneTimeSchedule);
-            Execution execution = new Execution(failsafeTask, toExecute, listeners, schedule, systemClock);
+            Task task = tasksByIdentifier.get(toExecute.getName());
+            Schedule schedule = scheduleByIdentifier.getOrDefault(task.getName(), oneTimeSchedule);
+            Execution execution = new Execution(task, toExecute, listeners, schedule, systemClock);
 
             Future<TaskId> taskIdFuture = workerPool.execute(execution);
 

@@ -27,12 +27,12 @@ import java.util.function.Consumer;
 
 public class Tasks {
 
-    public static FailsafeTask runnable(String name, Runnable runnable) {
-        return new FailsafeTask(name, runnable);
+    public static Task runnable(String name, Runnable runnable) {
+        return new Task(name, runnable);
     }
 
-    public static FailsafeTask parameterized(String name, Consumer<String> parameterConsumer) {
-        return new FailsafeTask(name, parameterConsumer);
+    public static Task parameterized(String name, Consumer<String> parameterConsumer) {
+        return new Task(name, parameterConsumer);
     }
 
 }

@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.FailsafeExecutor;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Tasks;
@@ -74,7 +74,7 @@ public class FailsafeExecutorShould {
 
     DataSource dataSource;
     FailsafeExecutor failsafeExecutor;
-    FailsafeTask task;
+    Task task;
     TaskExecutionListener taskExecutionListener;
 
     boolean executionShouldFail;
@@ -130,7 +130,7 @@ public class FailsafeExecutorShould {
         systemClock.fixedTime(beforePlannedExecutionTime);
 
         DailySchedule dailySchedule = new DailySchedule(dailyTime);
-        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+        Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
         TaskId taskId = failsafeExecutor.schedule(task, dailySchedule);
 
@@ -150,7 +150,7 @@ public class FailsafeExecutorShould {
     public void
     not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
-        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+        Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
         failsafeExecutor.schedule(task, dailySchedule);
 
@@ -162,7 +162,7 @@ public class FailsafeExecutorShould {
     public void
     not_throw_an_exception_if_task_is_already_scheduled() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
-        FailsafeTask task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
+        Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
         failsafeExecutor.schedule(task, dailySchedule);
         assertDoesNotThrow(() -> failsafeExecutor.schedule(task, dailySchedule));

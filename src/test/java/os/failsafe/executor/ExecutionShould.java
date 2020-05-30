@@ -26,7 +26,7 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.OneTimeSchedule;
@@ -47,7 +47,7 @@ public class ExecutionShould {
     private final TestSystemClock systemClock = new TestSystemClock();
     private Execution execution;
     private TaskExecutionListener listener;
-    private FailsafeTask failsafeTask;
+    private Task task;
     private PersistentTask persistentTask;
     private OneTimeSchedule oneTimeSchedule;
     private final TaskId taskId = new TaskId("123");
@@ -56,7 +56,7 @@ public class ExecutionShould {
 
     @BeforeEach
     public void init() {
-        failsafeTask = Mockito.mock(FailsafeTask.class);
+        task = Mockito.mock(Task.class);
 
         oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
         when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.empty());
@@ -68,14 +68,14 @@ public class ExecutionShould {
 
         listener = Mockito.mock(TaskExecutionListener.class);
 
-        execution = new Execution(failsafeTask, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
+        execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
     }
 
     @Test public void
     execute_task_with_parameter() {
         execution.perform();
 
-        verify(failsafeTask).run(parameter);
+        verify(task).run(parameter);
     }
 
     @Test public void
@@ -95,7 +95,7 @@ public class ExecutionShould {
     @Test public void
     notify_listeners_after_failed_execution() {
         RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(failsafeTask).run(any());
+        doThrow(exception).when(task).run(any());
 
         execution.perform();
 

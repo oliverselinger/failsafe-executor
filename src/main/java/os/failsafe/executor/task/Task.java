@@ -25,17 +25,17 @@ package os.failsafe.executor.task;
 
 import java.util.function.Consumer;
 
-public class FailsafeTask {
+public class Task {
 
     private final String name;
     private final Consumer<String> parameterConsumer;
 
-    FailsafeTask(String name, Runnable runnable) {
+    Task(String name, Runnable runnable) {
         this.name = name;
         this.parameterConsumer = ignore -> runnable.run();
     }
 
-    FailsafeTask(String name, Consumer<String> parameterConsumer) {
+    Task(String name, Consumer<String> parameterConsumer) {
         this.name = name;
         this.parameterConsumer = parameterConsumer;
     }

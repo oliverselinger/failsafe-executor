@@ -23,7 +23,7 @@
  ******************************************************************************/
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.FailsafeTask;
+import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.Schedule;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -35,14 +35,14 @@ import java.util.Optional;
 
 class Execution {
 
-    private final FailsafeTask failsafeTask;
+    private final Task task;
     private final PersistentTask persistentTask;
     private final List<TaskExecutionListener> listeners;
     private final Schedule schedule;
     private final SystemClock systemClock;
 
-    Execution(FailsafeTask failsafeTask, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock) {
-        this.failsafeTask = failsafeTask;
+    Execution(Task task, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock) {
+        this.task = task;
         this.persistentTask = persistentTask;
         this.listeners = listeners;
         this.schedule = schedule;
@@ -51,7 +51,7 @@ class Execution {
 
     public TaskId perform() {
         try {
-            failsafeTask.run(persistentTask.getParameter());
+            task.run(persistentTask.getParameter());
 
             notifySuccess();
 
