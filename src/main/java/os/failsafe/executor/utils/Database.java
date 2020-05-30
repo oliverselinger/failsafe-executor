@@ -35,16 +35,36 @@ import java.util.function.Function;
 
 public class Database {
 
+    public final boolean oracleDatabase;
     public final boolean mysqlDatabase;
+    public final boolean postgresDatabase;
+    public final boolean h2Database;
     private final DataSource dataSource;
 
     public Database(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.mysqlDatabase = determineDatabase();
+
+        String databaseName = determineDatabase();
+        this.oracleDatabase = databaseName.equalsIgnoreCase("Oracle");
+        this.mysqlDatabase = databaseName.equalsIgnoreCase("MySQL");
+        this.postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
+        this.h2Database = databaseName.equalsIgnoreCase("H2");
+    }
+
+    public boolean isOracle() {
+        return oracleDatabase;
     }
 
     public boolean isMysql() {
         return mysqlDatabase;
+    }
+
+    public boolean isPostgres() {
+        return postgresDatabase;
+    }
+
+    public boolean isH2() {
+        return h2Database;
     }
 
     public <T> T selectOne(String sql,
@@ -97,11 +117,7 @@ public class Database {
     public <T> void insert(Connection connection,
                            String sql,
                            Object... params) {
-        int effectedRows = executeUpdate(connection, sql, params);
-
-        if (effectedRows != 1) {
-            throw new RuntimeException("Insertion failure");
-        }
+        executeUpdate(connection, sql, params);
     }
 
     public <T> int update(Connection connection,
@@ -160,9 +176,9 @@ public class Database {
         }
     }
 
-    private boolean determineDatabase() {
+    private String determineDatabase() {
         try (Connection connection = dataSource.getConnection()) {
-            return connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
+            return connection.getMetaData().getDatabaseProductName();
         } catch (SQLException e) {
             throw new RuntimeException("Unable to determine database product name", e);
         }

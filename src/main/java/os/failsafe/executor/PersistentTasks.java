@@ -37,7 +37,9 @@ import java.util.Optional;
 
 class PersistentTasks {
 
-    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?)";
+    private static final String INSERT_TASK_POSTGRES = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING";
+    private static final String INSERT_TASK_MYSQL = "INSERT IGNORE INTO PERSISTENT_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?)";
+    private static final String INSERT_TASK_ORACLE = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) SELECT ?, ?, ?, ?, ? FROM DUAL WHERE NOT EXISTS (SELECT ID FROM PERSISTENT_TASK WHERE ID = ?)";
     private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
@@ -56,12 +58,33 @@ class PersistentTasks {
     }
 
     PersistentTask create(Connection connection, TaskInstance task) {
-        database.insert(connection, INSERT_TASK,
-                task.id,
-                task.name,
-                task.parameter,
-                task.plannedExecutionTime,
-                Timestamp.valueOf(systemClock.now()));
+        if (database.isOracle() || database.isH2()) {
+            database.insert(connection, INSERT_TASK_ORACLE,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()),
+                    task.id);
+        }
+
+        if (database.isMysql()) {
+            database.insert(connection, INSERT_TASK_MYSQL,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()));
+        }
+
+        if (database.isPostgres()) {
+            database.insert(connection, INSERT_TASK_POSTGRES,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()));
+        }
 
         return new PersistentTask(task.id, task.parameter, task.name, task.plannedExecutionTime, database, systemClock);
     }

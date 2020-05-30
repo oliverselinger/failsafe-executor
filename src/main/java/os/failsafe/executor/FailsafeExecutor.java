@@ -125,10 +125,6 @@ public class FailsafeExecutor {
     }
 
     public TaskId schedule(Connection connection, FailsafeTask task, Schedule schedule) {
-        if (scheduleByIdentifier.containsKey(task.getName())) {
-            throw new IllegalArgumentException(String.format("Task %s already scheduled", task.getName()));
-        }
-
         scheduleByIdentifier.put(task.getName(), schedule);
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));

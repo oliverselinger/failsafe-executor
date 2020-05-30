@@ -90,10 +90,10 @@ public class PersistentTasksShould {
 
     @Test
     public void
-    raise_and_exception_if_id_is_not_unique() {
+    do_nothing_if_id_is_not_unique() {
         String id = "id";
         createTask(id);
-        assertThrows(RuntimeException.class, () -> createTask(id));
+        assertDoesNotThrow(() -> createTask(id));
     }
 
     @Test
