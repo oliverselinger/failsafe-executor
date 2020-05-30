@@ -47,11 +47,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FailsafeExecutor {
 
     public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
-    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 2;
+    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
 
@@ -71,6 +72,7 @@ public class FailsafeExecutor {
     private final SystemClock systemClock;
 
     private volatile Exception lastRunException;
+    private AtomicBoolean running = new AtomicBoolean();
 
     public FailsafeExecutor(DataSource dataSource) {
         this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL);
@@ -91,6 +93,11 @@ public class FailsafeExecutor {
     }
 
     public void start() {
+        boolean shouldStart = running.compareAndSet(false, true);
+        if (!shouldStart) {
+            return;
+        }
+
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
@@ -103,6 +110,7 @@ public class FailsafeExecutor {
     public void stop() {
         this.workerPool.stop();
         executor.shutdown();
+        running.set(false);
     }
 
     public TaskId execute(Task task) {
