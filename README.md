@@ -159,11 +159,18 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `systemClock` | `SystemClock` | LocalDateTime.now() | Clock to retrieve the current time. |
 | `workerThreadCount` | `int` | 5 | Number of threads executing tasks. |
 | `queueSize` | `int`  |  2 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
-| `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the 'FailsafeExecutor'. |
-| `pollingInterval` | `Duration` |  5 sec | How often the 'FailsafeExecutor' checks for tasks to execute. |
-| `lockTimeout` | `Duration` |  10 min | If an execution is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
+| `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
+| `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
+| `lockTimeout` | `Duration` |  10 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
 
 ## FAQ
+
+#### How is an at-least-once execution guaranteed?
+
+First, each task gets persisted into database before it's considered for execution. After that, the `FailsafeExecutor` tries to reserve the next task based on creation date by setting a lock timestamp in the database. Concurrent
+access by several FailsafeExecutors is controlled by applying optimistic locking. Only if the lock operation succeeds, the task is submitted for execution to the FailsafeExecutor's worker pool. In case,
+the `FailsafeExecutor` is not able to execute all his locked tasks, e.g. due to a system crash, a predefined lock timeout guarantees that a task will again be considered for execution by other FailsafeExecutors which could be running
+on different nodes.
 
 #### Can method `execute` and `schedule` take part in a Spring-managed transaction?
 
