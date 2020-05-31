@@ -63,7 +63,7 @@ Task parameterizedTask = Tasks.parameterized("ParamTask", parameter -> { ... });
 
 Make sure your business logic is **idempotent**, since it gets executed at least once.
 
-As parameter, we recommend to use only a single ID that your business logic is able to interpret properly. Try to avoid using a complex object as parameter
+As parameter, we recommend to use only a single ID that your business logic is able to interpret properly. Avoid using complex objects
 (through serialization) since it may lead to complex migration scenarios in case your object and your business logic changes.
 
 ### Execute a task
@@ -79,7 +79,7 @@ TaskId taskId = failsafeExecutor.execute(parameterizedTask, parameter);
 
 ### Schedule a task
 
-You can schedule the tasks execution time. For that, pass your task and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
+You can schedule the task's execution time. Pass your task and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
 
 ```java
 TaskId taskId = failsafeExecutor.schedule(runnableTask, schedule);
