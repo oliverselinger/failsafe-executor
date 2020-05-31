@@ -123,7 +123,7 @@ failsafeExecutor.subscribe(executionListener);
 
 The listener gets called at the end of the execution in an at least once manner. Depending on the outcome either `succeeded` or `failed` is called.
 
-## Monitoring
+## Health check
 
 The `FailsafeExecutor` provides a health check through two methods. One that returns if last run of `FailsafeExecutor` was successful.
 
@@ -164,7 +164,7 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 ## FAQ
 
-#### Can method `execute` take part in a Spring-managed transaction?
+#### Can method `execute` and `schedule` take part in a Spring-managed transaction?
 
 Yes. Wrap your `dataSource` object with a `TransactionAwareDataSourceProxy` before passing it to FailsafeExecutor's constructor. The proxy adds awareness of Spring-managed transactions.
 
