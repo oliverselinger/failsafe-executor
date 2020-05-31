@@ -16,6 +16,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
 * **Lightweight**. Small code base.
 * **No dependencies**.
+* **No reflection**.
 
 ## Getting started
 
@@ -49,47 +50,45 @@ failsafeExecutor.start();
 
 ## Execute Tasks
 
-### Define the execution logic
+### Create a task
 
-You need to define the logic that should be executed by the `FailsafeExecutor`. For that, create a `TaskDefinition`. It consists of an arbitrary chosen id that must be
-unique application-wide. The actual logic is defined via a consumer that accepts a String as parameter, used for state transfer.
-The parameter can be anything but we recommend to use just a single ID that your business logic is able to interpret properly. Avoid using a complex object
-(through serialization) since it may lead to complex migration scenarios in case business logic changes.
+Create your task either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
 
 ```java
-TaskDefinition taskDefinition = TaskDefinitions.of("UniqueTaskName", parameter -> log.info("Hello {}", parameter));
-failsafeExecutor.defineTask(taskDefinition);
+Task runnableTask = Tasks.runnable("RunTask", () -> { ... });
+```
+```java
+Task parameterizedTask = Tasks.parameterized("ParamTask", parameter -> { ... });
 ```
 
-### Create and execute a task
+Make sure your business logic is **idempotent**, since it gets executed at least once.
 
-To execute a task create a new instance by using the `TaskDefinition`. There you can define the parameter.
-The task is then executed some time in the future by passing it to the `FailsafeExecutor`.
+As parameter, we recommend to use only a single ID that your business logic is able to interpret properly. Try to avoid using a complex object as parameter
+(through serialization) since it may lead to complex migration scenarios in case your object and your business logic changes.
+
+### Execute a task
+
+Pass your task and optionally your parameter to FailsafeExecutor's `execute` method. The task is then executed some time in the future.
 
 ```java
-Task task = taskDefinition.newTask(" world!");
-TaskId taskId = failsafeExecutor.execute(task);
+TaskId taskId = failsafeExecutor.execute(runnableTask);
+```
+```java
+TaskId taskId = failsafeExecutor.execute(parameterizedTask, parameter);
 ```
 
-## Monitoring the execution
+### Schedule a task
 
-The result of execution of a task can be observed by subscribing a listener either at the `TaskDefinition`:
+You can schedule the tasks execution time. For that, pass your task and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
 
 ```java
-TaskExecutionListener executionListener = new TaskExecutionListener() { ... };
-taskDefinition.subscribe(executionListener);
+TaskId taskId = failsafeExecutor.schedule(runnableTask, schedule);
 ```
 
-or globally at the `FailsafeExecutor`:
+With a `Schedule` you can either plan a one time execution in future or a recurring execution.
 
-```java
-failsafeExecutor.subscribe(executionListener);
-```
-
-Listeners subscribed at a `TaskDefinition` get called only if a corresponding task gets executed.
-A global listener gets called each time an execution is performed.
-
-The listener gets called at the end of the execution in an at least once manner.
+* For a **one-time execution** just let method `nextExecutionTime` return `Optional.empty()` after your planned execution time has past.
+* A **recurring execution** requires method `nextExecutionTime` to always return the next planned time for execution. For example see [DailySchedule](src/main/java/os/failsafe/executor/schedule/DailySchedule.java).
 
 ## Task failures
 
@@ -113,6 +112,16 @@ failedTask.cancel();
 ```
 
 Cancel deletes the task from database.
+
+## Monitoring the execution
+
+The result of each execution of tasks can be observed by subscribing a listener at the `FailsafeExecutor`:
+
+```java
+failsafeExecutor.subscribe(executionListener);
+```
+
+The listener gets called at the end of the execution in an at least once manner. Depending on the outcome either `succeeded` or `failed` is called.
 
 ## Monitoring
 
