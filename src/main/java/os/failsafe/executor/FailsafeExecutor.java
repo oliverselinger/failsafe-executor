@@ -55,6 +55,7 @@ public class FailsafeExecutor {
     public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
+    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(10);
 
     private final Map<String, Task> tasksByIdentifier = new ConcurrentHashMap<>();
     private final Map<String, Schedule> scheduleByIdentifier = new ConcurrentHashMap<>();
@@ -75,17 +76,17 @@ public class FailsafeExecutor {
     private AtomicBoolean running = new AtomicBoolean();
 
     public FailsafeExecutor(DataSource dataSource) {
-        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL);
+        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL, DEFAULT_LOCK_TIMEOUT);
     }
 
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval) {
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout) {
         if (queueSize < workerThreadCount) {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
 
         this.database = new Database(dataSource);
         this.systemClock = systemClock;
-        this.persistentQueue = new PersistentQueue(database, systemClock);
+        this.persistentQueue = new PersistentQueue(database, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;

@@ -156,11 +156,12 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 | Option  | Type | Default | Description |
 | ------------- | ---- | ---- | ------------- |
-| `systemClock` | `SystemClock`  | LocalDateTime.now() | Clock to retrieve the current time. |
-| `workerThreadCount` | `int`  | 5  | Number of threads executing tasks. |
-| `queueSize` | `int`  |  2 * `<worker-thread-count>`  | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
-| `initialDelay` | `Duration`  |  10 sec  | The time to delay first execution to fetch tasks of the 'FailsafeExecutor'. |
-| `pollingInterval` | `Duration`  |  5 sec  | How often the 'FailsafeExecutor' checks for tasks to execute. |
+| `systemClock` | `SystemClock` | LocalDateTime.now() | Clock to retrieve the current time. |
+| `workerThreadCount` | `int` | 5 | Number of threads executing tasks. |
+| `queueSize` | `int`  |  2 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
+| `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the 'FailsafeExecutor'. |
+| `pollingInterval` | `Duration` |  5 sec | How often the 'FailsafeExecutor' checks for tasks to execute. |
+| `lockTimeout` | `Duration` |  10 min | If an execution is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
 
 ## FAQ
 

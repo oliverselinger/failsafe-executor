@@ -44,13 +44,13 @@ public class PersistentQueueShould {
     static final DbExtension DB_EXTENSION = new DbExtension();
 
     private TestSystemClock systemClock = new TestSystemClock();
-
+    private Duration lockTimeout = Duration.ofMinutes(10);
     private PersistentQueue persistentQueue;
 
     @BeforeEach
     void init() {
         systemClock = new TestSystemClock();
-        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock);
+        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock, lockTimeout);
     }
 
     @Test void
@@ -103,7 +103,7 @@ public class PersistentQueueShould {
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
 
-        systemClock.timeTravelBy(Duration.ofMinutes(10));
+        systemClock.timeTravelBy(lockTimeout);
 
         PersistentTask dequedTask2 = persistentQueue.peekAndLock();
 
@@ -121,7 +121,7 @@ public class PersistentQueueShould {
 
         dequedTask1.fail(new RuntimeException());
 
-        systemClock.timeTravelBy(Duration.ofMinutes(10));
+        systemClock.timeTravelBy(lockTimeout);
 
         PersistentTask dequedTask2 = persistentQueue.peekAndLock();
 

@@ -60,6 +60,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
 
@@ -93,7 +94,7 @@ class FailsafeExecutorShould {
             log.info("Hello {}", parameter);
         });
 
-        failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
+        failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
 
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
         failsafeExecutor.subscribe(taskExecutionListener);
@@ -108,7 +109,7 @@ class FailsafeExecutorShould {
 
     @Test void
     throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
-        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1)));
+        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
     }
 
     @Test void
@@ -151,7 +152,7 @@ class FailsafeExecutorShould {
 
         failsafeExecutor.schedule(task, dailySchedule);
 
-        FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1));
+        FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(task, dailySchedule));
     }
 
@@ -196,7 +197,7 @@ class FailsafeExecutorShould {
         DataSource failingDataSource = Mockito.mock(DataSource.class);
         when(failingDataSource.getConnection()).thenReturn(connection);
 
-        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofSeconds(10));
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofSeconds(10), DEFAULT_LOCK_TIMEOUT);
         failsafeExecutor.start();
 
         verify(connection, timeout(TimeUnit.SECONDS.toMillis(5))).prepareStatement(any());

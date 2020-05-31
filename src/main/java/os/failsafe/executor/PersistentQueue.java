@@ -29,12 +29,12 @@ import os.failsafe.executor.utils.SystemClock;
 
 import java.sql.Connection;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 class PersistentQueue {
 
-    private static final int DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES = 10;
     private static final String QUERY_ALL_QUEUED_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?))";
     private static final String QUERY_ORDER_BY_CREATED_DATE = " ORDER BY CREATED_DATE";
     private static final String QUERY_PLANNED_EXECUTION_TIME = " AND PLANNED_EXECUTION_TIME <= ?";
@@ -46,11 +46,13 @@ class PersistentQueue {
 
     private final Database database;
     private final SystemClock systemClock;
+    private final Duration lockTimeout;
     private final PersistentTasks persistentTasks;
 
-    public PersistentQueue(Database database, SystemClock systemClock) {
+    public PersistentQueue(Database database, SystemClock systemClock, Duration lockTimeout) {
         this.database = database;
         this.systemClock = systemClock;
+        this.lockTimeout = lockTimeout;
         this.persistentTasks = new PersistentTasks(database, systemClock);
 
         this.QUERY_NEXT_TASKS = constructNextTaskQuery();
@@ -96,7 +98,7 @@ class PersistentQueue {
     }
 
     private Timestamp deadExecutionTimeout() {
-        return Timestamp.valueOf(systemClock.now().minusMinutes(DEAD_EXECUTIONS_TIMEOUT_IN_MINUTES));
+        return Timestamp.valueOf(systemClock.now().minus(lockTimeout));
     }
 
     private Timestamp expectedPlannedExecutionTime() {
