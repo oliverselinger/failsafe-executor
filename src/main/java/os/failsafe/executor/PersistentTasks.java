@@ -1,31 +1,7 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.FailedTask;
 import os.failsafe.executor.task.TaskId;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
@@ -38,8 +14,10 @@ import java.util.Optional;
 
 class PersistentTasks {
 
-    private static final String INSERT_TASK = "INSERT INTO PERSISTENT_TASK (ID,NAME,PARAMETER,VERSION,CREATED_DATE) VALUES (?,?,?,?,?)";
-    private static final String QUERY_ALL = "SELECT * FROM PERSISTENT_TASK";
+    private static final String INSERT_TASK_POSTGRES = "INSERT INTO FAILSAFE_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING";
+    private static final String INSERT_TASK_MYSQL = "INSERT IGNORE INTO FAILSAFE_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) VALUES (?,?,?,?,?)";
+    private static final String INSERT_TASK_ORACLE = "INSERT INTO FAILSAFE_TASK (ID,NAME,PARAMETER,PLANNED_EXECUTION_TIME,CREATED_DATE) SELECT ?, ?, ?, ?, ? FROM DUAL WHERE NOT EXISTS (SELECT ID FROM FAILSAFE_TASK WHERE ID = ?)";
+    private static final String QUERY_ALL = "SELECT * FROM FAILSAFE_TASK";
     private static final String QUERY_ONE = QUERY_ALL + " WHERE ID=?";
     private static final String QUERY_ALL_FAILED = QUERY_ALL + " WHERE FAILED=1";
     private static final String QUERY_ONE_FAILED = QUERY_ONE + " AND FAILED=1";
@@ -52,19 +30,40 @@ class PersistentTasks {
         this.systemClock = systemClock;
     }
 
-    PersistentTask create(Task task) {
+    PersistentTask create(TaskInstance task) {
         return database.connect(connection -> this.create(connection, task));
     }
 
-    PersistentTask create(Connection connection, Task task) {
-        database.insert(connection, INSERT_TASK,
-                task.id,
-                task.name,
-                task.parameter,
-                0,
-                Timestamp.valueOf(systemClock.now()));
+    PersistentTask create(Connection connection, TaskInstance task) {
+        if (database.isOracle() || database.isH2()) {
+            database.insert(connection, INSERT_TASK_ORACLE,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()),
+                    task.id);
+        }
 
-        return new PersistentTask(task.id, task.parameter, task.name, database, systemClock);
+        if (database.isMysql()) {
+            database.insert(connection, INSERT_TASK_MYSQL,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()));
+        }
+
+        if (database.isPostgres()) {
+            database.insert(connection, INSERT_TASK_POSTGRES,
+                    task.id,
+                    task.name,
+                    task.parameter,
+                    task.plannedExecutionTime,
+                    Timestamp.valueOf(systemClock.now()));
+        }
+
+        return new PersistentTask(task.id, task.parameter, task.name, task.plannedExecutionTime, database, systemClock);
     }
 
     PersistentTask findOne(TaskId id) {
@@ -87,6 +86,7 @@ class PersistentTasks {
                     new TaskId(rs.getString("ID")),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
+                    rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                     pickTime != null ? pickTime.toLocalDateTime() : null,
                     rs.getLong("VERSION"),
                     database,

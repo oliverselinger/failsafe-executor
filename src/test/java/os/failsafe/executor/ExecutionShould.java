@@ -1,104 +1,95 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import os.failsafe.executor.schedule.OneTimeSchedule;
+import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskDefinition;
 import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.utils.TestSystemClock;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ExecutionShould {
 
+    private final TestSystemClock systemClock = new TestSystemClock();
     private Execution execution;
-    private TaskDefinition taskDefinition;
-    private TaskExecutionListener globalListener;
-
+    private TaskExecutionListener listener;
+    private Task task;
     private PersistentTask persistentTask;
+    private OneTimeSchedule oneTimeSchedule;
     private final TaskId taskId = new TaskId("123");
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
 
     @BeforeEach
-    public void init() {
-        taskDefinition = Mockito.mock(TaskDefinition.class);
+    void init() {
+        task = Mockito.mock(Task.class);
+
+        oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
+        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.empty());
 
         persistentTask = Mockito.mock(PersistentTask.class);
         when(persistentTask.getId()).thenReturn(taskId);
         when(persistentTask.getParameter()).thenReturn(parameter);
         when(persistentTask.getName()).thenReturn(taskName);
 
-        globalListener = Mockito.mock(TaskExecutionListener.class);
+        listener = Mockito.mock(TaskExecutionListener.class);
 
-        execution = new Execution(taskDefinition, persistentTask, Collections.singletonList(globalListener));
+        execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
     }
 
-    @Test public void
+    @Test
+    void
     execute_task_with_parameter() {
         execution.perform();
 
-        verify(taskDefinition).execute(parameter);
+        verify(task).run(parameter);
     }
 
-    @Test public void
+    @Test
+    void
     notify_listeners_after_successful_execution() {
-        TaskExecutionListener listener = Mockito.mock(TaskExecutionListener.class);
-        when(taskDefinition.allListeners()).thenReturn(Collections.singletonList(listener));
-
         execution.perform();
 
-        verify(globalListener).succeeded(taskName, taskId, parameter);
         verify(listener).succeeded(taskName, taskId, parameter);
     }
 
-    @Test public void
+    @Test void
     remove_task_after_successful_execution() {
         execution.perform();
 
         verify(persistentTask).remove();
     }
 
-    @Test public void
+    @Test void
     notify_listeners_after_failed_execution() {
-        TaskExecutionListener listener = Mockito.mock(TaskExecutionListener.class);
-        when(taskDefinition.allListeners()).thenReturn(Collections.singletonList(listener));
-
         RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(taskDefinition).execute(any());
+        doThrow(exception).when(task).run(any());
 
         execution.perform();
 
-        verify(globalListener).failed(taskName, taskId, parameter);
         verify(listener).failed(taskName, taskId, parameter);
+    }
+
+    @Test void
+    not_remove_but_set_next_execution_time_of_the_task_if_one_is_available() {
+        LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
+        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
+
+        execution.perform();
+
+        verify(persistentTask).nextExecution(nextPlannedExecutionTime);
+        verify(persistentTask, never()).remove();
     }
 
 }

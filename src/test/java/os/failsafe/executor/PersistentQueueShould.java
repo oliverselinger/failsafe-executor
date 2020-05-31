@@ -1,41 +1,14 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskDefinition;
-import os.failsafe.executor.task.TaskDefinitions;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import javax.sql.DataSource;
-
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,23 +21,24 @@ public class PersistentQueueShould {
     static final DbExtension DB_EXTENSION = new DbExtension();
 
     private TestSystemClock systemClock = new TestSystemClock();
-
+    private Duration lockTimeout = Duration.ofMinutes(10);
     private PersistentQueue persistentQueue;
 
     @BeforeEach
-    public void init() {
+    void init() {
         systemClock = new TestSystemClock();
-        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock);
+        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock, lockTimeout);
     }
 
-    @Test public void
+    @Test void
     return_null_if_queue_is_empty() {
         assertNull(persistentQueue.peekAndLock());
     }
 
-    @Test public void
+    @Test void
     store_and_enqueue_a_task() {
-        Task task = createTask();
+        LocalDateTime plannedExecutionTime = systemClock.now();
+        TaskInstance task = createTask(plannedExecutionTime);
 
         TaskId persistentTask = persistentQueue.add(task);
 
@@ -74,14 +48,15 @@ public class PersistentQueueShould {
         PersistentTask actual = all.get(0);
         assertEquals(task.name, actual.getName());
         assertEquals(task.parameter, actual.getParameter());
+        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertEquals(persistentTask, actual.getId());
     }
 
-    @Test public void
-    dequeue_tasks_in_fifo_sequence() {
-        Task task1 = createTask();
-        Task task2 = createTask();
-        Task task3 = createTask();
+    @Test void
+    peek_tasks_in_fifo_sequence() {
+        TaskInstance task1 = createTask();
+        TaskInstance task2 = createTask();
+        TaskInstance task3 = createTask();
 
         TaskId persistentTask1 = persistentQueue.add(task1);
         systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
@@ -98,14 +73,14 @@ public class PersistentQueueShould {
         assertEquals(persistentTask3, dequedTask3.getId());
     }
 
-    @Test public void
-    retrieve_a_task_again_after_lock_times_out() {
-        Task task = createTask();
+    @Test void
+    peek_a_task_again_after_lock_times_out() {
+        TaskInstance task = createTask();
         persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
 
-        systemClock.timeTravelBy(Duration.ofMinutes(10));
+        systemClock.timeTravelBy(lockTimeout);
 
         PersistentTask dequedTask2 = persistentQueue.peekAndLock();
 
@@ -114,16 +89,16 @@ public class PersistentQueueShould {
         assertEquals(dequedTask1.getId(), dequedTask2.getId());
     }
 
-    @Test public void
-    never_retrieve_a_failed_task() {
-        Task task = createTask();
+    @Test void
+    never_peek_a_failed_task() {
+        TaskInstance task = createTask();
         persistentQueue.add(task);
 
         PersistentTask dequedTask1 = persistentQueue.peekAndLock();
 
         dequedTask1.fail(new RuntimeException());
 
-        systemClock.timeTravelBy(Duration.ofMinutes(10));
+        systemClock.timeTravelBy(lockTimeout);
 
         PersistentTask dequedTask2 = persistentQueue.peekAndLock();
 
@@ -131,9 +106,33 @@ public class PersistentQueueShould {
         assertNull(dequedTask2);
     }
 
-    private Task createTask() {
-        TaskDefinition taskDefinition = TaskDefinitions.of("TaskName", parameter -> {
-        });
-        return taskDefinition.newTask("Hello world!");
+    @Test void
+    never_peek_a_planned_future_task() {
+        TaskInstance task = createTask(systemClock.now().plusDays(1));
+        persistentQueue.add(task);
+
+        PersistentTask peekedTask = persistentQueue.peekAndLock();
+        assertNull(peekedTask);
+    }
+
+    @Test void
+    store_and_enqueue_a_task_with_future_execution() {
+        TaskInstance task = createTask(systemClock.now().plusDays(1));
+
+        persistentQueue.add(task);
+
+        List<PersistentTask> all = persistentQueue.allQueued();
+        assertEquals(1, all.size());
+
+        PersistentTask actual = all.get(0);
+        assertEquals(task.name, actual.getName());
+    }
+
+    private TaskInstance createTask() {
+        return createTask(systemClock.now());
+    }
+
+    private TaskInstance createTask(LocalDateTime plannedExecutionTime) {
+        return new TaskInstance("TaskName", "Hello world!", plannedExecutionTime);
     }
 }

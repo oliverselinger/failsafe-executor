@@ -1,26 +1,3 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor.utils;
 
 import javax.sql.DataSource;
@@ -35,16 +12,36 @@ import java.util.function.Function;
 
 public class Database {
 
-    public final boolean mysqlDatabase;
+    private final boolean oracleDatabase;
+    private final boolean mysqlDatabase;
+    private final boolean postgresDatabase;
+    private final boolean h2Database;
     private final DataSource dataSource;
 
     public Database(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.mysqlDatabase = determineDatabase();
+
+        String databaseName = determineDatabase();
+        this.oracleDatabase = databaseName.equalsIgnoreCase("Oracle");
+        this.mysqlDatabase = databaseName.equalsIgnoreCase("MySQL");
+        this.postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
+        this.h2Database = databaseName.equalsIgnoreCase("H2");
+    }
+
+    public boolean isOracle() {
+        return oracleDatabase;
     }
 
     public boolean isMysql() {
         return mysqlDatabase;
+    }
+
+    public boolean isPostgres() {
+        return postgresDatabase;
+    }
+
+    public boolean isH2() {
+        return h2Database;
     }
 
     public <T> T selectOne(String sql,
@@ -94,40 +91,36 @@ public class Database {
         }
     }
 
-    public <T> void insert(Connection connection,
-                           String sql,
-                           Object... params) {
-        int effectedRows = executeUpdate(connection, sql, params);
-
-        if (effectedRows != 1) {
-            throw new RuntimeException("Insertion failure");
-        }
+    public void insert(Connection connection,
+                       String sql,
+                       Object... params) {
+        executeUpdate(connection, sql, params);
     }
 
-    public <T> int update(Connection connection,
-                          String sql,
-                          Object... params) {
+    public int update(Connection connection,
+                      String sql,
+                      Object... params) {
         return executeUpdate(connection, sql, params);
     }
 
-    public <T> int update(String sql,
-                          Object... params) {
+    public int update(String sql,
+                      Object... params) {
         return executeUpdate(sql, params);
     }
 
-    public <T> int delete(String sql,
-                          Object... params) {
+    public int delete(String sql,
+                      Object... params) {
         return executeUpdate(sql, params);
     }
 
-    public <T> int executeUpdate(String sql,
-                                 Object... params) {
+    public int executeUpdate(String sql,
+                             Object... params) {
         return connect(connection -> executeUpdate(connection, sql, params));
     }
 
-    public <T> int executeUpdate(Connection connection,
-                                 String sql,
-                                 Object... params) {
+    private int executeUpdate(Connection connection,
+                              String sql,
+                              Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             int cnt = 0;
@@ -160,9 +153,9 @@ public class Database {
         }
     }
 
-    private boolean determineDatabase() {
+    private String determineDatabase() {
         try (Connection connection = dataSource.getConnection()) {
-            return connection.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
+            return connection.getMetaData().getDatabaseProductName();
         } catch (SQLException e) {
             throw new RuntimeException("Unable to determine database product name", e);
         }

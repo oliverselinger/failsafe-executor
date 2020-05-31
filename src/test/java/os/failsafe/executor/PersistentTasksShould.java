@@ -1,26 +1,3 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -28,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.task.FailedTask;
-import os.failsafe.executor.task.Task;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,10 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class PersistentTasksShould {
+class PersistentTasksShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -53,16 +29,17 @@ public class PersistentTasksShould {
     private PersistentTasks persistentTasks;
     private String taskName = "TestTask";
     private final String taskParameter = "parameter";
+    private final LocalDateTime plannedExecutionTime = systemClock.now();
 
     @BeforeEach
-    public void init() {
+    void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
         persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     @Test
-    public void
+    void
     persist_and_find_a_task() {
         PersistentTask task = createTask();
 
@@ -72,11 +49,12 @@ public class PersistentTasksShould {
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.version);
+        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertNull(actual.startTime);
     }
 
     @Test
-    public void
+    void
     persist_a_task_with_given_id() {
         String id = "id";
         PersistentTask task = createTask(id);
@@ -87,15 +65,15 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
-    raise_and_exception_if_id_is_not_unique() {
+    void
+    do_nothing_if_id_is_not_unique() {
         String id = "id";
         createTask(id);
-        assertThrows(RuntimeException.class, () -> createTask(id));
+        assertDoesNotThrow(() -> createTask(id));
     }
 
     @Test
-    public void
+    void
     return_empty_list_if_no_task_is_failed() {
         createTask();
 
@@ -104,7 +82,7 @@ public class PersistentTasksShould {
     }
 
     @Test
-    public void
+    void
     return_empty_optional_if_task_is_not_failed() {
         PersistentTask persistentTask = createTask();
 
@@ -113,10 +91,10 @@ public class PersistentTasksShould {
     }
 
     private PersistentTask createTask() {
-        return persistentTasks.create(new Task(taskName, taskParameter));
+        return persistentTasks.create(new TaskInstance(taskName, taskParameter, plannedExecutionTime));
     }
 
     private PersistentTask createTask(String id) {
-        return persistentTasks.create(new Task(id, taskName, taskParameter));
+        return persistentTasks.create(new TaskInstance(id, taskName, taskParameter, plannedExecutionTime));
     }
 }

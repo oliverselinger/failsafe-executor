@@ -1,26 +1,3 @@
-/*******************************************************************************
- * MIT License
- *
- * Copyright (c) 2020 Oliver Selinger
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/
 package os.failsafe.executor;
 
 import os.failsafe.executor.task.TaskId;
@@ -35,26 +12,29 @@ import java.time.LocalDateTime;
 
 class PersistentTask {
 
-    private static final String SET_LOCK_TIME = "UPDATE PERSISTENT_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
-    private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
-    private static final String FAIL_TASK = "UPDATE PERSISTENT_TASK SET FAILED=1, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
+    private static final String SET_LOCK_TIME = "UPDATE FAILSAFE_TASK SET VERSION=?, LOCK_TIME=? WHERE VERSION=? AND ID=?";
+    private static final String CLEAR_LOCK_TIME_AND_SET_NEXT_EXECUTION_TIME = "UPDATE FAILSAFE_TASK SET VERSION=?, LOCK_TIME=null, PLANNED_EXECUTION_TIME=? WHERE VERSION=? AND ID=?";
+    private static final String DELETE_TASK = "DELETE FROM FAILSAFE_TASK WHERE ID=? AND VERSION=?";
+    private static final String FAIL_TASK = "UPDATE FAILSAFE_TASK SET FAILED=1, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final TaskId id;
     private final String parameter;
     private final String name;
+    private final LocalDateTime plannedExecutionTime;
     final LocalDateTime startTime;
     final Long version;
     private final Database database;
     private final SystemClock systemClock;
 
-    public PersistentTask(String id, String parameter, String name, Database database, SystemClock systemClock) {
-        this(new TaskId(id), parameter, name, null, 0L, database, systemClock);
+    public PersistentTask(String id, String parameter, String name, LocalDateTime plannedExecutionTime, Database database, SystemClock systemClock) {
+        this(new TaskId(id), parameter, name, plannedExecutionTime, null, 0L, database, systemClock);
     }
 
-    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime startTime, Long version, Database database, SystemClock systemClock) {
+    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime startTime, Long version, Database database, SystemClock systemClock) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
+        this.plannedExecutionTime = plannedExecutionTime;
         this.startTime = startTime;
         this.version = version;
         this.database = database;
@@ -70,7 +50,7 @@ class PersistentTask {
                 version,
                 id.id);
         if (effectedRows == 1) {
-            return new PersistentTask(id, parameter, name, startTime, version + 1, database, systemClock);
+            return new PersistentTask(id, parameter, name, plannedExecutionTime, startTime, version + 1, database, systemClock);
         }
 
         return null;
@@ -91,6 +71,17 @@ class PersistentTask {
         }
     }
 
+    void nextExecution(LocalDateTime time) {
+        int effectedRows = database.update(CLEAR_LOCK_TIME_AND_SET_NEXT_EXECUTION_TIME,
+                version + 1,
+                Timestamp.valueOf(time),
+                version,
+                id.id);
+        if (effectedRows != 1) {
+            throw new RuntimeException("Unable to set next planned execution time");
+        }
+    }
+
     public TaskId getId() {
         return id;
     }
@@ -102,4 +93,9 @@ class PersistentTask {
     public String getParameter() {
         return parameter;
     }
+
+    public LocalDateTime getPlannedExecutionTime() {
+        return plannedExecutionTime;
+    }
+
 }
