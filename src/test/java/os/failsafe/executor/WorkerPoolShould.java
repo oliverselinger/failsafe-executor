@@ -8,9 +8,11 @@ import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -46,9 +48,10 @@ public class WorkerPoolShould {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
         Future<TaskId> execution = workerPool.execute(firstBlockingExecution);
 
-        IntStream.range(1, queueSize)
+        List<BlockingExecution> blockingExecutions = IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingExecution())
-                .forEach(workerPool::execute);
+                .peek(workerPool::execute)
+                .collect(Collectors.toList());
 
         assertTrue(workerPool.allWorkersBusy());
 
@@ -57,9 +60,13 @@ public class WorkerPoolShould {
 
         assertFalse(workerPool.allWorkersBusy());
 
-        workerPool.execute(new BlockingExecution());
+        BlockingExecution nextBlockingExecution = new BlockingExecution();
+        workerPool.execute(nextBlockingExecution);
 
         assertTrue(workerPool.allWorkersBusy());
+
+        nextBlockingExecution.release();
+        blockingExecutions.forEach(BlockingExecution::release);
     }
 
     static class BlockingExecution extends Execution {
@@ -77,7 +84,7 @@ public class WorkerPoolShould {
         }
 
         public void release() {
-            phaser.arriveAndAwaitAdvance();
+            phaser.arrive();
         }
     }
 }

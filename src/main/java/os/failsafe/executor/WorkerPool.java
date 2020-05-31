@@ -8,6 +8,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static os.failsafe.executor.utils.ExecutorServiceUtil.shutdownAndAwaitTermination;
+
 class WorkerPool {
 
     private final AtomicInteger idleWorkerCount;
@@ -36,7 +38,7 @@ class WorkerPool {
     }
 
     public void stop() {
-        this.workers.shutdown();
+        shutdownAndAwaitTermination(workers);
     }
 
 }

@@ -26,6 +26,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static os.failsafe.executor.utils.ExecutorServiceUtil.shutdownAndAwaitTermination;
+
 public class FailsafeExecutor {
 
     public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
@@ -87,7 +89,7 @@ public class FailsafeExecutor {
 
     public void stop() {
         this.workerPool.stop();
-        executor.shutdown();
+        shutdownAndAwaitTermination(executor);
         running.set(false);
     }
 
