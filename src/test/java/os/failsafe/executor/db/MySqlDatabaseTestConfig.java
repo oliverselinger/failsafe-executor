@@ -8,12 +8,12 @@ class MySqlDatabaseTestConfig implements DatabaseTestConfig {
     public void createTable(Database database) {
         String createTableSql = FileUtil.readResourceFile("mysql.sql");
 
-        database.execute("DROP TABLE IF EXISTS PERSISTENT_TASK",
+        database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK",
                 createTableSql);
     }
 
     public void truncateTable(Database database) {
-        database.update("TRUNCATE TABLE PERSISTENT_TASK");
+        database.update("TRUNCATE TABLE FAILSAFE_TASK");
     }
 
     public String user() {

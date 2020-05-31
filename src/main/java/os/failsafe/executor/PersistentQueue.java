@@ -12,7 +12,7 @@ import java.util.Optional;
 
 class PersistentQueue {
 
-    private static final String QUERY_ALL_QUEUED_TASKS = "SELECT * FROM PERSISTENT_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?))";
+    private static final String QUERY_ALL_QUEUED_TASKS = "SELECT * FROM FAILSAFE_TASK WHERE FAILED = 0 AND (LOCK_TIME IS NULL OR (LOCK_TIME <= ?))";
     private static final String QUERY_ORDER_BY_CREATED_DATE = " ORDER BY CREATED_DATE";
     private static final String QUERY_PLANNED_EXECUTION_TIME = " AND PLANNED_EXECUTION_TIME <= ?";
     private static final String QUERY_LIMIT = " FETCH FIRST 3 ROWS ONLY";

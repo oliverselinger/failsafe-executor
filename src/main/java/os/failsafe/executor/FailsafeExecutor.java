@@ -32,7 +32,7 @@ public class FailsafeExecutor {
     public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
-    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(10);
+    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
 
     private final Map<String, Task> tasksByIdentifier = new ConcurrentHashMap<>();
     private final Map<String, Schedule> scheduleByIdentifier = new ConcurrentHashMap<>();

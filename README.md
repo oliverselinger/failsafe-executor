@@ -158,10 +158,13 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | ------------- | ---- | ---- | ------------- |
 | `systemClock` | `SystemClock` | LocalDateTime.now() | Clock to retrieve the current time. |
 | `workerThreadCount` | `int` | 5 | Number of threads executing tasks. |
-| `queueSize` | `int`  |  2 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
+| `queueSize` | `int`  |  4 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
-| `lockTimeout` | `Duration` |  10 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
+| `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
+
+**Note:** Consider the lockTimeout must be longer than `(queueSize / workerThreadCount) * task-max-execution-time`. We expect the maximum execution time of a task as 3 min.
+With the default configuration you get `(4*5 / 5) * 3 min = 12 min`. Therefore default lockTimeout is 13 min.
 
 ## FAQ
 
@@ -169,8 +172,17 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 First, each task gets persisted into database before it's considered for execution. After that, the `FailsafeExecutor` tries to reserve the next task based on creation date by setting a lock timestamp in the database. Concurrent
 access by several FailsafeExecutors is controlled by applying optimistic locking. Only if the lock operation succeeds, the task is submitted for execution to the FailsafeExecutor's worker pool. In case,
-the `FailsafeExecutor` is not able to execute all his locked tasks, e.g. due to a system crash, a predefined lock timeout guarantees that a task will again be considered for execution by other FailsafeExecutors which could be running
+the `FailsafeExecutor` is not able to execute all his locked tasks, e.g. due to a system crash, a predefined lock timeout guarantees that a task will again be considered for execution by other FailsafeExecutors which may be running
 on different nodes.
+
+#### Are tasks executed in the insertion order?
+
+No. Basically, the `FailsafeExecutor` orders tasks by creation date for locking. However then locked tasks are executed by a pool of threads. So execution order can not be guaranteed. Furthermore more randomness is applied
+if the `FailsafeExecutor` is running on multiple nodes.
+
+#### Is there any retry mechanism?
+
+No. For that, you can implement it yourself inside of a tasks runnable or consumer function or utilize a library, e.g. [resilience4j](https://github.com/resilience4j/resilience4j)
 
 #### Can method `execute` and `schedule` take part in a Spring-managed transaction?
 

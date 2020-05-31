@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 
 public class FailedTask {
 
-    private static final String DELETE_TASK = "DELETE FROM PERSISTENT_TASK WHERE ID=? AND VERSION=?";
-    private static final String RETRY_TASK = "UPDATE PERSISTENT_TASK SET LOCK_TIME=null, FAILED=0, FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
+    private static final String DELETE_TASK = "DELETE FROM FAILSAFE_TASK WHERE ID=? AND VERSION=?";
+    private static final String RETRY_TASK = "UPDATE FAILSAFE_TASK SET LOCK_TIME=null, FAILED=0, FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=? WHERE ID=? AND VERSION=?";
 
     private final TaskId id;
     private final String parameter;
