@@ -40,7 +40,7 @@ class PersistentTasks {
                     task.id,
                     task.name,
                     task.parameter,
-                    task.plannedExecutionTime,
+                    Timestamp.valueOf(task.plannedExecutionTime),
                     Timestamp.valueOf(systemClock.now()),
                     task.id);
         }
@@ -50,7 +50,7 @@ class PersistentTasks {
                     task.id,
                     task.name,
                     task.parameter,
-                    task.plannedExecutionTime,
+                    Timestamp.valueOf(task.plannedExecutionTime),
                     Timestamp.valueOf(systemClock.now()));
         }
 
@@ -59,7 +59,7 @@ class PersistentTasks {
                     task.id,
                     task.name,
                     task.parameter,
-                    task.plannedExecutionTime,
+                    Timestamp.valueOf(task.plannedExecutionTime),
                     Timestamp.valueOf(systemClock.now()));
         }
 
