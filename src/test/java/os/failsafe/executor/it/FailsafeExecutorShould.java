@@ -80,24 +80,32 @@ class FailsafeExecutorShould {
     @AfterEach
     public void stop() {
         failsafeExecutor.stop();
-        verifyNoMoreInteractions(taskExecutionListener);
     }
 
-
-    @Test void
+    @Test
+    void
     throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
     }
 
-    @Test void
+    @Test
+    void
+    notify_listeners_about_task_registration() {
+        TaskId taskId = failsafeExecutor.execute(task, parameter);
+        assertListenerOnRegistration(task.getName(), taskId, parameter);
+    }
+
+    @Test
+    void
     execute_a_task() {
         TaskId taskId = failsafeExecutor.execute(task, parameter);
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
+        assertListenerOnSucceeded(task.getName(), taskId, parameter);
     }
 
-    @Test void
+    @Test
+    void
     execute_a_daily_scheduled_task_every_day() {
         LocalTime dailyTime = LocalTime.of(1, 0);
 
@@ -108,17 +116,20 @@ class FailsafeExecutorShould {
         Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
         TaskId taskId = failsafeExecutor.schedule(task, dailySchedule);
+        assertListenerOnRegistration(task.getName(), taskId, null);
 
         failsafeExecutor.start();
 
         systemClock.timeTravelBy(Duration.ofSeconds(1));
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, null);
+        assertListenerOnSucceeded(task.getName(), taskId, null);
 
         systemClock.timeTravelBy(Duration.ofDays(1));
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5)).times(2)).succeeded(task.getName(), taskId, null);
+        assertListenerOnSucceeded(task.getName(), taskId, null);
 
         systemClock.timeTravelBy(Duration.ofDays(1));
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5)).times(3)).succeeded(task.getName(), taskId, null);
+        assertListenerOnSucceeded(task.getName(), taskId, null);
+
+        verifyNoMoreInteractions(taskExecutionListener);
     }
 
     @Test
@@ -147,6 +158,8 @@ class FailsafeExecutorShould {
         executionShouldFail = true;
 
         TaskId taskId = failsafeExecutor.execute(task, parameter);
+        assertListenerOnRegistration(task.getName(), taskId, parameter);
+
         failsafeExecutor.start();
 
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(task.getName(), taskId, parameter);
@@ -162,7 +175,9 @@ class FailsafeExecutorShould {
         executionShouldFail = false;
         failedTask.retry();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(task.getName(), taskId, parameter);
+        assertListenerOnSucceeded(task.getName(), taskId, parameter);
+
+        verifyNoMoreInteractions(taskExecutionListener);
     }
 
     @Test void
@@ -189,5 +204,13 @@ class FailsafeExecutorShould {
         when(connection.getMetaData().getDatabaseProductName()).thenReturn("H2");
         when(connection.prepareStatement(any())).thenThrow(e);
         return connection;
+    }
+
+    private void assertListenerOnSucceeded(String name, TaskId taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(name, taskId, parameter);
+    }
+
+    private void assertListenerOnRegistration(String name, TaskId taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).registered(name, taskId, parameter);
     }
 }

@@ -152,7 +152,10 @@ public class FailsafeExecutor {
             tasksByIdentifier.put(task.getName(), task);
         }
 
-        return persistentQueue.add(connection, taskInstance);
+        TaskId taskId = persistentQueue.add(connection, taskInstance);
+        notifyRegistration(taskInstance, taskId);
+
+        return taskId;
     }
 
     private Future<TaskId> executeNextTask() {
@@ -189,5 +192,9 @@ public class FailsafeExecutor {
 
     private void clearException() {
         lastRunException = null;
+    }
+
+    private void notifyRegistration(TaskInstance taskInstance, TaskId taskId) {
+        listeners.forEach(listener -> listener.registered(taskInstance.name, taskId, taskInstance.parameter));
     }
 }
