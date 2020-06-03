@@ -35,7 +35,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>0.4.1</version>
+    <version>0.5.0</version>
 </dependency>
 ```
 
@@ -115,13 +115,13 @@ Cancel deletes the task from database.
 
 ## Monitoring the execution
 
-The result of each execution of tasks can be observed by subscribing a listener at the `FailsafeExecutor`:
+The each execution of a task can be observed by subscribing a listener at the `FailsafeExecutor`:
 
 ```java
 failsafeExecutor.subscribe(executionListener);
 ```
 
-The listener gets called at the end of the execution in an at least once manner. Depending on the outcome either `succeeded` or `failed` is called.
+The `registered` method gets called after task is persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
 
 ## Health check
 
