@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,20 +27,25 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
+import static os.failsafe.executor.utils.testing.FailsafeExecutorTestUtility.awaitAllTasks;
 
 class FailsafeExecutorShould {
 
@@ -90,6 +96,12 @@ class FailsafeExecutorShould {
 
     @Test
     void
+    throw_an_exception_if_lock_timeout_too_short() {
+        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
+    }
+
+    @Test
+    void
     notify_listeners_about_task_registration() {
         TaskId taskId = failsafeExecutor.execute(task, parameter);
         assertListenerOnRegistration(task.getName(), taskId, parameter);
@@ -133,7 +145,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    public void
+    void
     not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
         Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
@@ -197,6 +209,23 @@ class FailsafeExecutorShould {
 
         assertTrue(failsafeExecutor.isLastRunFailed());
         assertEquals(e, failsafeExecutor.lastRunException());
+    }
+
+    @Test
+    void
+    execute_all_tasks() {
+        failsafeExecutor.start();
+
+        int taskCount = 5;
+        List<String> parameters = IntStream.range(0, taskCount).mapToObj(String::valueOf).collect(Collectors.toList());
+
+        awaitAllTasks(failsafeExecutor, () -> parameters.forEach(param -> failsafeExecutor.execute(task, param)));
+
+        ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
+        verify(taskExecutionListener, times(taskCount)).registered(eq(task.getName()), any(), any());
+        verify(taskExecutionListener, times(taskCount)).succeeded(eq(task.getName()), any(), parameterCaptor.capture());
+
+        assertTrue(parameterCaptor.getAllValues().containsAll(parameters));
     }
 
     private Connection createFailingJdbcConnection(RuntimeException e) throws SQLException {

@@ -63,6 +63,10 @@ public class FailsafeExecutor {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
 
+        if (lockTimeout.compareTo(Duration.ofMinutes(5)) < 0) {
+            throw new IllegalArgumentException("LockTimeout must be >= 5 minutes");
+        }
+
         this.database = new Database(dataSource);
         this.systemClock = systemClock;
         this.persistentQueue = new PersistentQueue(database, systemClock, lockTimeout);

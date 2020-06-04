@@ -161,10 +161,21 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `queueSize` | `int`  |  4 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
-| `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. |
+| `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum lockTimeout is 5 min. |
 
 **Note:** Consider the lockTimeout must be longer than `(queueSize / workerThreadCount) * task-max-execution-time`. We expect the maximum execution time of a task as 3 min.
 With the default configuration you get `(4*5 / 5) * 3 min = 12 min`. Therefore default lockTimeout is 13 min.
+
+## Testability
+
+In class `FailsafeExecutorTestUtility` you find some static methods to support you with your integration tests. Just wrap your business logic with `awaitAllTasks`. This registers a listener before executing your business logic.
+With it all created tasks during the execution of your business logic are registered. After execution finishes, a barrier blocks the calling thread until all tasks got executed.
+
+```java
+awaitAllTasks(failsafeExecutor, () -> {
+    ... // your business logic
+});
+```
 
 ## FAQ
 
@@ -196,3 +207,7 @@ public FailsafeExecutor failsafeExecutor(DataSource dataSource) {
     return failsafeExecutor;
 }
 ```
+
+#### Is it running in production?
+
+Yes.
