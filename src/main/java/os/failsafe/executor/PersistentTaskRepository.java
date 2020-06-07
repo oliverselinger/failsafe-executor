@@ -157,7 +157,7 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 " ORDER BY CREATED_DATE";
 
         if (database.isMysql()) {
-            selectStmt += " LIMIT (?)";
+            selectStmt += " LIMIT ?";
         } else {
             selectStmt += " FETCH FIRST (?) ROWS ONLY";
         }
