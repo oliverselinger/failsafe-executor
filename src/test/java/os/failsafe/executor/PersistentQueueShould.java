@@ -2,134 +2,93 @@ package os.failsafe.executor;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.RegisterExtension;
-import os.failsafe.executor.db.DbExtension;
-import os.failsafe.executor.task.TaskId;
+import org.mockito.Mockito;
+import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-public class PersistentQueueShould {
-
-    @RegisterExtension
-    static final DbExtension DB_EXTENSION = new DbExtension();
+class PersistentQueueShould {
 
     private TestSystemClock systemClock = new TestSystemClock();
     private Duration lockTimeout = Duration.ofMinutes(10);
+    private PersistentTaskRepository persistentTaskRepository;
     private PersistentQueue persistentQueue;
 
     @BeforeEach
     void init() {
         systemClock = new TestSystemClock();
-        persistentQueue = new PersistentQueue(DB_EXTENSION.database(), systemClock, lockTimeout);
+        persistentTaskRepository = Mockito.mock(PersistentTaskRepository.class);
+        persistentQueue = new PersistentQueue(persistentTaskRepository, systemClock, lockTimeout);
     }
 
-    @Test void
-    return_null_if_queue_is_empty() {
-        assertNull(persistentQueue.peekAndLock());
-    }
+    @Test
+    void add_a_task_to_repository() {
+        when(persistentTaskRepository.add(any())).thenReturn(Mockito.mock(PersistentTask.class));
 
-    @Test void
-    store_and_enqueue_a_task() {
         LocalDateTime plannedExecutionTime = systemClock.now();
         TaskInstance task = createTask(plannedExecutionTime);
 
-        TaskId persistentTask = persistentQueue.add(task);
-
-        List<PersistentTask> all = persistentQueue.allQueued();
-        assertEquals(1, all.size());
-
-        PersistentTask actual = all.get(0);
-        assertEquals(task.name, actual.getName());
-        assertEquals(task.parameter, actual.getParameter());
-        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
-        assertEquals(persistentTask, actual.getId());
-    }
-
-    @Test void
-    peek_tasks_in_fifo_sequence() {
-        TaskInstance task1 = createTask();
-        TaskInstance task2 = createTask();
-        TaskInstance task3 = createTask();
-
-        TaskId persistentTask1 = persistentQueue.add(task1);
-        systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
-        TaskId persistentTask2 = persistentQueue.add(task2);
-        systemClock.timeTravelBy(Duration.ofMillis(1));
-        TaskId persistentTask3 =  persistentQueue.add(task3);
-
-        PersistentTask dequedTask1 = persistentQueue.peekAndLock();
-        PersistentTask dequedTask2 = persistentQueue.peekAndLock();
-        PersistentTask dequedTask3 = persistentQueue.peekAndLock();
-
-        assertEquals(persistentTask1, dequedTask1.getId());
-        assertEquals(persistentTask2, dequedTask2.getId());
-        assertEquals(persistentTask3, dequedTask3.getId());
-    }
-
-    @Test void
-    peek_a_task_again_after_lock_times_out() {
-        TaskInstance task = createTask();
         persistentQueue.add(task);
 
-        PersistentTask dequedTask1 = persistentQueue.peekAndLock();
-
-        systemClock.timeTravelBy(lockTimeout);
-
-        PersistentTask dequedTask2 = persistentQueue.peekAndLock();
-
-        assertNotNull(dequedTask1);
-        assertNotNull(dequedTask2);
-        assertEquals(dequedTask1.getId(), dequedTask2.getId());
+        verify(persistentTaskRepository).add(task);
     }
 
-    @Test void
-    never_peek_a_failed_task() {
-        TaskInstance task = createTask();
-        persistentQueue.add(task);
+    @Test
+    void return_null_if_no_task_exists() {
+        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        PersistentTask dequedTask1 = persistentQueue.peekAndLock();
-
-        dequedTask1.fail(new RuntimeException());
-
-        systemClock.timeTravelBy(lockTimeout);
-
-        PersistentTask dequedTask2 = persistentQueue.peekAndLock();
-
-        assertNotNull(dequedTask1);
-        assertNull(dequedTask2);
+        assertNull(persistentQueue.peekAndLock());
     }
 
-    @Test void
-    never_peek_a_planned_future_task() {
-        TaskInstance task = createTask(systemClock.now().plusDays(1));
-        persistentQueue.add(task);
+    @Test
+    void peek_and_lock_next_task() {
+        PersistentTask persistentTask = Mockito.mock(PersistentTask.class);
 
-        PersistentTask peekedTask = persistentQueue.peekAndLock();
-        assertNull(peekedTask);
+        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(persistentTask));
+        when(persistentTaskRepository.lock(persistentTask)).thenReturn(persistentTask);
+
+        PersistentTask nextTask = persistentQueue.peekAndLock();
+
+        verify(persistentTaskRepository).lock(persistentTask);
+        assertEquals(persistentTask, nextTask);
     }
 
-    @Test void
-    store_and_enqueue_a_task_with_future_execution() {
-        TaskInstance task = createTask(systemClock.now().plusDays(1));
+    @Test
+    void find_next_tasks_for_execution_if_tasks_of_first_result_list_cannot_be_locked() {
+        PersistentTask alreadyLocked = Mockito.mock(PersistentTask.class);
+        PersistentTask toLock = Mockito.mock(PersistentTask.class);
 
-        persistentQueue.add(task);
+        when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
+        when(persistentTaskRepository.lock(toLock)).thenReturn(toLock);
 
-        List<PersistentTask> all = persistentQueue.allQueued();
-        assertEquals(1, all.size());
+        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
 
-        PersistentTask actual = all.get(0);
-        assertEquals(task.name, actual.getName());
+        PersistentTask nextTask = persistentQueue.peekAndLock();
+
+        verify(persistentTaskRepository).lock(toLock);
+        assertEquals(toLock, nextTask);
     }
 
-    private TaskInstance createTask() {
-        return createTask(systemClock.now());
+    @Test
+    void return_null_if_first_result_list_cannot_be_locked_and_no_more_results_can_be_found() {
+        PersistentTask alreadyLocked = Mockito.mock(PersistentTask.class);
+
+        when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
+
+        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
+
+        assertNull(persistentQueue.peekAndLock());
     }
 
     private TaskInstance createTask(LocalDateTime plannedExecutionTime) {

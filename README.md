@@ -96,7 +96,7 @@ Any exceptions occurring during the execution of a task are captured. The except
 Thus the `FailsafeExecutor` does not execute the task anymore. To find failed tasks use the following:
 
 ```java
-List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
+List<PersistentTask> failedTasks = failsafeExecutor.failedTasks();
 ```
 
 Two options are offered to handle a failed task. Either retry it:

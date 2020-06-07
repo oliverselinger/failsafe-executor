@@ -18,7 +18,7 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class WorkerPoolShould {
+class WorkerPoolShould {
 
     private static final TestSystemClock systemClock = new TestSystemClock();
 
@@ -37,14 +37,12 @@ public class WorkerPoolShould {
     }
 
     @Test
-    void
-    accept_more_tasks_if_workers_are_idle() {
+    void accept_more_tasks_if_workers_are_idle() {
         assertFalse(workerPool.allWorkersBusy());
     }
 
     @Test
-    void
-    not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
+    void not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
         Future<TaskId> execution = workerPool.execute(firstBlockingExecution);
 
@@ -73,7 +71,7 @@ public class WorkerPoolShould {
         Phaser phaser;
 
         BlockingExecution() {
-            super(null, null, Collections.emptyList(), new OneTimeSchedule(), systemClock);
+            super(null, null, Collections.emptyList(), new OneTimeSchedule(), systemClock, null);
             phaser = new Phaser(2);
         }
 

@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.FailsafeExecutor;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
-import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -89,27 +89,23 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void
-    throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
+    void throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
     }
 
     @Test
-    void
-    throw_an_exception_if_lock_timeout_too_short() {
+    void throw_an_exception_if_lock_timeout_too_short() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
     }
 
     @Test
-    void
-    notify_listeners_about_task_registration() {
+    void notify_listeners_about_task_registration() {
         TaskId taskId = failsafeExecutor.execute(task, parameter);
         assertListenerOnRegistration(task.getName(), taskId, parameter);
     }
 
     @Test
-    void
-    execute_a_task() {
+    void execute_a_task() {
         TaskId taskId = failsafeExecutor.execute(task, parameter);
         failsafeExecutor.start();
 
@@ -117,8 +113,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void
-    execute_a_daily_scheduled_task_every_day() {
+    void execute_a_daily_scheduled_task_every_day() {
         LocalTime dailyTime = LocalTime.of(1, 0);
 
         LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
@@ -145,8 +140,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void
-    not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
+    void not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
         Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
@@ -156,8 +150,8 @@ class FailsafeExecutorShould {
         assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(task, dailySchedule));
     }
 
-    @Test void
-    not_throw_an_exception_if_task_is_already_scheduled() {
+    @Test
+    void not_throw_an_exception_if_task_is_already_scheduled() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
         Task task = Tasks.runnable("ScheduledTestTask", () -> log.info("Hello World"));
 
@@ -165,8 +159,8 @@ class FailsafeExecutorShould {
         assertDoesNotThrow(() -> failsafeExecutor.schedule(task, dailySchedule));
     }
 
-    @Test void
-    retry_a_failed_task_on_demand() {
+    @Test
+    void retry_a_failed_task_on_demand() {
         executionShouldFail = true;
 
         TaskId taskId = failsafeExecutor.execute(task, parameter);
@@ -176,15 +170,15 @@ class FailsafeExecutorShould {
 
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(task.getName(), taskId, parameter);
 
-        List<FailedTask> failedTasks = failsafeExecutor.failedTasks();
+        List<PersistentTask> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
 
-        FailedTask failedTask = failedTasks.get(0);
-        assertEquals(1, failedTasks.size());
+        PersistentTask failedTask = failedTasks.get(0);
 
-        failsafeExecutor.failedTask(failedTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
+        failsafeExecutor.task(failedTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
 
         executionShouldFail = false;
+
         failedTask.retry();
 
         assertListenerOnSucceeded(task.getName(), taskId, parameter);
@@ -192,8 +186,30 @@ class FailsafeExecutorShould {
         verifyNoMoreInteractions(taskExecutionListener);
     }
 
-    @Test void
-    report_failures() throws SQLException {
+    @Test
+    void cancel_a_failed_task_on_demand() {
+        executionShouldFail = true;
+
+        TaskId taskId = failsafeExecutor.execute(task, parameter);
+        assertListenerOnRegistration(task.getName(), taskId, parameter);
+
+        failsafeExecutor.start();
+
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(task.getName(), taskId, parameter);
+
+        List<PersistentTask> failedTasks = failsafeExecutor.failedTasks();
+        assertEquals(1, failedTasks.size());
+
+        PersistentTask failedTask = failedTasks.get(0);
+
+        failedTask.cancel();
+
+        verifyNoMoreInteractions(taskExecutionListener);
+        assertTrue(failsafeExecutor.allTasks().isEmpty());
+    }
+
+    @Test
+    void report_failures() throws SQLException {
         RuntimeException e = new RuntimeException("Error");
 
         Connection connection = createFailingJdbcConnection(e);
@@ -212,8 +228,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void
-    execute_all_tasks() {
+    void execute_all_tasks() {
         failsafeExecutor.start();
 
         int taskCount = 5;

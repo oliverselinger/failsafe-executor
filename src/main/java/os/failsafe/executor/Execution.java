@@ -1,6 +1,7 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.schedule.Schedule;
+import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -17,13 +18,15 @@ class Execution {
     private final List<TaskExecutionListener> listeners;
     private final Schedule schedule;
     private final SystemClock systemClock;
+    private final PersistentTaskRepository persistentTaskRepository;
 
-    Execution(Task task, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock) {
+    Execution(Task task, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, PersistentTaskRepository persistentTaskRepository) {
         this.task = task;
         this.persistentTask = persistentTask;
         this.listeners = listeners;
         this.schedule = schedule;
         this.systemClock = systemClock;
+        this.persistentTaskRepository = persistentTaskRepository;
     }
 
     public TaskId perform() {
@@ -34,12 +37,12 @@ class Execution {
 
             Optional<LocalDateTime> nextExecutionTime = schedule.nextExecutionTime(systemClock.now());
             if (nextExecutionTime.isPresent()) {
-                persistentTask.nextExecution(nextExecutionTime.get());
+                persistentTaskRepository.unlock(persistentTask, nextExecutionTime.get());
             } else {
-                persistentTask.remove();
+                persistentTaskRepository.delete(persistentTask);
             }
         } catch (Exception e) {
-            persistentTask.fail(e);
+            persistentTaskRepository.saveFailure(persistentTask, e);
 
             notifyFailed();
         }

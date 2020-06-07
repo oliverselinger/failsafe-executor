@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import os.failsafe.executor.schedule.OneTimeSchedule;
+import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -19,7 +20,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class ExecutionShould {
+class ExecutionShould {
 
     private final TestSystemClock systemClock = new TestSystemClock();
     private Execution execution;
@@ -27,6 +28,7 @@ public class ExecutionShould {
     private Task task;
     private PersistentTask persistentTask;
     private OneTimeSchedule oneTimeSchedule;
+    private PersistentTaskRepository persistentTaskRepository;
     private final TaskId taskId = new TaskId("123");
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
@@ -45,51 +47,61 @@ public class ExecutionShould {
 
         listener = Mockito.mock(TaskExecutionListener.class);
 
-        execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock);
+        persistentTaskRepository = Mockito.mock(PersistentTaskRepository.class);
+
+        execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock, persistentTaskRepository);
     }
 
     @Test
-    void
-    execute_task_with_parameter() {
+    void execute_task_with_parameter() {
         execution.perform();
 
         verify(task).run(parameter);
     }
 
     @Test
-    void
-    notify_listeners_after_successful_execution() {
+    void notify_listeners_after_successful_execution() {
         execution.perform();
 
         verify(listener).succeeded(taskName, taskId, parameter);
     }
 
-    @Test void
-    remove_task_after_successful_execution() {
+    @Test
+    void delete_task_after_successful_execution() {
         execution.perform();
 
-        verify(persistentTask).remove();
+        verify(persistentTaskRepository).delete(persistentTask);
     }
 
-    @Test void
-    notify_listeners_after_failed_execution() {
+    @Test
+    void unlock_task_and_set_next_planned_execution_time_if_one_is_available() {
+        LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
+        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
+
+        execution.perform();
+
+        verify(persistentTaskRepository).unlock(persistentTask, nextPlannedExecutionTime);
+        verify(persistentTaskRepository, never()).delete(any());
+    }
+
+    @Test
+    void save_failure_on_exception() {
+        RuntimeException exception = new RuntimeException();
+        doThrow(exception).when(task).run(any());
+
+        execution.perform();
+
+        verify(persistentTaskRepository).saveFailure(persistentTask, exception);
+    }
+
+    @Test
+    void notify_listeners_after_failed_execution() {
         RuntimeException exception = new RuntimeException();
         doThrow(exception).when(task).run(any());
 
         execution.perform();
 
         verify(listener).failed(taskName, taskId, parameter);
-    }
-
-    @Test void
-    not_remove_but_set_next_execution_time_of_the_task_if_one_is_available() {
-        LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
-        when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
-
-        execution.perform();
-
-        verify(persistentTask).nextExecution(nextPlannedExecutionTime);
-        verify(persistentTask, never()).remove();
     }
 
 }

@@ -2,7 +2,7 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.schedule.Schedule;
-import os.failsafe.executor.task.FailedTask;
+import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.task.Task;
 import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
@@ -45,7 +45,7 @@ public class FailsafeExecutor {
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
-    private final PersistentTasks persistentTasks;
+    private final PersistentTaskRepository persistentTaskRepository;
     private final Duration initialDelay;
     private final Duration pollingInterval;
     private final Database database;
@@ -69,11 +69,11 @@ public class FailsafeExecutor {
 
         this.database = new Database(dataSource);
         this.systemClock = systemClock;
-        this.persistentQueue = new PersistentQueue(database, systemClock, lockTimeout);
+        this.persistentTaskRepository = new PersistentTaskRepository(database, systemClock);
+        this.persistentQueue = new PersistentQueue(persistentTaskRepository, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
-        this.persistentTasks = new PersistentTasks(database, systemClock);
     }
 
     public void start() {
@@ -127,12 +127,16 @@ public class FailsafeExecutor {
         return enqueue(connection, task, taskInstance);
     }
 
-    public List<FailedTask> failedTasks() {
-        return persistentTasks.failedTasks();
+    public List<PersistentTask> allTasks() {
+        return persistentTaskRepository.findAll();
     }
 
-    public Optional<FailedTask> failedTask(TaskId taskId) {
-        return persistentTasks.failedTask(taskId);
+    public Optional<PersistentTask> task(TaskId taskId) {
+        return Optional.ofNullable(persistentTaskRepository.findOne(taskId));
+    }
+
+    public List<PersistentTask> failedTasks() {
+        return persistentTaskRepository.findAllFailedTasks();
     }
 
     public void subscribe(TaskExecutionListener listener) {
@@ -176,7 +180,7 @@ public class FailsafeExecutor {
 
             Task task = tasksByIdentifier.get(toExecute.getName());
             Schedule schedule = scheduleByIdentifier.getOrDefault(task.getName(), oneTimeSchedule);
-            Execution execution = new Execution(task, toExecute, listeners, schedule, systemClock);
+            Execution execution = new Execution(task, toExecute, listeners, schedule, systemClock, persistentTaskRepository);
 
             Future<TaskId> taskIdFuture = workerPool.execute(execution);
 
