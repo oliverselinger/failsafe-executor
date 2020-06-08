@@ -90,7 +90,8 @@ jobs:
           at: ./target
       - run: ls target/*.exec
       - run: mvn org.jacoco:jacoco-maven-plugin:merge
-      - run: bash <(curl -s https://codecov.io/bash) -f target/jacoco.exec
+      - run: rm target/jacoco-mysql.exec target/jacoco-postgres.exec target/jacoco-h2.exec
+      - run: bash <(curl -s https://codecov.io/bash)
 
 workflows:
   version: 2
