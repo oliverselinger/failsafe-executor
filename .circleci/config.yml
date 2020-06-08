@@ -82,6 +82,8 @@ workflows:
       - build
       - test-postgres
       - test-mysql
-  code_cov_report:
-    jobs:
       - code_coverage_report
+        requires:
+          - build
+          - test-postgres
+          - test-mysql
