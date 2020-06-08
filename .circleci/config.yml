@@ -26,8 +26,11 @@ jobs:
   build:
     docker:
       - image: circleci/openjdk:8-jdk-stretch
+    environment:
+      CODECOV_TOKEN: 5c9595f5-cee9-4846-8e71-dc2ea591355d
     steps:
       - maven-package
+      - run: bash <(curl -s https://codecov.io/bash)
 
   test-postgres:
     docker:
