@@ -177,6 +177,9 @@ awaitAllTasks(failsafeExecutor, () -> {
 });
 ```
 
+**Note:** In your business logic all tasks should be created transactionally with a single commit. Otherwise `awaitAllTasks` cannot exactly determine how many tasks belong to your block of business logic.
+If you do not follow this, a race condition occurs.
+
 ## FAQ
 
 #### How is an at-least-once execution guaranteed?

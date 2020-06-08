@@ -17,6 +17,7 @@ import os.failsafe.executor.task.TaskExecutionListener;
 import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.task.Tasks;
 import os.failsafe.executor.utils.TestSystemClock;
+import os.failsafe.executor.utils.Transaction;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -234,7 +235,17 @@ class FailsafeExecutorShould {
         int taskCount = 5;
         List<String> parameters = IntStream.range(0, taskCount).mapToObj(String::valueOf).collect(Collectors.toList());
 
-        awaitAllTasks(failsafeExecutor, () -> parameters.forEach(param -> failsafeExecutor.execute(task, param)));
+        awaitAllTasks(failsafeExecutor, () -> {
+            try (Connection connection = dataSource.getConnection();
+                 Transaction transaction = new Transaction(connection)) {
+
+                parameters.forEach(param -> failsafeExecutor.execute(connection, task, param));
+
+                transaction.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        });
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
         verify(taskExecutionListener, times(taskCount)).registered(eq(task.getName()), any(), any());

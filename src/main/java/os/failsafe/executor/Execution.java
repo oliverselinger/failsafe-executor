@@ -51,10 +51,7 @@ class Execution {
     }
 
     private void notifySuccess() {
-        listeners.forEach(listener -> {
-            System.out.println(listener.getClass().getName());
-            notifySuccess(listener);
-        });
+        listeners.forEach(this::notifySuccess);
     }
 
     private void notifySuccess(TaskExecutionListener listener) {
