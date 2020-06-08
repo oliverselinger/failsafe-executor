@@ -3,13 +3,13 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -34,10 +34,10 @@ class PersistentQueueShould {
 
     @Test
     void add_a_task_to_repository() {
-        when(persistentTaskRepository.add(any())).thenReturn(Mockito.mock(PersistentTask.class));
+        when(persistentTaskRepository.add(any())).thenReturn(Mockito.mock(Task.class));
 
         LocalDateTime plannedExecutionTime = systemClock.now();
-        TaskInstance task = createTask(plannedExecutionTime);
+        Task task = createTask(plannedExecutionTime);
 
         persistentQueue.add(task);
 
@@ -53,28 +53,28 @@ class PersistentQueueShould {
 
     @Test
     void peek_and_lock_next_task() {
-        PersistentTask persistentTask = Mockito.mock(PersistentTask.class);
+        Task task = Mockito.mock(Task.class);
 
-        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(persistentTask));
-        when(persistentTaskRepository.lock(persistentTask)).thenReturn(persistentTask);
+        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
+        when(persistentTaskRepository.lock(task)).thenReturn(task);
 
-        PersistentTask nextTask = persistentQueue.peekAndLock();
+        Task nextTask = persistentQueue.peekAndLock();
 
-        verify(persistentTaskRepository).lock(persistentTask);
-        assertEquals(persistentTask, nextTask);
+        verify(persistentTaskRepository).lock(task);
+        assertEquals(task, nextTask);
     }
 
     @Test
     void find_next_tasks_for_execution_if_tasks_of_first_result_list_cannot_be_locked() {
-        PersistentTask alreadyLocked = Mockito.mock(PersistentTask.class);
-        PersistentTask toLock = Mockito.mock(PersistentTask.class);
+        Task alreadyLocked = Mockito.mock(Task.class);
+        Task toLock = Mockito.mock(Task.class);
 
         when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
         when(persistentTaskRepository.lock(toLock)).thenReturn(toLock);
 
         when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
 
-        PersistentTask nextTask = persistentQueue.peekAndLock();
+        Task nextTask = persistentQueue.peekAndLock();
 
         verify(persistentTaskRepository).lock(toLock);
         assertEquals(toLock, nextTask);
@@ -82,7 +82,7 @@ class PersistentQueueShould {
 
     @Test
     void return_null_if_first_result_list_cannot_be_locked_and_no_more_results_can_be_found() {
-        PersistentTask alreadyLocked = Mockito.mock(PersistentTask.class);
+        Task alreadyLocked = Mockito.mock(Task.class);
 
         when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
 
@@ -91,7 +91,7 @@ class PersistentQueueShould {
         assertNull(persistentQueue.peekAndLock());
     }
 
-    private TaskInstance createTask(LocalDateTime plannedExecutionTime) {
-        return new TaskInstance("TaskName", "Hello world!", plannedExecutionTime);
+    private Task createTask(LocalDateTime plannedExecutionTime) {
+        return new Task(UUID.randomUUID().toString(), "Hello World!", "TaskName", plannedExecutionTime);
     }
 }

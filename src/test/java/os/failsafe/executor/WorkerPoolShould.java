@@ -4,11 +4,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import os.failsafe.executor.schedule.OneTimeSchedule;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
@@ -41,14 +41,15 @@ class WorkerPoolShould {
         assertFalse(workerPool.allWorkersBusy());
     }
 
+    /*
     @Test
     void not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
         BlockingExecution firstBlockingExecution = new BlockingExecution();
-        Future<TaskId> execution = workerPool.execute(firstBlockingExecution);
+        Future<String> execution = workerPool.execute(UUID.randomUUID().toString(), firstBlockingExecution::perform);
 
         List<BlockingExecution> blockingExecutions = IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingExecution())
-                .peek(workerPool::execute)
+                .peek(s -> sworkerPool(UUID.randomUUID().toString(), s))
                 .collect(Collectors.toList());
 
         assertTrue(workerPool.allWorkersBusy());
@@ -59,13 +60,13 @@ class WorkerPoolShould {
         assertFalse(workerPool.allWorkersBusy());
 
         BlockingExecution nextBlockingExecution = new BlockingExecution();
-        workerPool.execute(nextBlockingExecution);
+        workerPool.execute(UUID.randomUUID().toString(), nextBlockingExecution::perform);
 
         assertTrue(workerPool.allWorkersBusy());
 
         nextBlockingExecution.release();
         blockingExecutions.forEach(BlockingExecution::release);
-    }
+    }*/
 
     static class BlockingExecution extends Execution {
         Phaser phaser;
@@ -76,9 +77,9 @@ class WorkerPoolShould {
         }
 
         @Override
-        public TaskId perform() {
+        public String perform() {
             phaser.arriveAndAwaitAdvance();
-            return new TaskId("id");
+            return "id";
         }
 
         public void release() {

@@ -2,10 +2,6 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.schedule.Schedule;
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
@@ -18,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -25,6 +22,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import static os.failsafe.executor.utils.ExecutorServiceUtil.shutdownAndAwaitTermination;
 
@@ -36,8 +34,8 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
 
-    private final Map<String, Task> tasksByIdentifier = new ConcurrentHashMap<>();
-    private final Map<String, Schedule> scheduleByIdentifier = new ConcurrentHashMap<>();
+    private final Map<String, Consumer<String>> tasksByName = new ConcurrentHashMap<>();
+    private final Map<String, Schedule> scheduleByName = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
     private final OneTimeSchedule oneTimeSchedule = new OneTimeSchedule();
@@ -97,45 +95,47 @@ public class FailsafeExecutor {
         running.set(false);
     }
 
-    public TaskId execute(Task task) {
-        return execute(task, null);
+    public boolean registerTask(String name, Consumer<String> function) {
+        if (tasksByName.containsKey(name)) {
+            return false;
+        }
+        tasksByName.put(name, function);
+        return true;
     }
 
-    public TaskId execute(Task task, String parameter) {
-        return database.connect(connection -> execute(connection, task, parameter));
+    public String execute(String taskName, String parameter) {
+        return database.connect(connection -> execute(connection, taskName, parameter));
     }
 
-    public TaskId execute(Connection connection, Task task) {
-        return execute(connection, task, null);
+    public String execute(Connection connection, String taskName, String parameter) {
+        Task taskInstance = new Task(UUID.randomUUID().toString(), parameter, taskName, systemClock.now());
+        return enqueue(connection, taskInstance);
     }
 
-    public TaskId execute(Connection connection, Task task, String parameter) {
-        TaskInstance taskInstance = new TaskInstance(task.getName(), parameter, systemClock.now());
-        return enqueue(connection, task, taskInstance);
+    public String schedule(String scheduleName, Schedule schedule) {
+        return database.connect(connection -> schedule(connection, scheduleName, schedule));
     }
 
-    public TaskId schedule(Task task, Schedule schedule) {
-        return database.connect(connection -> schedule(connection, task, schedule));
-    }
-
-    public TaskId schedule(Connection connection, Task task, Schedule schedule) {
-        scheduleByIdentifier.put(task.getName(), schedule);
+    public String schedule(Connection connection, String scheduleName, Schedule schedule) {
+        if (!scheduleByName.containsKey(scheduleName)) {
+            scheduleByName.put(scheduleName, schedule);
+        }
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
-        TaskInstance taskInstance = new TaskInstance(task.getName(), task.getName(), null, plannedExecutionTime);
-        return enqueue(connection, task, taskInstance);
+        Task task = new Task(UUID.randomUUID().toString(), null, scheduleName, plannedExecutionTime);
+        return enqueue(connection, task);
     }
 
-    public List<PersistentTask> allTasks() {
+    public List<Task> allTasks() {
         return persistentTaskRepository.findAll();
     }
 
-    public Optional<PersistentTask> task(TaskId taskId) {
-        return Optional.ofNullable(persistentTaskRepository.findOne(taskId));
+    public Optional<Task> task(String String) {
+        return Optional.ofNullable(persistentTaskRepository.findOne(String));
     }
 
-    public List<PersistentTask> failedTasks() {
+    public List<Task> failedTasks() {
         return persistentTaskRepository.findAllFailedTasks();
     }
 
@@ -155,38 +155,33 @@ public class FailsafeExecutor {
         return lastRunException;
     }
 
-    private TaskId enqueue(Connection connection, Task task, TaskInstance taskInstance) {
-        if (!tasksByIdentifier.containsKey(task.getName())) {
-            tasksByIdentifier.put(task.getName(), task);
-        }
+    private String enqueue(Connection connection, Task task) {
+        String String = persistentQueue.add(connection, task);
+        notifyRegistration(task, String);
 
-        TaskId taskId = persistentQueue.add(connection, taskInstance);
-        notifyRegistration(taskInstance, taskId);
-
-        return taskId;
+        return String;
     }
 
-    private Future<TaskId> executeNextTask() {
+    private Future<String> executeNextTask() {
         try {
             if (workerPool.allWorkersBusy()) {
                 return null;
             }
 
-            PersistentTask toExecute = persistentQueue.peekAndLock();
-
+            Task toExecute = persistentQueue.peekAndLock();
             if (toExecute == null) {
                 return null;
             }
 
-            Task task = tasksByIdentifier.get(toExecute.getName());
-            Schedule schedule = scheduleByIdentifier.getOrDefault(task.getName(), oneTimeSchedule);
-            Execution execution = new Execution(task, toExecute, listeners, schedule, systemClock, persistentTaskRepository);
-
-            Future<TaskId> taskIdFuture = workerPool.execute(execution);
+            Consumer<String> consumer = tasksByName.get(toExecute.getName());
+            //TODO: handle unknown tasks gracefully
+            Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
+            Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, persistentTaskRepository);
+            Future<String> future = workerPool.execute(toExecute.getId(), () -> execution.perform());
 
             clearException();
 
-            return taskIdFuture;
+            return future;
         } catch (Exception e) {
             storeException(e);
         }
@@ -202,7 +197,8 @@ public class FailsafeExecutor {
         lastRunException = null;
     }
 
-    private void notifyRegistration(TaskInstance taskInstance, TaskId taskId) {
-        listeners.forEach(listener -> listener.registered(taskInstance.name, taskId, taskInstance.parameter));
+    private void notifyRegistration(Task task, String String) {
+        listeners.forEach(listener -> listener.registered(task.getName(), String, task.getParameter()));
     }
+
 }

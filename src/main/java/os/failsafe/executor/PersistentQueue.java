@@ -1,7 +1,5 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.SystemClock;
 
 import java.sql.Connection;
@@ -23,23 +21,23 @@ class PersistentQueue {
         this.persistentTaskRepository = persistentTaskRepository;
     }
 
-    TaskId add(TaskInstance task) {
+    String add(Task task) {
         return persistentTaskRepository.add(task).getId();
     }
 
-    TaskId add(Connection connection, TaskInstance task) {
+    String add(Connection connection, Task task) {
         return persistentTaskRepository.add(connection, task).getId();
     }
 
-    PersistentTask peekAndLock() {
-        List<PersistentTask> nextTasksToLock = findNextForExecution();
+    Task peekAndLock() {
+        List<Task> nextTasksToLock = findNextForExecution();
 
         if (nextTasksToLock.isEmpty()) {
             return null;
         }
 
         do {
-            Optional<PersistentTask> locked = nextTasksToLock.stream()
+            Optional<Task> locked = nextTasksToLock.stream()
                     .map(persistentTaskRepository::lock)
                     .filter(Objects::nonNull)
                     .findFirst();
@@ -52,7 +50,7 @@ class PersistentQueue {
         return null;
     }
 
-    private List<PersistentTask> findNextForExecution() {
+    private List<Task> findNextForExecution() {
         return persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(plannedExecutionTime(), currentLockTimeout(), 3);
     }
 

@@ -1,9 +1,5 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.ExecutionFailure;
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.PersistentTaskLifecycleListener;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.StringUtils;
@@ -26,11 +22,11 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
         this.systemClock = systemClock;
     }
 
-    PersistentTask add(TaskInstance task) {
+    Task add(Task task) {
         return database.connect(connection -> this.add(connection, task));
     }
 
-    PersistentTask add(Connection connection, TaskInstance task) {
+    Task add(Connection connection, Task task) {
         if (database.isOracle() || database.isH2()) {
             addTaskInOracle(connection, task);
         } else if (database.isMysql()) {
@@ -41,10 +37,10 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
             throw new RuntimeException("Unsupported database");
         }
 
-        return new PersistentTask(task.id, task.parameter, task.name, task.plannedExecutionTime);
+        return new Task(task.getId(), task.getParameter(), task.getName(), task.getPlannedExecutionTime());
     }
 
-    private void addTaskInMysql(Connection connection, TaskInstance task) {
+    private void addTaskInMysql(Connection connection, Task task) {
         String insertStmt = "" +
                 "INSERT IGNORE INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -52,14 +48,14 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 " (?, ?, ?, ?, ?)";
 
         database.insert(connection, insertStmt,
-                task.id,
-                task.name,
-                task.parameter,
-                Timestamp.valueOf(task.plannedExecutionTime),
+                task.getId(),
+                task.getName(),
+                task.getParameter(),
+                Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(systemClock.now()));
     }
 
-    private void addTaskInPostgres(Connection connection, TaskInstance task) {
+    private void addTaskInPostgres(Connection connection, Task task) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -68,14 +64,14 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 " ON CONFLICT DO NOTHING";
 
         database.insert(connection, insertStmt,
-                task.id,
-                task.name,
-                task.parameter,
-                Timestamp.valueOf(task.plannedExecutionTime),
+                task.getId(),
+                task.getName(),
+                task.getParameter(),
+                Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(systemClock.now()));
     }
 
-    private void addTaskInOracle(Connection connection, TaskInstance task) {
+    private void addTaskInOracle(Connection connection, Task task) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -84,25 +80,25 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 " (SELECT ID FROM FAILSAFE_TASK WHERE ID = ?)";
 
         database.insert(connection, insertStmt,
-                task.id,
-                task.name,
-                task.parameter,
-                Timestamp.valueOf(task.plannedExecutionTime),
+                task.getId(),
+                task.getName(),
+                task.getParameter(),
+                Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(systemClock.now()),
-                task.id);
+                task.getId());
     }
 
-    PersistentTask findOne(TaskId id) {
+    Task findOne(String id) {
         String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE ID = ?";
-        return database.selectOne(selectStmt, this::mapToPersistentTask, id.id);
+        return database.selectOne(selectStmt, this::mapToPersistentTask, id);
     }
 
-    List<PersistentTask> findAll() {
+    List<Task> findAll() {
         String selectStmt = "SELECT * FROM FAILSAFE_TASK";
         return database.selectAll(selectStmt, this::mapToPersistentTask);
     }
 
-    PersistentTask lock(PersistentTask toLock) {
+    Task lock(Task toLock) {
         if (toLock.isLocked()) {
             return toLock;
         }
@@ -117,17 +113,17 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
         int updateCount = database.update(updateStmt,
                 Timestamp.valueOf(lockTime),
                 toLock.getVersion() + 1,
-                toLock.getId().id,
+                toLock.getId(),
                 toLock.getVersion());
 
         if (updateCount == 1) {
-            return new PersistentTask(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1, this);
+            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1, this);
         }
 
         return null;
     }
 
-    void unlock(PersistentTask toUnLock, LocalDateTime nextPlannedExecutionTime) {
+    void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
         if (!toUnLock.isLocked()) {
             return;
         }
@@ -141,7 +137,7 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
         int effectedRows = database.update(updateStmt,
                 Timestamp.valueOf(nextPlannedExecutionTime),
                 toUnLock.getVersion() + 1,
-                toUnLock.getId().id,
+                toUnLock.getId(),
                 toUnLock.getVersion());
 
         if (effectedRows != 1) {
@@ -149,7 +145,7 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
         }
     }
 
-    List<PersistentTask> findAllNotLockedOrderedByCreatedDate(LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+    List<Task> findAllNotLockedOrderedByCreatedDate(LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
         String selectStmt = "" +
                 "SELECT * FROM FAILSAFE_TASK" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
@@ -168,7 +164,7 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 limit);
     }
 
-    void saveFailure(PersistentTask failed, Exception exception) {
+    void saveFailure(Task failed, Exception exception) {
         String message = StringUtils.abbreviate(exception.getMessage(), 1000);
         String stackTrace = ExceptionUtils.stackTraceAsString(exception);
 
@@ -183,47 +179,47 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
                 message,
                 stackTrace,
                 failed.getVersion() + 1,
-                failed.getId().id);
+                failed.getId());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't save failure to task %s", failed.getId()));
         }
     }
 
-    void deleteFailure(PersistentTask failed) {
+    void deleteFailure(Task failed) {
         String updateStmt = "" +
                 "UPDATE FAILSAFE_TASK" +
                 " SET" +
                 " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=?" +
                 " WHERE ID=? AND VERSION=?";
 
-        int updateCount = database.update(updateStmt, failed.getVersion() + 1, failed.getId().id, failed.getVersion());
+        int updateCount = database.update(updateStmt, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete failure of task %s", failed.getId()));
         }
     }
 
-    List<PersistentTask> findAllFailedTasks() {
+    List<Task> findAllFailedTasks() {
         String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE FAIL_TIME IS NOT NULL";
         return database.selectAll(selectStmt, this::mapToPersistentTask);
     }
 
-    void delete(PersistentTask toDelete) {
+    void delete(Task toDelete) {
         String deleteStmt = "DELETE FROM FAILSAFE_TASK WHERE ID = ? AND VERSION = ?";
-        int deleteCount = database.delete(deleteStmt, toDelete.getId().id, toDelete.getVersion());
+        int deleteCount = database.delete(deleteStmt, toDelete.getId(), toDelete.getVersion());
 
         if (deleteCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete task %s", toDelete.getId()));
         }
     }
 
-    PersistentTask mapToPersistentTask(ResultSet rs) {
+    Task mapToPersistentTask(ResultSet rs) {
         try {
             Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
 
-            return new PersistentTask(
-                    new TaskId(rs.getString("ID")),
+            return new Task(
+                    rs.getString("ID"),
                     rs.getString("PARAMETER"),
                     rs.getString("NAME"),
                     rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
@@ -253,12 +249,12 @@ class PersistentTaskRepository implements PersistentTaskLifecycleListener {
     }
 
     @Override
-    public void cancel(PersistentTask toCancel) {
+    public void cancel(Task toCancel) {
         delete(toCancel);
     }
 
     @Override
-    public void retry(PersistentTask toRetry) {
+    public void retry(Task toRetry) {
         deleteFailure(toRetry);
     }
 }
