@@ -28,7 +28,7 @@ jobs:
       - image: circleci/openjdk:8-jdk-stretch
     steps:
       - maven-package
-      - run: bash <(curl -s https://codecov.io/bash)
+      - run: mv target/jacoco.exec target/jacoco-h2.exec
 
   test-postgres:
     docker:
@@ -46,6 +46,7 @@ jobs:
           name: Wait for db
           command: dockerize -wait tcp://localhost:5432 -timeout 1m
       - maven-package
+      - run: mv target/jacoco.exec target/jacoco-postgres.exec
 
   test-mysql:
     docker:
@@ -64,6 +65,15 @@ jobs:
           name: Wait for db
           command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
+      - run: mv target/jacoco.exec target/jacoco-mysql.exec
+
+  code_coverage_report:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+    steps:
+      - run: ls target/*.exec
+      - run: mvn jacoco:merge
+      - run: bash <(curl -s https://codecov.io/bash)
 
 workflows:
   version: 2
@@ -72,3 +82,6 @@ workflows:
       - build
       - test-postgres
       - test-mysql
+  code_cov_report:
+    jobs:
+      - code_coverage_report
