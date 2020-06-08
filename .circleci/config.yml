@@ -21,6 +21,7 @@ commands:
       - run: mvn package
       - store_test_results:
           path: target/surefire-reports
+      - run: bash <(curl -s https://codecov.io/bash)
 
 jobs:
   build:
@@ -28,11 +29,6 @@ jobs:
       - image: circleci/openjdk:8-jdk-stretch
     steps:
       - maven-package
-      - run: mv target/jacoco.exec target/jacoco-h2.exec
-      - persist_to_workspace:
-          root: ./target
-          paths:
-            - jacoco-h2.exec
 
   test-postgres:
     docker:
@@ -50,11 +46,6 @@ jobs:
           name: Wait for db
           command: dockerize -wait tcp://localhost:5432 -timeout 1m
       - maven-package
-      - run: mv target/jacoco.exec target/jacoco-postgres.exec
-      - persist_to_workspace:
-          root: ./target
-          paths:
-            - jacoco-postgres.exec
 
   test-mysql:
     docker:
@@ -73,25 +64,6 @@ jobs:
           name: Wait for db
           command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
-      - run: mv target/jacoco.exec target/jacoco-mysql.exec
-      - persist_to_workspace:
-          root: ./target
-          paths:
-            - jacoco-mysql.exec
-
-  code_coverage_report:
-    docker:
-      - image: circleci/openjdk:8-jdk-stretch
-    steps:
-      - checkout
-      - restore_cache:
-          key: failsafe-executor-{{ checksum "pom.xml" }}
-      - attach_workspace:
-          at: ./target
-      - run: ls target/*.exec
-      - run: mvn org.jacoco:jacoco-maven-plugin:merge
-      - run: rm target/jacoco-mysql.exec target/jacoco-postgres.exec target/jacoco-h2.exec
-      - run: bash <(curl -s https://codecov.io/bash)
 
 workflows:
   version: 2
@@ -100,8 +72,3 @@ workflows:
       - build
       - test-postgres
       - test-mysql
-      - code_coverage_report:
-          requires:
-            - build
-            - test-postgres
-            - test-mysql
