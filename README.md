@@ -50,16 +50,14 @@ failsafeExecutor.start();
 
 ## Execute Tasks
 
-### Create a task
+### Register a task
 
-Create your task either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
+First, register your task either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
 
-TODO: Fix documentation
 ```java
-Task runnableTask = Tasks.runnable("RunTask", () -> { ... });
-```
-```java
-Task parameterizedTask = Tasks.parameterized("ParamTask", parameter -> { ... });
+failsafeExecutor.registerTask("TaskName", (s) -> {
+    ... // your business logic
+});
 ```
 
 Make sure your business logic is **idempotent**, since it gets executed at least once.
