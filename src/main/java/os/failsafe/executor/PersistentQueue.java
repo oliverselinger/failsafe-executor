@@ -1,7 +1,5 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.SystemClock;
 
 import java.sql.Connection;
@@ -15,32 +13,32 @@ class PersistentQueue {
 
     private final SystemClock systemClock;
     private final Duration lockTimeout;
-    private final PersistentTaskRepository persistentTaskRepository;
+    private final TaskRepository taskRepository;
 
-    public PersistentQueue(PersistentTaskRepository persistentTaskRepository, SystemClock systemClock, Duration lockTimeout) {
+    public PersistentQueue(TaskRepository taskRepository, SystemClock systemClock, Duration lockTimeout) {
         this.systemClock = systemClock;
         this.lockTimeout = lockTimeout;
-        this.persistentTaskRepository = persistentTaskRepository;
+        this.taskRepository = taskRepository;
     }
 
-    TaskId add(TaskInstance task) {
-        return persistentTaskRepository.add(task).getId();
+    String add(Task task) {
+        return taskRepository.add(task).getId();
     }
 
-    TaskId add(Connection connection, TaskInstance task) {
-        return persistentTaskRepository.add(connection, task).getId();
+    String add(Connection connection, Task task) {
+        return taskRepository.add(connection, task).getId();
     }
 
-    PersistentTask peekAndLock() {
-        List<PersistentTask> nextTasksToLock = findNextForExecution();
+    Task peekAndLock() {
+        List<Task> nextTasksToLock = findNextForExecution();
 
         if (nextTasksToLock.isEmpty()) {
             return null;
         }
 
         do {
-            Optional<PersistentTask> locked = nextTasksToLock.stream()
-                    .map(persistentTaskRepository::lock)
+            Optional<Task> locked = nextTasksToLock.stream()
+                    .map(taskRepository::lock)
                     .filter(Objects::nonNull)
                     .findFirst();
 
@@ -52,8 +50,8 @@ class PersistentQueue {
         return null;
     }
 
-    private List<PersistentTask> findNextForExecution() {
-        return persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(plannedExecutionTime(), currentLockTimeout(), 3);
+    private List<Task> findNextForExecution() {
+        return taskRepository.findAllNotLockedOrderedByCreatedDate(plannedExecutionTime(), currentLockTimeout(), 3);
     }
 
     private LocalDateTime plannedExecutionTime() {

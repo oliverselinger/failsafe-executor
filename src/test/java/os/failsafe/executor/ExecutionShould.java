@@ -4,15 +4,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import os.failsafe.executor.schedule.OneTimeSchedule;
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -26,37 +23,37 @@ class ExecutionShould {
     private Execution execution;
     private TaskExecutionListener listener;
     private Task task;
-    private PersistentTask persistentTask;
+    private Consumer<String> runnable;
     private OneTimeSchedule oneTimeSchedule;
-    private PersistentTaskRepository persistentTaskRepository;
-    private final TaskId taskId = new TaskId("123");
+    private TaskRepository taskRepository;
+    private final String taskId = "123";
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
 
     @BeforeEach
     void init() {
-        task = Mockito.mock(Task.class);
+        runnable = Mockito.mock(Consumer.class);
 
         oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
         when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.empty());
 
-        persistentTask = Mockito.mock(PersistentTask.class);
-        when(persistentTask.getId()).thenReturn(taskId);
-        when(persistentTask.getParameter()).thenReturn(parameter);
-        when(persistentTask.getName()).thenReturn(taskName);
+        task = Mockito.mock(Task.class);
+        when(task.getId()).thenReturn(taskId);
+        when(task.getParameter()).thenReturn(parameter);
+        when(task.getName()).thenReturn(taskName);
 
         listener = Mockito.mock(TaskExecutionListener.class);
 
-        persistentTaskRepository = Mockito.mock(PersistentTaskRepository.class);
+        taskRepository = Mockito.mock(TaskRepository.class);
 
-        execution = new Execution(task, persistentTask, Collections.singletonList(listener), oneTimeSchedule, systemClock, persistentTaskRepository);
+        execution = new Execution(task, () -> runnable.accept(parameter), Collections.singletonList(listener), oneTimeSchedule, systemClock, taskRepository);
     }
 
     @Test
     void execute_task_with_parameter() {
         execution.perform();
 
-        verify(task).run(parameter);
+        verify(runnable).accept(parameter);
     }
 
     @Test
@@ -70,7 +67,7 @@ class ExecutionShould {
     void delete_task_after_successful_execution() {
         execution.perform();
 
-        verify(persistentTaskRepository).delete(persistentTask);
+        verify(taskRepository).delete(task);
     }
 
     @Test
@@ -80,24 +77,24 @@ class ExecutionShould {
 
         execution.perform();
 
-        verify(persistentTaskRepository).unlock(persistentTask, nextPlannedExecutionTime);
-        verify(persistentTaskRepository, never()).delete(any());
+        verify(taskRepository).unlock(task, nextPlannedExecutionTime);
+        verify(taskRepository, never()).delete(any());
     }
 
     @Test
     void save_failure_on_exception() {
         RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(task).run(any());
+        doThrow(exception).when(runnable).accept(any());
 
         execution.perform();
 
-        verify(persistentTaskRepository).saveFailure(persistentTask, exception);
+        verify(taskRepository).saveFailure(task, exception);
     }
 
     @Test
     void notify_listeners_after_failed_execution() {
         RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(task).run(any());
+        doThrow(exception).when(runnable).accept(any());
 
         execution.perform();
 

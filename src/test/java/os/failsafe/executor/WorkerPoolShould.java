@@ -3,12 +3,10 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import os.failsafe.executor.schedule.OneTimeSchedule;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
@@ -43,42 +41,40 @@ class WorkerPoolShould {
 
     @Test
     void not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
-        BlockingExecution firstBlockingExecution = new BlockingExecution();
-        Future<TaskId> execution = workerPool.execute(firstBlockingExecution);
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
+        Future<String> execution = workerPool.execute(UUID.randomUUID().toString(), firstBlockingRunnable);
 
-        List<BlockingExecution> blockingExecutions = IntStream.range(1, queueSize)
-                .mapToObj(i -> new BlockingExecution())
-                .peek(workerPool::execute)
+        List<BlockingRunnable> blockingRunnables = IntStream.range(1, queueSize)
+                .mapToObj(i -> new BlockingRunnable())
+                .peek(blockingRunnable -> workerPool.execute(UUID.randomUUID().toString(), blockingRunnable))
                 .collect(Collectors.toList());
 
         assertTrue(workerPool.allWorkersBusy());
 
-        firstBlockingExecution.release();
+        firstBlockingRunnable.release();
         execution.get();
 
         assertFalse(workerPool.allWorkersBusy());
 
-        BlockingExecution nextBlockingExecution = new BlockingExecution();
-        workerPool.execute(nextBlockingExecution);
+        BlockingRunnable nextBlockingRunnable = new BlockingRunnable();
+        workerPool.execute(UUID.randomUUID().toString(), nextBlockingRunnable);
 
         assertTrue(workerPool.allWorkersBusy());
 
-        nextBlockingExecution.release();
-        blockingExecutions.forEach(BlockingExecution::release);
+        nextBlockingRunnable.release();
+        blockingRunnables.forEach(BlockingRunnable::release);
     }
 
-    static class BlockingExecution extends Execution {
+    static class BlockingRunnable implements Runnable {
         Phaser phaser;
 
-        BlockingExecution() {
-            super(null, null, Collections.emptyList(), new OneTimeSchedule(), systemClock, null);
+        BlockingRunnable() {
             phaser = new Phaser(2);
         }
 
         @Override
-        public TaskId perform() {
+        public void run() {
             phaser.arriveAndAwaitAdvance();
-            return new TaskId("id");
         }
 
         public void release() {

@@ -1,10 +1,7 @@
 package os.failsafe.executor;
 
+
 import os.failsafe.executor.schedule.Schedule;
-import os.failsafe.executor.task.PersistentTask;
-import os.failsafe.executor.task.Task;
-import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskId;
 import os.failsafe.executor.utils.SystemClock;
 
 import java.time.LocalDateTime;
@@ -14,55 +11,47 @@ import java.util.Optional;
 class Execution {
 
     private final Task task;
-    private final PersistentTask persistentTask;
+    private final Runnable runnable;
     private final List<TaskExecutionListener> listeners;
     private final Schedule schedule;
     private final SystemClock systemClock;
-    private final PersistentTaskRepository persistentTaskRepository;
+    private final TaskRepository taskRepository;
 
-    Execution(Task task, PersistentTask persistentTask, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, PersistentTaskRepository persistentTaskRepository) {
+    Execution(Task task, Runnable runnable, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, TaskRepository taskRepository) {
         this.task = task;
-        this.persistentTask = persistentTask;
+        this.runnable = runnable;
         this.listeners = listeners;
         this.schedule = schedule;
         this.systemClock = systemClock;
-        this.persistentTaskRepository = persistentTaskRepository;
+        this.taskRepository = taskRepository;
     }
 
-    public TaskId perform() {
+    public String perform() {
         try {
-            task.run(persistentTask.getParameter());
+            runnable.run();
 
             notifySuccess();
 
             Optional<LocalDateTime> nextExecutionTime = schedule.nextExecutionTime(systemClock.now());
             if (nextExecutionTime.isPresent()) {
-                persistentTaskRepository.unlock(persistentTask, nextExecutionTime.get());
+                taskRepository.unlock(task, nextExecutionTime.get());
             } else {
-                persistentTaskRepository.delete(persistentTask);
+                taskRepository.delete(task);
             }
         } catch (Exception e) {
-            persistentTaskRepository.saveFailure(persistentTask, e);
+            taskRepository.saveFailure(task, e);
 
             notifyFailed();
         }
 
-        return persistentTask.getId();
+        return task.getId();
     }
 
     private void notifySuccess() {
-        listeners.forEach(this::notifySuccess);
-    }
-
-    private void notifySuccess(TaskExecutionListener listener) {
-        listener.succeeded(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter());
+        listeners.forEach(l -> l.succeeded(task.getName(), task.getId(), task.getParameter()));
     }
 
     private void notifyFailed() {
-        listeners.forEach(this::notifyFailed);
-    }
-
-    private void notifyFailed(TaskExecutionListener listener) {
-        listener.failed(persistentTask.getName(), persistentTask.getId(), persistentTask.getParameter());
+        listeners.forEach(l -> l.failed(task.getName(), task.getId(), task.getParameter()));
     }
 }

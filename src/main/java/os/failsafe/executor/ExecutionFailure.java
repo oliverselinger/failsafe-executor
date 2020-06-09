@@ -1,4 +1,4 @@
-package os.failsafe.executor.task;
+package os.failsafe.executor;
 
 import java.time.LocalDateTime;
 

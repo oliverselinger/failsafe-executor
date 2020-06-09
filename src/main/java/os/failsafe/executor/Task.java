@@ -1,24 +1,24 @@
-package os.failsafe.executor.task;
+package os.failsafe.executor;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-public class PersistentTask {
+public class Task {
 
-    private final TaskId id;
+    private final String id;
     private final String parameter;
     private final String name;
     private final LocalDateTime plannedExecutionTime;
     private final LocalDateTime lockTime;
     private final ExecutionFailure executionFailure;
     private final Long version;
-    private final PersistentTaskLifecycleListener persistentTaskLifecycleListener;
+    private final TaskLifecycleListener taskLifecycleListener;
 
-    public PersistentTask(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
-        this(new TaskId(id), parameter, name, plannedExecutionTime, null, null, 0L, null);
+    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
+        this(id, parameter, name, plannedExecutionTime, null, null, 0L, null);
     }
 
-    public PersistentTask(TaskId id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version, PersistentTaskLifecycleListener persistentTaskLifecycleListener) {
+    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version, TaskLifecycleListener taskLifecycleListener) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
@@ -26,10 +26,10 @@ public class PersistentTask {
         this.lockTime = lockTime;
         this.executionFailure = executionFailure;
         this.version = version;
-        this.persistentTaskLifecycleListener = persistentTaskLifecycleListener;
+        this.taskLifecycleListener = taskLifecycleListener;
     }
 
-    public TaskId getId() {
+    public String getId() {
         return id;
     }
 
@@ -71,7 +71,7 @@ public class PersistentTask {
 
     public boolean cancel() {
         if (isCancelable()) {
-            persistentTaskLifecycleListener.cancel(this);
+            taskLifecycleListener.cancel(this);
             return true;
         }
 
@@ -84,7 +84,7 @@ public class PersistentTask {
 
     public boolean retry() {
         if (isRetryable()) {
-            persistentTaskLifecycleListener.retry(this);
+            taskLifecycleListener.retry(this);
             return true;
         }
 
@@ -95,7 +95,7 @@ public class PersistentTask {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        PersistentTask that = (PersistentTask) o;
+        Task that = (Task) o;
         return id.equals(that.id) &&
                 Objects.equals(parameter, that.parameter) &&
                 name.equals(that.name) &&

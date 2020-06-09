@@ -4,8 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
-import os.failsafe.executor.task.ExecutionFailure;
-import os.failsafe.executor.task.PersistentTask;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
@@ -23,14 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class PersistentTaskRepositoryShould {
+class TaskRepositoryShould {
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
 
     private final TestSystemClock systemClock = new TestSystemClock();
     private Database database;
-    private PersistentTaskRepository persistentTaskRepository;
+    private TaskRepository taskRepository;
     private String taskName = "TestTask";
     private final String taskParameter = "parameter";
     private final LocalDateTime plannedExecutionTime = systemClock.now();
@@ -39,15 +37,15 @@ class PersistentTaskRepositoryShould {
     void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
-        persistentTaskRepository = new PersistentTaskRepository(database, systemClock);
+        taskRepository = new TaskRepository(database, systemClock);
     }
 
     @Test
     void add_a_task() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        PersistentTask actual = persistentTaskRepository.findOne(task.getId());
-        assertDoesNotThrow(() -> UUID.fromString(actual.getId().id));
+        Task actual = taskRepository.findOne(task.getId());
+        assertDoesNotThrow(() -> UUID.fromString(actual.getId()));
         assertEquals(task.getId(), actual.getId());
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
@@ -59,11 +57,11 @@ class PersistentTaskRepositoryShould {
     @Test
     void add_a_task_with_given_id() {
         String id = "id";
-        PersistentTask task = addTask(id);
+        Task task = addTask(id);
 
-        PersistentTask actual = persistentTaskRepository.findOne(task.getId());
-        assertEquals(id, task.getId().id);
-        assertEquals(id, actual.getId().id);
+        Task actual = taskRepository.findOne(task.getId());
+        assertEquals(id, task.getId());
+        assertEquals(id, actual.getId());
     }
 
     @Test
@@ -75,38 +73,38 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void find_and_return_all_tasks() {
-        PersistentTask task1 = addTask();
-        PersistentTask task2 = addTask();
+        Task task1 = addTask();
+        Task task2 = addTask();
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAll();
+        List<Task> tasks = taskRepository.findAll();
         assertEquals(2, tasks.size());
         assertTrue(tasks.containsAll(Arrays.asList(task1, task2)));
     }
 
     @Test
     void find_and_return_empty_list_if_no_task_exists() {
-        assertTrue(persistentTaskRepository.findAll().isEmpty());
+        assertTrue(taskRepository.findAll().isEmpty());
     }
 
     @Test
     void return_empty_list_if_no_unlocked_task_exists() {
-        assertEquals(0, persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3).size());
+        assertEquals(0, taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3).size());
     }
 
     @Test
     void return_empty_list_if_tasks_planned_execution_time_is_not_reached_yet() {
         addTask();
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }
 
     @Test
     void return_task_if_planned_execution_time_is_reached() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -114,13 +112,13 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void return_tasks_ordered_by_created_date() {
-        PersistentTask task1 = addTask();
+        Task task1 = addTask();
         systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
-        PersistentTask task2 = addTask();
+        Task task2 = addTask();
         systemClock.timeTravelBy(Duration.ofMillis(1));
-        PersistentTask task3 = addTask();
+        Task task3 = addTask();
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(task1.getId(), tasks.get(0).getId());
         assertEquals(task2.getId(), tasks.get(1).getId());
@@ -129,12 +127,12 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void lock_a_task() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
         LocalDateTime lockTime = LocalDateTime.now();
         systemClock.fixedTime(lockTime);
 
-        PersistentTask locked = persistentTaskRepository.lock(task);
+        Task locked = taskRepository.lock(task);
 
         assertEquals(lockTime, locked.getLockTime());
         assertTrue(locked.isLocked());
@@ -143,14 +141,14 @@ class PersistentTaskRepositoryShould {
     @Test
     void
     unlock_a_task_and_set_next_planned_execution_time() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        PersistentTask locked = persistentTaskRepository.lock(task);
+        Task locked = taskRepository.lock(task);
 
         LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
-        persistentTaskRepository.unlock(locked, nextPlannedExecutionTime);
+        taskRepository.unlock(locked, nextPlannedExecutionTime);
 
-        PersistentTask unlocked = persistentTaskRepository.findOne(task.getId());
+        Task unlocked = taskRepository.findOne(task.getId());
 
         assertNull(unlocked.getLockTime());
         assertFalse(unlocked.isLocked());
@@ -159,22 +157,22 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void never_return_a_locked_task_before_lock_timeout() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        persistentTaskRepository.lock(task);
+        taskRepository.lock(task);
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }
 
     @Test
     void return_a_locked_task_after_lock_timeout_is_reached() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        persistentTaskRepository.lock(task);
+        taskRepository.lock(task);
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().plusDays(1), systemClock.now(), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().plusDays(1), systemClock.now(), 3);
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -182,17 +180,17 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void save_an_execution_failure() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
         String exceptionMessage = "Exception message";
         Exception exception = new Exception(exceptionMessage);
 
-        persistentTaskRepository.saveFailure(task, exception);
+        taskRepository.saveFailure(task, exception);
 
-        List<PersistentTask> failedTasks = persistentTaskRepository.findAllFailedTasks();
+        List<Task> failedTasks = taskRepository.findAllFailedTasks();
         assertEquals(1, failedTasks.size());
 
-        PersistentTask failedTask = failedTasks.get(0);
+        Task failedTask = failedTasks.get(0);
         assertNull(failedTask.getLockTime());
 
         ExecutionFailure executionFailure = failedTask.getExecutionFailure();
@@ -204,11 +202,11 @@ class PersistentTaskRepositoryShould {
 
     @Test
     void never_return_a_failed_task() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
-        persistentTaskRepository.saveFailure(task, new Exception());
+        taskRepository.saveFailure(task, new Exception());
 
-        List<PersistentTask> tasks = persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }
@@ -217,43 +215,43 @@ class PersistentTaskRepositoryShould {
     void return_empty_list_if_no_failed_task_exists() {
         addTask();
 
-        List<PersistentTask> failedTasks = persistentTaskRepository.findAllFailedTasks();
+        List<Task> failedTasks = taskRepository.findAllFailedTasks();
         assertTrue(failedTasks.isEmpty());
     }
 
     @Test
     void delete_a_task() {
-        PersistentTask persistentTask = addTask();
+        Task task = addTask();
 
-        persistentTaskRepository.delete(persistentTask);
+        taskRepository.delete(task);
 
-        assertNull(persistentTaskRepository.findOne(persistentTask.getId()));
+        assertNull(taskRepository.findOne(task.getId()));
     }
 
     @Test
     void delete_failure_of_a_task() {
-        PersistentTask task = addTask();
+        Task task = addTask();
 
         RuntimeException exception = new RuntimeException("Sorry");
-        persistentTaskRepository.saveFailure(task, exception);
+        taskRepository.saveFailure(task, exception);
 
 
-        PersistentTask failedTask = persistentTaskRepository.findAllFailedTasks().get(0);
-        persistentTaskRepository.deleteFailure(failedTask);
+        Task failedTask = taskRepository.findAllFailedTasks().get(0);
+        taskRepository.deleteFailure(failedTask);
 
-        List<PersistentTask> allFailedTasks = persistentTaskRepository.findAllFailedTasks();
+        List<Task> allFailedTasks = taskRepository.findAllFailedTasks();
         assertTrue(allFailedTasks.isEmpty());
 
-        PersistentTask taskWithoutFailure = persistentTaskRepository.findOne(task.getId());
+        Task taskWithoutFailure = taskRepository.findOne(task.getId());
         assertNull(taskWithoutFailure.getExecutionFailure());
         assertFalse(taskWithoutFailure.isExecutionFailed());
     }
 
-    private PersistentTask addTask() {
-        return persistentTaskRepository.add(new TaskInstance(taskName, taskParameter, plannedExecutionTime));
+    private Task addTask() {
+        return addTask(UUID.randomUUID().toString());
     }
 
-    private PersistentTask addTask(String id) {
-        return persistentTaskRepository.add(new TaskInstance(id, taskName, taskParameter, plannedExecutionTime));
+    private Task addTask(String id) {
+        return taskRepository.add(new Task(id, taskParameter, taskName, plannedExecutionTime));
     }
 }

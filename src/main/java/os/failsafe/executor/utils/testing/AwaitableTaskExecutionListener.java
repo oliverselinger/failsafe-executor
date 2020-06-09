@@ -1,7 +1,6 @@
 package os.failsafe.executor.utils.testing;
 
-import os.failsafe.executor.task.TaskExecutionListener;
-import os.failsafe.executor.task.TaskId;
+import os.failsafe.executor.TaskExecutionListener;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Phaser;
@@ -12,7 +11,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
 
     private final long timeout;
     private final TimeUnit timeUnit;
-    private final ConcurrentHashMap<TaskId, TaskId> taskMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> taskMap = new ConcurrentHashMap<>();
     private final Phaser phaser = new Phaser();
 
     public AwaitableTaskExecutionListener(long timeout, TimeUnit timeUnit) {
@@ -21,7 +20,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void registered(String s, TaskId taskId, String s1) {
+    public void registered(String s, String taskId, String s1) {
         taskMap.computeIfAbsent(taskId, key -> {
             phaser.register();
             return taskId;
@@ -29,16 +28,16 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void succeeded(String s, TaskId taskId, String s1) {
+    public void succeeded(String s, String taskId, String s1) {
         arrive(taskId);
     }
 
     @Override
-    public void failed(String s, TaskId taskId, String s1) {
+    public void failed(String s, String taskId, String s1) {
         arrive(taskId);
     }
 
-    private void arrive(TaskId taskId) {
+    private void arrive(String taskId) {
         if (taskMap.containsKey(taskId)) {
             phaser.arrive();
         }
