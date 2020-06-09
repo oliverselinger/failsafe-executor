@@ -15,9 +15,9 @@ class Execution {
     private final List<TaskExecutionListener> listeners;
     private final Schedule schedule;
     private final SystemClock systemClock;
-    private final PersistentTaskRepository taskRepository;
+    private final TaskRepository taskRepository;
 
-    Execution(Task task, Runnable runnable, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, PersistentTaskRepository taskRepository) {
+    Execution(Task task, Runnable runnable, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, TaskRepository taskRepository) {
         this.task = task;
         this.runnable = runnable;
         this.listeners = listeners;

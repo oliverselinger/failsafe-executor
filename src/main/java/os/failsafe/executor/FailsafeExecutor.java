@@ -43,7 +43,7 @@ public class FailsafeExecutor {
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
-    private final PersistentTaskRepository persistentTaskRepository;
+    private final TaskRepository taskRepository;
     private final Duration initialDelay;
     private final Duration pollingInterval;
     private final Database database;
@@ -67,8 +67,8 @@ public class FailsafeExecutor {
 
         this.database = new Database(dataSource);
         this.systemClock = systemClock;
-        this.persistentTaskRepository = new PersistentTaskRepository(database, systemClock);
-        this.persistentQueue = new PersistentQueue(persistentTaskRepository, systemClock, lockTimeout);
+        this.taskRepository = new TaskRepository(database, systemClock);
+        this.persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
@@ -128,15 +128,15 @@ public class FailsafeExecutor {
     }
 
     public List<Task> allTasks() {
-        return persistentTaskRepository.findAll();
+        return taskRepository.findAll();
     }
 
     public Optional<Task> task(String String) {
-        return Optional.ofNullable(persistentTaskRepository.findOne(String));
+        return Optional.ofNullable(taskRepository.findOne(String));
     }
 
     public List<Task> failedTasks() {
-        return persistentTaskRepository.findAllFailedTasks();
+        return taskRepository.findAllFailedTasks();
     }
 
     public void subscribe(TaskExecutionListener listener) {
@@ -176,8 +176,8 @@ public class FailsafeExecutor {
             Consumer<String> consumer = tasksByName.get(toExecute.getName());
             //TODO: handle unknown tasks gracefully
             Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
-            Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, persistentTaskRepository);
-            Future<String> future = workerPool.execute(toExecute.getId(), () -> execution.perform());
+            Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
+            Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
 
             clearException();
 

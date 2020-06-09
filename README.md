@@ -55,7 +55,7 @@ failsafeExecutor.start();
 First, register your task either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
 
 ```java
-failsafeExecutor.registerTask("TaskName", (s) -> {
+failsafeExecutor.registerTask("TaskName", param -> {
     ... // your business logic
 });
 ```

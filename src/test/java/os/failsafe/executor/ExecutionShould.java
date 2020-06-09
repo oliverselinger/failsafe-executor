@@ -25,7 +25,7 @@ class ExecutionShould {
     private Task task;
     private Consumer<String> runnable;
     private OneTimeSchedule oneTimeSchedule;
-    private PersistentTaskRepository persistentTaskRepository;
+    private TaskRepository taskRepository;
     private final String taskId = "123";
     private final String parameter = "Hello world!";
     private final String taskName = "TestTask";
@@ -44,9 +44,9 @@ class ExecutionShould {
 
         listener = Mockito.mock(TaskExecutionListener.class);
 
-        persistentTaskRepository = Mockito.mock(PersistentTaskRepository.class);
+        taskRepository = Mockito.mock(TaskRepository.class);
 
-        execution = new Execution(task, () -> runnable.accept(parameter), Collections.singletonList(listener), oneTimeSchedule, systemClock, persistentTaskRepository);
+        execution = new Execution(task, () -> runnable.accept(parameter), Collections.singletonList(listener), oneTimeSchedule, systemClock, taskRepository);
     }
 
     @Test
@@ -67,7 +67,7 @@ class ExecutionShould {
     void delete_task_after_successful_execution() {
         execution.perform();
 
-        verify(persistentTaskRepository).delete(task);
+        verify(taskRepository).delete(task);
     }
 
     @Test
@@ -77,8 +77,8 @@ class ExecutionShould {
 
         execution.perform();
 
-        verify(persistentTaskRepository).unlock(task, nextPlannedExecutionTime);
-        verify(persistentTaskRepository, never()).delete(any());
+        verify(taskRepository).unlock(task, nextPlannedExecutionTime);
+        verify(taskRepository, never()).delete(any());
     }
 
     @Test
@@ -88,7 +88,7 @@ class ExecutionShould {
 
         execution.perform();
 
-        verify(persistentTaskRepository).saveFailure(task, exception);
+        verify(taskRepository).saveFailure(task, exception);
     }
 
     @Test

@@ -22,31 +22,31 @@ class PersistentQueueShould {
 
     private TestSystemClock systemClock = new TestSystemClock();
     private Duration lockTimeout = Duration.ofMinutes(10);
-    private PersistentTaskRepository persistentTaskRepository;
+    private TaskRepository taskRepository;
     private PersistentQueue persistentQueue;
 
     @BeforeEach
     void init() {
         systemClock = new TestSystemClock();
-        persistentTaskRepository = Mockito.mock(PersistentTaskRepository.class);
-        persistentQueue = new PersistentQueue(persistentTaskRepository, systemClock, lockTimeout);
+        taskRepository = Mockito.mock(TaskRepository.class);
+        persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
     }
 
     @Test
     void add_a_task_to_repository() {
-        when(persistentTaskRepository.add(any())).thenReturn(Mockito.mock(Task.class));
+        when(taskRepository.add(any())).thenReturn(Mockito.mock(Task.class));
 
         LocalDateTime plannedExecutionTime = systemClock.now();
         Task task = createTask(plannedExecutionTime);
 
         persistentQueue.add(task);
 
-        verify(persistentTaskRepository).add(task);
+        verify(taskRepository).add(task);
     }
 
     @Test
     void return_null_if_no_task_exists() {
-        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
         assertNull(persistentQueue.peekAndLock());
     }
@@ -55,12 +55,12 @@ class PersistentQueueShould {
     void peek_and_lock_next_task() {
         Task task = Mockito.mock(Task.class);
 
-        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
-        when(persistentTaskRepository.lock(task)).thenReturn(task);
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
+        when(taskRepository.lock(task)).thenReturn(task);
 
         Task nextTask = persistentQueue.peekAndLock();
 
-        verify(persistentTaskRepository).lock(task);
+        verify(taskRepository).lock(task);
         assertEquals(task, nextTask);
     }
 
@@ -69,14 +69,14 @@ class PersistentQueueShould {
         Task alreadyLocked = Mockito.mock(Task.class);
         Task toLock = Mockito.mock(Task.class);
 
-        when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
-        when(persistentTaskRepository.lock(toLock)).thenReturn(toLock);
+        when(taskRepository.lock(alreadyLocked)).thenReturn(null);
+        when(taskRepository.lock(toLock)).thenReturn(toLock);
 
-        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
 
         Task nextTask = persistentQueue.peekAndLock();
 
-        verify(persistentTaskRepository).lock(toLock);
+        verify(taskRepository).lock(toLock);
         assertEquals(toLock, nextTask);
     }
 
@@ -84,9 +84,9 @@ class PersistentQueueShould {
     void return_null_if_first_result_list_cannot_be_locked_and_no_more_results_can_be_found() {
         Task alreadyLocked = Mockito.mock(Task.class);
 
-        when(persistentTaskRepository.lock(alreadyLocked)).thenReturn(null);
+        when(taskRepository.lock(alreadyLocked)).thenReturn(null);
 
-        when(persistentTaskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
 
         assertNull(persistentQueue.peekAndLock());
     }

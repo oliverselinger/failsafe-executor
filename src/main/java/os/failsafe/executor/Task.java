@@ -12,13 +12,13 @@ public class Task {
     private final LocalDateTime lockTime;
     private final ExecutionFailure executionFailure;
     private final Long version;
-    private final PersistentTaskLifecycleListener persistentTaskLifecycleListener;
+    private final TaskLifecycleListener taskLifecycleListener;
 
     public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
         this(id, parameter, name, plannedExecutionTime, null, null, 0L, null);
     }
 
-    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version, PersistentTaskLifecycleListener persistentTaskLifecycleListener) {
+    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version, TaskLifecycleListener taskLifecycleListener) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
@@ -26,7 +26,7 @@ public class Task {
         this.lockTime = lockTime;
         this.executionFailure = executionFailure;
         this.version = version;
-        this.persistentTaskLifecycleListener = persistentTaskLifecycleListener;
+        this.taskLifecycleListener = taskLifecycleListener;
     }
 
     public String getId() {
@@ -71,7 +71,7 @@ public class Task {
 
     public boolean cancel() {
         if (isCancelable()) {
-            persistentTaskLifecycleListener.cancel(this);
+            taskLifecycleListener.cancel(this);
             return true;
         }
 
@@ -84,7 +84,7 @@ public class Task {
 
     public boolean retry() {
         if (isRetryable()) {
-            persistentTaskLifecycleListener.retry(this);
+            taskLifecycleListener.retry(this);
             return true;
         }
 

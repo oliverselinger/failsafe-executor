@@ -12,12 +12,12 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 
-class PersistentTaskRepository implements PersistentTaskLifecycleListener {
+class TaskRepository implements TaskLifecycleListener {
 
     private final Database database;
     private final SystemClock systemClock;
 
-    public PersistentTaskRepository(Database database, SystemClock systemClock) {
+    public TaskRepository(Database database, SystemClock systemClock) {
         this.database = database;
         this.systemClock = systemClock;
     }
