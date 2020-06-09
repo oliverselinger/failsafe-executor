@@ -67,21 +67,21 @@ As parameter, we recommend to use only a single ID that your business logic is a
 
 ### Execute a task
 
-Pass your task and optionally your parameter to FailsafeExecutor's `execute` method. The task is then executed some time in the future.
+Pass your task's name and optionally your parameter to FailsafeExecutor's `execute` method. The task is then executed some time in the future.
 
 ```java
-String taskId = failsafeExecutor.execute(runnableTask);
+String taskId = failsafeExecutor.execute("TaskName");
 ```
 ```java
-String taskId = failsafeExecutor.execute(parameterizedTask, parameter);
+String taskId = failsafeExecutor.execute("TaskName", parameter);
 ```
 
 ### Schedule a task
 
-You can schedule the task's execution time. Pass your task and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
+You can schedule the task's execution time. Pass your task's name and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
 
 ```java
-String taskId = failsafeExecutor.schedule(runnableTask, schedule);
+String taskId = failsafeExecutor.schedule("TaskName", schedule);
 ```
 
 With a `Schedule` you can either plan a one time execution in future or a recurring execution.
@@ -95,7 +95,7 @@ Any exceptions occurring during the execution of a task are captured. The except
 Thus the `FailsafeExecutor` does not execute the task anymore. To find failed tasks use the following:
 
 ```java
-List<PersistentTask> failedTasks = failsafeExecutor.failedTasks();
+List<Task> failedTasks = failsafeExecutor.failedTasks();
 ```
 
 Two options are offered to handle a failed task. Either retry it:
@@ -114,7 +114,7 @@ Cancel deletes the task from database.
 
 ## Monitoring the execution
 
-The each execution of a task can be observed by subscribing a listener at the `FailsafeExecutor`:
+The result of an execution can be observed by subscribing a listener at the `FailsafeExecutor`:
 
 ```java
 failsafeExecutor.subscribe(executionListener);

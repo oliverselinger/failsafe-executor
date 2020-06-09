@@ -112,18 +112,18 @@ public class FailsafeExecutor {
         return enqueue(connection, taskInstance);
     }
 
-    public String schedule(String scheduleName, Schedule schedule) {
-        return database.connect(connection -> schedule(connection, scheduleName, schedule));
+    public String schedule(String taskName, Schedule schedule) {
+        return database.connect(connection -> schedule(connection, taskName, schedule));
     }
 
-    public String schedule(Connection connection, String scheduleName, Schedule schedule) {
-        if (!scheduleByName.containsKey(scheduleName)) {
-            scheduleByName.put(scheduleName, schedule);
+    public String schedule(Connection connection, String taskName, Schedule schedule) {
+        if (!scheduleByName.containsKey(taskName)) {
+            scheduleByName.put(taskName, schedule);
         }
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
-        Task task = new Task(UUID.randomUUID().toString(), null, scheduleName, plannedExecutionTime);
+        Task task = new Task(UUID.randomUUID().toString(), null, taskName, plannedExecutionTime);
         return enqueue(connection, task);
     }
 
@@ -131,8 +131,8 @@ public class FailsafeExecutor {
         return taskRepository.findAll();
     }
 
-    public Optional<Task> task(String String) {
-        return Optional.ofNullable(taskRepository.findOne(String));
+    public Optional<Task> task(String taskId) {
+        return Optional.ofNullable(taskRepository.findOne(taskId));
     }
 
     public List<Task> failedTasks() {
@@ -156,10 +156,10 @@ public class FailsafeExecutor {
     }
 
     private String enqueue(Connection connection, Task task) {
-        String String = persistentQueue.add(connection, task);
-        notifyRegistration(task, String);
+        String taskId = persistentQueue.add(connection, task);
+        notifyRegistration(task, taskId);
 
-        return String;
+        return taskId;
     }
 
     private Future<String> executeNextTask() {
@@ -197,8 +197,8 @@ public class FailsafeExecutor {
         lastRunException = null;
     }
 
-    private void notifyRegistration(Task task, String String) {
-        listeners.forEach(listener -> listener.registered(task.getName(), String, task.getParameter()));
+    private void notifyRegistration(Task task, String taskId) {
+        listeners.forEach(listener -> listener.registered(task.getName(), taskId, task.getParameter()));
     }
 
 }
