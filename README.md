@@ -52,7 +52,7 @@ failsafeExecutor.start();
 
 ### Register a task
 
-First, register your task either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
+First, register the task on startup of your application either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
 
 ```java
 failsafeExecutor.registerTask("TaskName", param -> {
