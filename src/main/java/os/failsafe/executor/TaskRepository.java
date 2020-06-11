@@ -12,6 +12,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 class TaskRepository implements TaskLifecycleListener {
 
@@ -147,6 +148,9 @@ class TaskRepository implements TaskLifecycleListener {
     }
 
     List<Task> findAllNotLockedOrderedByCreatedDate(Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+
+        String whereIn = processableTasks.stream().collect(Collectors.joining(","));
+
         String selectStmt = "" +
                 "SELECT * FROM FAILSAFE_TASK" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
@@ -162,7 +166,7 @@ class TaskRepository implements TaskLifecycleListener {
         return database.selectAll(selectStmt, this::mapToPersistentTask,
                 Timestamp.valueOf(lockTimeLessOrEqual),
                 Timestamp.valueOf(plannedExecutionDateLessOrEquals),
-                processableTasks.toArray(new String[processableTasks.size()]),
+                whereIn,
                 limit);
     }
 
