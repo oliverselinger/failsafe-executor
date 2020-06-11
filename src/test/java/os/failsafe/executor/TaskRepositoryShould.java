@@ -11,7 +11,12 @@ import os.failsafe.executor.utils.TestSystemClock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -247,6 +252,27 @@ class TaskRepositoryShould {
         Task taskWithoutFailure = taskRepository.findOne(task.getId());
         assertNull(taskWithoutFailure.getExecutionFailure());
         assertFalse(taskWithoutFailure.isExecutionFailed());
+    }
+
+    @Test
+    void find_only_registered_tasks() {
+        addTask();
+        addTask();
+        taskRepository.add(new Task(UUID.randomUUID().toString(), taskParameter, "OtherTaskName", plannedExecutionTime));
+        processableTasks.add("Some other");
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        assertEquals(tasks.size(), 2);
+
+        tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(Collections.emptySet(), systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        assertEquals(tasks.size(), 0);
+
+        Set<String> unknownTasks = new HashSet<>();
+        unknownTasks.add("UnknownTaskName");
+        tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(unknownTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        assertEquals(tasks.size(), 0);
+
+        assertEquals(taskRepository.findAll().size(), 3);
+
     }
 
     private Task addTask() {

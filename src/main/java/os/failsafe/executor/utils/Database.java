@@ -62,21 +62,19 @@ public class Database {
         });
     }
 
-    public <T> List<T> selectAll(String sql,
-                                 Function<ResultSet, T> mapper,
-                                 Object... params) {
+    public <T> List<T> selectAll(String sql, Function<ResultSet, T> mapper, Object[] params) {
         return connect(connection -> selectAll(connection, sql, mapper, params));
     }
 
-    public <T> List<T> selectAll(Connection connection,
-                                 String sql,
-                                 Function<ResultSet, T> resultSetConsumer,
-                                 Object... params) {
+    public <T> List<T> selectAll(Connection connection, String sql, Function<ResultSet, T> resultSetConsumer, Object[] params) {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int cnt = 0;
-            for (Object param : params) {
-                ps.setObject(++cnt, param);
+
+            if (params != null) {
+                for (Object param : params) {
+                    ps.setObject(++cnt, param);
+                }
             }
 
             try (ResultSet rs = ps.executeQuery()) {
