@@ -1,5 +1,6 @@
 package os.failsafe.executor;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -23,13 +24,13 @@ import static org.mockito.Mockito.verify;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
+import static os.failsafe.executor.utils.testing.FailsafeExecutorTestUtility.awaitAllTasks;
 
 public class MultipleNodesShould {
-
-    private static final Logger log = LoggerFactory.getLogger(MultipleNodesShould.class);
-
     private final TestSystemClock systemClock = new TestSystemClock();
     private TaskRepository taskRepository;
+
+    private static final Logger log = LoggerFactory.getLogger(MultipleNodesShould.class);
 
     @RegisterExtension
     static final DbExtension DB_EXTENSION = new DbExtension();
@@ -41,6 +42,7 @@ public class MultipleNodesShould {
     TaskExecutionListener listenerB;
 
     Consumer<String> task1;
+    Consumer<String> task2;
 
 
     @BeforeEach
@@ -58,29 +60,62 @@ public class MultipleNodesShould {
         executorA.subscribe(listenerA);
         executorB.subscribe(listenerB);
 
-        task1  = s -> {};
+        task1 = s -> {
+            log.info("Processed on Worker 1: " + s);
+        };
+        task2 = s -> {
+            log.info("Processed on Worker 2: " + s);
+        };
+    }
 
-        executorA.registerTask("Task1", task1);
-        executorB.registerTask("Task1", task1);
-        executorA.registerTask("Task2", task1);
+    @AfterEach
+    public void stop() {
+        executorA.stop();
+        executorB.stop();
     }
 
     @Test
-    void test_work_sharding() {
+    void do_work_sharding() {
+        executorA.registerTask("Task1", task1);
+        executorB.registerTask("Task1", task2);
+
         final int total = 30;
 
-        for (int i=0; i < total; i++) {
-            executorA.execute("Task1", "Test"+i);
+        for (int i = 0; i < total; i++) {
+            executorA.execute("Task1", "Test" + i);
         }
         executorA.start();
         executorB.start();
 
         awaitEmptyTaskTable();
 
-        assertListenerOnSucceeded(listenerA, "Task1",1);
-        assertListenerOnSucceeded(listenerB, "Task1",1);
+        assertListenerOnSucceeded(listenerA, "Task1", 2);
+        assertListenerOnSucceeded(listenerB, "Task1", 2);
 
         assertEquals(total, countFinishedTasks(listenerA) + countFinishedTasks(listenerB));
+    }
+
+    @Test
+    void run_only_processable_tasks() {
+        final int total = 15;
+        executorA.registerTask("Task2", task1);
+        executorB.registerTask("Task3", task2);
+
+
+        for (int i = 0; i < total; i++) {
+            executorA.execute("Task2", "Task 2 Test" + i);
+            executorA.execute("Task3", "Task 3 Test" + i);
+        }
+
+        executorA.start();
+        executorB.start();
+
+        awaitEmptyTaskTable();
+
+        assertListenerOnSucceeded(listenerA, "Task2", total);
+        assertListenerOnSucceeded(listenerB, "Task3", total);
+
+        assertEquals(2 * total, countFinishedTasks(listenerA) + countFinishedTasks(listenerB));
     }
 
     private void assertListenerOnSucceeded(TaskExecutionListener listener, String name, int count) {
@@ -92,9 +127,9 @@ public class MultipleNodesShould {
     }
 
     private void awaitEmptyTaskTable() {
-        while(taskRepository.findAll().size() > 0) {
+        while (taskRepository.findAll().size() > 0) {
             try {
-                Thread.sleep(1);
+                Thread.sleep(10);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
