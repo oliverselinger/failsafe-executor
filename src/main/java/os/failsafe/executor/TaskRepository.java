@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -149,12 +150,16 @@ class TaskRepository implements TaskLifecycleListener {
     }
 
     List<Task> findAllNotLockedOrderedByCreatedDate(Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
-        String whereIn = "(" + processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")) + ")";
+        if (processableTasks == null || processableTasks.size() == 0) {
+            return Collections.emptyList();
+        }
+
+        String whereIn = "AND NAME IN (" + processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")) + ")";
 
         String selectStmt = "" +
                 "SELECT * FROM FAILSAFE_TASK" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
-                " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN " + whereIn +
+                " AND PLANNED_EXECUTION_TIME <= ? " + whereIn +
                 " ORDER BY CREATED_DATE";
 
         if (database.isMysql()) {
