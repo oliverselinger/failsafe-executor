@@ -60,6 +60,8 @@ failsafeExecutor.registerTask("TaskName", param -> {
 });
 ```
 
+An executor will only pick up tasks which have been registered. This allows for simple **routing**, based on task names amongst different nodes.
+
 Make sure your business logic is **idempotent**, since it gets executed at least once.
 
 As parameter, we recommend to use only a single ID that your business logic is able to interpret properly. Avoid using complex objects
