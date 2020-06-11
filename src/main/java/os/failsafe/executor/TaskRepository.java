@@ -162,7 +162,7 @@ class TaskRepository implements TaskLifecycleListener {
         return database.selectAll(selectStmt, this::mapToPersistentTask,
                 Timestamp.valueOf(lockTimeLessOrEqual),
                 Timestamp.valueOf(plannedExecutionDateLessOrEquals),
-                processableTasks.toArray(),
+                processableTasks.toArray(new String[processableTasks.size()]),
                 limit);
     }
 
