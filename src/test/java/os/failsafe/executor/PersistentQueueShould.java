@@ -7,9 +7,7 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.UUID;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,12 +22,15 @@ class PersistentQueueShould {
     private Duration lockTimeout = Duration.ofMinutes(10);
     private TaskRepository taskRepository;
     private PersistentQueue persistentQueue;
+    private Set<String> processableTasks;
 
     @BeforeEach
     void init() {
         systemClock = new TestSystemClock();
         taskRepository = Mockito.mock(TaskRepository.class);
         persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
+        processableTasks = new HashSet<>();
+        processableTasks.add("Task");
     }
 
     @Test
@@ -46,19 +47,19 @@ class PersistentQueueShould {
 
     @Test
     void return_null_if_no_task_exists() {
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        assertNull(persistentQueue.peekAndLock());
+        assertNull(persistentQueue.peekAndLock(processableTasks));
     }
 
     @Test
     void peek_and_lock_next_task() {
         Task task = Mockito.mock(Task.class);
 
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
         when(taskRepository.lock(task)).thenReturn(task);
 
-        Task nextTask = persistentQueue.peekAndLock();
+        Task nextTask = persistentQueue.peekAndLock(processableTasks);
 
         verify(taskRepository).lock(task);
         assertEquals(task, nextTask);
@@ -72,9 +73,9 @@ class PersistentQueueShould {
         when(taskRepository.lock(alreadyLocked)).thenReturn(null);
         when(taskRepository.lock(toLock)).thenReturn(toLock);
 
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
 
-        Task nextTask = persistentQueue.peekAndLock();
+        Task nextTask = persistentQueue.peekAndLock(processableTasks);
 
         verify(taskRepository).lock(toLock);
         assertEquals(toLock, nextTask);
@@ -86,9 +87,9 @@ class PersistentQueueShould {
 
         when(taskRepository.lock(alreadyLocked)).thenReturn(null);
 
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
 
-        assertNull(persistentQueue.peekAndLock());
+        assertNull(persistentQueue.peekAndLock(processableTasks));
     }
 
     private Task createTask(LocalDateTime plannedExecutionTime) {

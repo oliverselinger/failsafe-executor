@@ -168,7 +168,7 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            Task toExecute = persistentQueue.peekAndLock();
+            Task toExecute = persistentQueue.peekAndLock(tasksByName.keySet());
             if (toExecute == null) {
                 return null;
             }

@@ -10,9 +10,8 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,12 +31,15 @@ class TaskRepositoryShould {
     private String taskName = "TestTask";
     private final String taskParameter = "parameter";
     private final LocalDateTime plannedExecutionTime = systemClock.now();
+    private Set<String> processableTasks;
 
     @BeforeEach
     void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
         taskRepository = new TaskRepository(database, systemClock);
+        processableTasks = new HashSet<>();
+        processableTasks.add(taskName);
     }
 
     @Test
@@ -50,7 +52,7 @@ class TaskRepositoryShould {
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.getVersion());
-        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
+        assertEquals(plannedExecutionTime.truncatedTo(ChronoUnit.MILLIS), actual.getPlannedExecutionTime().truncatedTo(ChronoUnit.MILLIS));
         assertNull(actual.getLockTime());
     }
 
@@ -88,14 +90,14 @@ class TaskRepositoryShould {
 
     @Test
     void return_empty_list_if_no_unlocked_task_exists() {
-        assertEquals(0, taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3).size());
+        assertEquals(0, taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3).size());
     }
 
     @Test
     void return_empty_list_if_tasks_planned_execution_time_is_not_reached_yet() {
         addTask();
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }
@@ -104,7 +106,7 @@ class TaskRepositoryShould {
     void return_task_if_planned_execution_time_is_reached() {
         Task task = addTask();
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -118,7 +120,7 @@ class TaskRepositoryShould {
         systemClock.timeTravelBy(Duration.ofMillis(1));
         Task task3 = addTask();
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(task1.getId(), tasks.get(0).getId());
         assertEquals(task2.getId(), tasks.get(1).getId());
@@ -152,7 +154,7 @@ class TaskRepositoryShould {
 
         assertNull(unlocked.getLockTime());
         assertFalse(unlocked.isLocked());
-        assertEquals(nextPlannedExecutionTime, unlocked.getPlannedExecutionTime());
+        assertEquals(nextPlannedExecutionTime.truncatedTo(ChronoUnit.MICROS), unlocked.getPlannedExecutionTime().truncatedTo(ChronoUnit.MICROS));
     }
 
     @Test
@@ -161,7 +163,7 @@ class TaskRepositoryShould {
 
         taskRepository.lock(task);
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }
@@ -172,7 +174,7 @@ class TaskRepositoryShould {
 
         taskRepository.lock(task);
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now().plusDays(1), systemClock.now(), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now().plusDays(1), systemClock.now(), 3);
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -206,7 +208,7 @@ class TaskRepositoryShould {
 
         taskRepository.saveFailure(task, new Exception());
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
         assertEquals(0, tasks.size());
     }

@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 class PersistentQueue {
 
@@ -29,8 +30,8 @@ class PersistentQueue {
         return taskRepository.add(connection, task).getId();
     }
 
-    Task peekAndLock() {
-        List<Task> nextTasksToLock = findNextForExecution();
+    Task peekAndLock(Set<String> processableTasks) {
+        List<Task> nextTasksToLock = findNextForExecution(processableTasks);
 
         if (nextTasksToLock.isEmpty()) {
             return null;
@@ -45,13 +46,13 @@ class PersistentQueue {
             if (locked.isPresent()) {
                 return locked.get();
             }
-        } while (!(nextTasksToLock = findNextForExecution()).isEmpty());
+        } while (!(nextTasksToLock = findNextForExecution(processableTasks)).isEmpty());
 
         return null;
     }
 
-    private List<Task> findNextForExecution() {
-        return taskRepository.findAllNotLockedOrderedByCreatedDate(plannedExecutionTime(), currentLockTimeout(), 3);
+    private List<Task> findNextForExecution(Set<String> processableTasks) {
+        return taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, plannedExecutionTime(), currentLockTimeout(), 3);
     }
 
     private LocalDateTime plannedExecutionTime() {
