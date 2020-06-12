@@ -168,13 +168,12 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            Task toExecute = persistentQueue.peekAndLock();
+            Task toExecute = persistentQueue.peekAndLock(tasksByName.keySet());
             if (toExecute == null) {
                 return null;
             }
 
             Consumer<String> consumer = tasksByName.get(toExecute.getName());
-            //TODO: handle unknown tasks gracefully
             Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
             Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
             Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);

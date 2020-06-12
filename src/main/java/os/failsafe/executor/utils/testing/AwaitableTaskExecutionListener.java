@@ -51,7 +51,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
         try {
             phaser.awaitAdvanceInterruptibly(0, timeout, timeUnit);
         } catch (InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/"+phaser.getRegisteredParties() + " tasks finished");
         }
     }
 }

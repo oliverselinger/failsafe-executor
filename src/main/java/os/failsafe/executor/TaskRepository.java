@@ -10,7 +10,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 class TaskRepository implements TaskLifecycleListener {
 
@@ -95,7 +99,7 @@ class TaskRepository implements TaskLifecycleListener {
 
     List<Task> findAll() {
         String selectStmt = "SELECT * FROM FAILSAFE_TASK";
-        return database.selectAll(selectStmt, this::mapToPersistentTask);
+        return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
     Task lock(Task toLock) {
@@ -145,11 +149,17 @@ class TaskRepository implements TaskLifecycleListener {
         }
     }
 
-    List<Task> findAllNotLockedOrderedByCreatedDate(LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+    List<Task> findAllNotLockedOrderedByCreatedDate(Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+        if (processableTasks == null || processableTasks.size() == 0) {
+            return Collections.emptyList();
+        }
+
+        String whereIn = "AND NAME IN (" + processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")) + ")";
+
         String selectStmt = "" +
                 "SELECT * FROM FAILSAFE_TASK" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
-                " AND PLANNED_EXECUTION_TIME <= ?" +
+                " AND PLANNED_EXECUTION_TIME <= ? " + whereIn +
                 " ORDER BY CREATED_DATE";
 
         if (database.isMysql()) {
@@ -158,10 +168,13 @@ class TaskRepository implements TaskLifecycleListener {
             selectStmt += " FETCH FIRST (?) ROWS ONLY";
         }
 
-        return database.selectAll(selectStmt, this::mapToPersistentTask,
-                Timestamp.valueOf(lockTimeLessOrEqual),
-                Timestamp.valueOf(plannedExecutionDateLessOrEquals),
-                limit);
+        List<Object> params = new ArrayList<>();
+        params.add(Timestamp.valueOf(lockTimeLessOrEqual));
+        params.add(Timestamp.valueOf(plannedExecutionDateLessOrEquals));
+        params.addAll(processableTasks);
+        params.add(limit);
+
+        return database.selectAll(selectStmt, this::mapToPersistentTask,params.toArray());
     }
 
     void saveFailure(Task failed, Exception exception) {
@@ -202,7 +215,7 @@ class TaskRepository implements TaskLifecycleListener {
 
     List<Task> findAllFailedTasks() {
         String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE FAIL_TIME IS NOT NULL";
-        return database.selectAll(selectStmt, this::mapToPersistentTask);
+        return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
     void delete(Task toDelete) {
