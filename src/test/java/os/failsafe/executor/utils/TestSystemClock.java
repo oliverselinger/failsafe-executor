@@ -12,7 +12,7 @@ public class TestSystemClock implements SystemClock {
 
     @Override
     public LocalDateTime now() {
-        return LocalDateTime.now(clock);
+        return LocalDateTime.now(clock).withNano(0);
     }
 
     public void timeTravelBy(Duration duration) {
