@@ -10,7 +10,6 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,7 +56,7 @@ class TaskRepositoryShould {
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.getVersion());
-        assertEquals(plannedExecutionTime.truncatedTo(ChronoUnit.MILLIS), actual.getPlannedExecutionTime().truncatedTo(ChronoUnit.MILLIS));
+        assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertNull(actual.getLockTime());
     }
 
@@ -120,9 +119,9 @@ class TaskRepositoryShould {
     @Test
     void return_tasks_ordered_by_created_date() {
         Task task1 = addTask();
-        systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
+        systemClock.timeTravelBy(Duration.ofSeconds(1)); // next added task could get same timestamp because it is too fast
         Task task2 = addTask();
-        systemClock.timeTravelBy(Duration.ofMillis(1));
+        systemClock.timeTravelBy(Duration.ofSeconds(1));
         Task task3 = addTask();
 
         List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
@@ -136,7 +135,7 @@ class TaskRepositoryShould {
     void lock_a_task() {
         Task task = addTask();
 
-        LocalDateTime lockTime = LocalDateTime.now();
+        LocalDateTime lockTime = systemClock.now();
         systemClock.fixedTime(lockTime);
 
         Task locked = taskRepository.lock(task);
@@ -159,7 +158,7 @@ class TaskRepositoryShould {
 
         assertNull(unlocked.getLockTime());
         assertFalse(unlocked.isLocked());
-        assertEquals(nextPlannedExecutionTime.truncatedTo(ChronoUnit.MICROS), unlocked.getPlannedExecutionTime().truncatedTo(ChronoUnit.MICROS));
+        assertEquals(nextPlannedExecutionTime, unlocked.getPlannedExecutionTime());
     }
 
     @Test

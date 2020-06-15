@@ -24,9 +24,15 @@ commands:
       - run: bash <(curl -s https://codecov.io/bash)
 
 jobs:
-  build:
+  jdk-8-build:
     docker:
       - image: circleci/openjdk:8-jdk-stretch
+    steps:
+      - maven-package
+
+  jdk-11-build:
+    docker:
+      - image: circleci/openjdk:11-jdk-stretch
     steps:
       - maven-package
 
@@ -69,6 +75,7 @@ workflows:
   version: 2
   build_and_test:
     jobs:
-      - build
+      - jdk-8-build
+      - jdk-11-build
       - test-postgres
       - test-mysql
