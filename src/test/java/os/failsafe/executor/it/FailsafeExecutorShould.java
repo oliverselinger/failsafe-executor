@@ -93,7 +93,12 @@ class FailsafeExecutorShould {
 
     @Test
     void throw_an_exception_if_lock_timeout_too_short() {
-        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
+        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 4, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
+    }
+
+    @Test
+    void not_throw_exception_default_datasource_constructor() {
+        assertDoesNotThrow(() -> new FailsafeExecutor(dataSource));
     }
 
     @Test
