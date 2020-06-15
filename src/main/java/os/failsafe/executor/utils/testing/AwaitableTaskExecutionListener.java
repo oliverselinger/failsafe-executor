@@ -20,7 +20,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void registered(String s, String taskId, String s1) {
+    public void registered(String name, String taskId, String parameter) {
         taskMap.computeIfAbsent(taskId, key -> {
             phaser.register();
             return taskId;
@@ -28,12 +28,12 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void succeeded(String s, String taskId, String s1) {
+    public void succeeded(String name, String taskId, String parameter) {
         arrive(taskId);
     }
 
     @Override
-    public void failed(String s, String taskId, String s1) {
+    public void failed(String name, String taskId, String parameter) {
         arrive(taskId);
     }
 
@@ -51,7 +51,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
         try {
             phaser.awaitAdvanceInterruptibly(0, timeout, timeUnit);
         } catch (InterruptedException | TimeoutException e) {
-            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/"+phaser.getRegisteredParties() + " tasks finished");
+            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished");
         }
     }
 }

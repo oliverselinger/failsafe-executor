@@ -70,7 +70,7 @@ class FailsafeExecutorShould {
         failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
 
-        failsafeExecutor.registerTask(TASK_NAME, (s) -> {
+        failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
             if (executionShouldFail) {
                 throw new RuntimeException();
             }
@@ -82,7 +82,7 @@ class FailsafeExecutorShould {
     }
 
     @AfterEach
-    public void stop() {
+    void stop() {
         failsafeExecutor.stop();
     }
 
@@ -121,7 +121,7 @@ class FailsafeExecutorShould {
 
         final String scheduleTaskName = "ScheduledTestTask";
 
-        failsafeExecutor.registerTask(scheduleTaskName, (s) -> log.info("Hello World"));
+        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
 
 
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
@@ -146,7 +146,7 @@ class FailsafeExecutorShould {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
-        failsafeExecutor.registerTask(scheduleTaskName, (s) -> log.info("Hello World"));
+        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
 
         failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
 
@@ -159,7 +159,7 @@ class FailsafeExecutorShould {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
-        failsafeExecutor.registerTask(scheduleTaskName, (s) -> log.info("Hello World"));
+        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
 
         failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
         assertDoesNotThrow(() -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule));
@@ -216,16 +216,16 @@ class FailsafeExecutorShould {
 
     @Test
     void report_failures() throws SQLException {
-        RuntimeException e = new RuntimeException("Error");
+        RuntimeException connectionException = new RuntimeException("Error");
 
-        Connection connection = createFailingJdbcConnection(e);
+        Connection connection = createFailingJdbcConnection(connectionException);
 
         DataSource failingDataSource = Mockito.mock(DataSource.class);
         when(failingDataSource.getConnection()).thenReturn(connection);
 
         FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofSeconds(15), DEFAULT_LOCK_TIMEOUT);
 
-        failsafeExecutor.registerTask(TASK_NAME, (s) -> {
+        failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
             if (executionShouldFail) {
                 throw new RuntimeException();
             }
@@ -239,7 +239,7 @@ class FailsafeExecutorShould {
         failsafeExecutor.stop();
 
         assertTrue(failsafeExecutor.isLastRunFailed());
-        assertEquals(e, failsafeExecutor.lastRunException());
+        assertEquals(connectionException, failsafeExecutor.lastRunException());
     }
 
     @Test

@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -24,9 +25,8 @@ import static org.mockito.Mockito.verify;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
-import static os.failsafe.executor.utils.testing.FailsafeExecutorTestUtility.awaitAllTasks;
 
-public class MultipleNodesShould {
+class MultipleNodesShould {
     private final TestSystemClock systemClock = new TestSystemClock();
     private TaskRepository taskRepository;
 
@@ -43,7 +43,6 @@ public class MultipleNodesShould {
 
     Consumer<String> task1;
     Consumer<String> task2;
-
 
     @BeforeEach
     void init() {
@@ -69,7 +68,7 @@ public class MultipleNodesShould {
     }
 
     @AfterEach
-    public void stop() {
+    void stop() {
         executorA.stop();
         executorB.stop();
     }
@@ -127,12 +126,8 @@ public class MultipleNodesShould {
     }
 
     private void awaitEmptyTaskTable() {
-        while (taskRepository.findAll().size() > 0) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        await().atMost(Duration.ofSeconds(1))
+                .pollInterval(Duration.ofMillis(100))
+                .until(() -> taskRepository.findAll().isEmpty());
     }
 }
