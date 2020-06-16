@@ -95,6 +95,11 @@ public class FailsafeExecutor {
         running.set(false);
     }
 
+    /**
+     * @param name unique name of the task that should be registered
+     * @param function the function that should should assigned to the unique name
+     * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been registered already
+     */
     public boolean registerTask(String name, Consumer<String> function) {
         if (tasksByName.containsKey(name)) {
             return false;

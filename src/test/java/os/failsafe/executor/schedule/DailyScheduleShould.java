@@ -8,7 +8,7 @@ import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class DailyScheduleShould {
+class DailyScheduleShould {
 
     private final LocalTime dailyTime = LocalTime.of(22, 0);
     private final DailySchedule dailySchedule = new DailySchedule(dailyTime);
