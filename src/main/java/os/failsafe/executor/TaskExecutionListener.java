@@ -5,5 +5,5 @@ public interface TaskExecutionListener {
 
     void succeeded(String name, String id, String parameter);
 
-    void failed(String name, String id, String parameter);
+    void failed(String name, String id, String parameter, Exception exception);
 }

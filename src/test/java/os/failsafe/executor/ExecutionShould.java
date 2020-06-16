@@ -98,7 +98,7 @@ class ExecutionShould {
 
         execution.perform();
 
-        verify(listener).failed(taskName, taskId, parameter);
+        verify(listener).failed(taskName, taskId, parameter, exception);
     }
 
 }

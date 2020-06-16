@@ -61,6 +61,7 @@ class FailsafeExecutorShould {
     boolean executionShouldFail;
     private static final String TASK_NAME = "TestTask";
     private final String parameter = " world!";
+    private final RuntimeException runtimeException = new RuntimeException();
 
     @BeforeEach
     void init() {
@@ -72,7 +73,7 @@ class FailsafeExecutorShould {
 
         failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
             if (executionShouldFail) {
-                throw new RuntimeException();
+                throw runtimeException;
             }
 
             log.info("Hello {}", parameter);
@@ -179,7 +180,7 @@ class FailsafeExecutorShould {
 
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter, runtimeException);
 
         List<Task> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
@@ -206,7 +207,7 @@ class FailsafeExecutorShould {
 
         failsafeExecutor.start();
 
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter, runtimeException);
 
         List<Task> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());

@@ -38,10 +38,10 @@ class Execution {
             } else {
                 taskRepository.delete(task);
             }
-        } catch (Exception e) {
-            taskRepository.saveFailure(task, e);
+        } catch (Exception exception) {
+            taskRepository.saveFailure(task, exception);
 
-            notifyFailed();
+            notifyFailed(exception);
         }
 
         return task.getId();
@@ -51,7 +51,7 @@ class Execution {
         listeners.forEach(l -> l.succeeded(task.getName(), task.getId(), task.getParameter()));
     }
 
-    private void notifyFailed() {
-        listeners.forEach(l -> l.failed(task.getName(), task.getId(), task.getParameter()));
+    private void notifyFailed(Exception exception) {
+        listeners.forEach(l -> l.failed(task.getName(), task.getId(), task.getParameter(), exception));
     }
 }

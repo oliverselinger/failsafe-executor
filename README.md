@@ -14,6 +14,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 * **Reliable** execution. Guarantees at least once execution of a submitted tasks
 * **Multi-node compatible**. Coordination between nodes with optimistic locking
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
+* **Routing** tasks amongst different nodes. An executor only picks up registered tasks.
 * **Lightweight**. Small code base.
 * **No dependencies**.
 * **No reflection**.
@@ -60,7 +61,7 @@ failsafeExecutor.registerTask("TaskName", param -> {
 });
 ```
 
-An executor will only pick up tasks which have been registered. This allows for simple **routing**, based on task names amongst different nodes.
+An executor only picks up tasks which have been registered. This allows for simple **routing**, based on task names amongst different nodes.
 
 Make sure your business logic is **idempotent**, since it gets executed at least once.
 

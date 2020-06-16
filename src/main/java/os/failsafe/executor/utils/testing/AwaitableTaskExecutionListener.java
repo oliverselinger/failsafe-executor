@@ -33,7 +33,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void failed(String name, String taskId, String parameter) {
+    public void failed(String name, String taskId, String parameter, Exception exception) {
         arrive(taskId);
     }
 
