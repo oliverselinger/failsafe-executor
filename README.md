@@ -51,9 +51,11 @@ failsafeExecutor.start();
 
 ## Execute Tasks
 
-### Register a task
+Execution of a task requires two steps:
 
-First, register the task on startup of your application either with a runnable command or with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
+1. Register the task
+
+First, register the task on startup of your application with a consumer that accepts a single input argument for state transfer. Give the task a unique name.
 
 ```java
 failsafeExecutor.registerTask("TaskName", param -> {
@@ -63,34 +65,35 @@ failsafeExecutor.registerTask("TaskName", param -> {
 
 An executor only picks up tasks which have been registered. This allows for simple **routing**, based on task names amongst different nodes.
 
-Make sure your business logic is **idempotent**, since it gets executed at least once.
+Make sure your business logic is **idempotent**, since it gets executed at least once per task execution.
 
 As parameter, we recommend to use only a single ID that your business logic is able to interpret properly. Avoid using complex objects
 (through serialization) since it may lead to complex migration scenarios in case your object and your business logic changes.
 
-### Execute a task
+2. Execute the task
 
-Pass your task's name and optionally your parameter to FailsafeExecutor's `execute` method. The task is then executed some time in the future.
+Pass your task's name and your parameter to FailsafeExecutor's `execute` method. The task gets persisted and is then executed at some time in the future.
 
-```java
-String taskId = failsafeExecutor.execute("TaskName");
-```
 ```java
 String taskId = failsafeExecutor.execute("TaskName", parameter);
 ```
 
-### Schedule a task
+## Schedule Tasks
 
-You can schedule the task's execution time. Pass your task's name and your `Schedule` to FailsafeExecutor's `schedule` method. The task is then executed at the defined times.
+You can schedule a task's execution. Pass your task's name, your `Schedule` and your runnable to FailsafeExecutor's `schedule` method. The task is then executed at the planned execution times.
 
 ```java
-String taskId = failsafeExecutor.schedule("TaskName", schedule);
+String taskId = failsafeExecutor.schedule("TaskName", schedule, () -> {
+... // your business logic
+});
 ```
 
 With a `Schedule` you can either plan a one time execution in future or a recurring execution.
 
 * For a **one-time execution** just let method `nextExecutionTime` return `Optional.empty()` after your planned execution time has past.
 * A **recurring execution** requires method `nextExecutionTime` to always return the next planned time for execution. For example see [DailySchedule](src/main/java/os/failsafe/executor/schedule/DailySchedule.java).
+
+As before, make sure your business logic is **idempotent**, since it gets executed at least once per scheduled execution.
 
 ## Task failures
 

@@ -127,16 +127,10 @@ class FailsafeExecutorShould {
 
         final String scheduleTaskName = "ScheduledTestTask";
 
-        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
-
-
-        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
+        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
         assertListenerOnRegistration(scheduleTaskName, taskId, null);
 
         failsafeExecutor.start();
-
-        //systemClock.timeTravelBy(Duration.ofSeconds(1));
-        //assertListenerOnSucceeded(scheduleTaskName, taskId, null);
 
         systemClock.timeTravelBy(Duration.ofDays(1));
         assertListenerOnSucceeded(scheduleTaskName, taskId, null);
@@ -152,12 +146,11 @@ class FailsafeExecutorShould {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
-        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
 
-        failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
+        failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
 
         FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
-        assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(scheduleTaskName, dailySchedule));
+        assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
     }
 
     @Test
@@ -165,10 +158,9 @@ class FailsafeExecutorShould {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
-        failsafeExecutor.registerTask(scheduleTaskName, (parameter) -> log.info("Hello World"));
 
-        failsafeExecutor.schedule(scheduleTaskName, dailySchedule);
-        assertDoesNotThrow(() -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule));
+        failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
+        assertDoesNotThrow(() -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
     }
 
     @Test
