@@ -6,7 +6,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AwaitableTaskExecutionListenerShould {
 
@@ -52,6 +54,18 @@ class AwaitableTaskExecutionListenerShould {
         listener.failed("TaskName", "taskId", "parameter", new Exception());
         countDownLatch.await(1, TimeUnit.SECONDS);
     }
+
+    @Test
+    void return_all_failed_tasks_by_id() {
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
+        listener.registered("TaskName", "taskId", "parameter");
+        listener.failed("TaskName", "taskId", "parameter", new Exception());
+
+        assertTrue(listener.isAnyExecutionFailed());
+        assertEquals(1, listener.failedTasksByIds().size());
+        assertTrue(listener.failedTasksByIds().contains("taskId"));
+    }
+
 
     private void executeInThread(Runnable runnable) {
         new Thread(runnable).start();
