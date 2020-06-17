@@ -36,7 +36,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>0.9.0</version>
+    <version>0.10.0</version>
 </dependency>
 ```
 
@@ -176,8 +176,12 @@ With it all created tasks during the execution of your business logic are regist
 ```java
 awaitAllTasks(failsafeExecutor, () -> {
     ... // your business logic
+}, failedTasks -> {
+    ... // e.g. let your unit test case fail immediately
 });
 ```
+
+After all tasks finished execution, failed tasks are collected and are passed to the callback consumer function. E.g. with that call you can let your test case fail immediately.
 
 **Note:** In your business logic all tasks should be created transactionally with a single commit. Otherwise `awaitAllTasks` cannot exactly determine how many tasks belong to your block of business logic.
 If you do not follow this, a race condition occurs.
