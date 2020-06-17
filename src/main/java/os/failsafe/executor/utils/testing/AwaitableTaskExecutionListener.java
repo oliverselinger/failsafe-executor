@@ -2,7 +2,9 @@ package os.failsafe.executor.utils.testing;
 
 import os.failsafe.executor.TaskExecutionListener;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -13,6 +15,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     private final TimeUnit timeUnit;
     private final ConcurrentHashMap<String, String> taskMap = new ConcurrentHashMap<>();
     private final Phaser phaser = new Phaser();
+    private final List<String> failedTasksByIds = new CopyOnWriteArrayList<>();
 
     public AwaitableTaskExecutionListener(long timeout, TimeUnit timeUnit) {
         this.timeout = timeout;
@@ -34,6 +37,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
 
     @Override
     public void failed(String name, String taskId, String parameter, Exception exception) {
+        failedTasksByIds.add(taskId);
         arrive(taskId);
     }
 
@@ -54,4 +58,13 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
             throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished");
         }
     }
+
+    public boolean isAnyExecutionFailed() {
+        return !failedTasksByIds.isEmpty();
+    }
+
+    public List<String> failedTasksByIds() {
+        return failedTasksByIds;
+    }
+
 }

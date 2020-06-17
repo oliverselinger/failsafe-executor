@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -265,7 +266,7 @@ class FailsafeExecutorShould {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-        });
+        }, failedTasks -> fail(failedTasks.toString()));
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
         verify(taskExecutionListener, times(taskCount)).registered(eq(TASK_NAME), any(), any());

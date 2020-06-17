@@ -92,17 +92,31 @@ public class Task {
     }
 
     @Override
+    public String toString() {
+        return "Task{" +
+                "id='" + id + '\'' +
+                ", parameter='" + parameter + '\'' +
+                ", name='" + name + '\'' +
+                ", plannedExecutionTime=" + plannedExecutionTime +
+                ", lockTime=" + lockTime +
+                ", executionFailure=" + executionFailure +
+                ", version=" + version +
+                ", taskLifecycleListener=" + taskLifecycleListener +
+                '}';
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Task that = (Task) o;
-        return id.equals(that.id) &&
-                Objects.equals(parameter, that.parameter) &&
-                name.equals(that.name) &&
-                Objects.equals(plannedExecutionTime, that.plannedExecutionTime) &&
-                Objects.equals(lockTime, that.lockTime) &&
-                Objects.equals(executionFailure, that.executionFailure) &&
-                version.equals(that.version);
+        Task task = (Task) o;
+        return Objects.equals(id, task.id) &&
+                Objects.equals(parameter, task.parameter) &&
+                Objects.equals(name, task.name) &&
+                Objects.equals(plannedExecutionTime, task.plannedExecutionTime) &&
+                Objects.equals(lockTime, task.lockTime) &&
+                Objects.equals(executionFailure, task.executionFailure) &&
+                Objects.equals(version, task.version);
     }
 
     @Override
