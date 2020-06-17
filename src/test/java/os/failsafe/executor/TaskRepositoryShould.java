@@ -118,11 +118,11 @@ class TaskRepositoryShould {
 
     @Test
     void return_tasks_ordered_by_created_date() {
-        Task task1 = addTask();
-        systemClock.timeTravelBy(Duration.ofSeconds(1)); // next added task could get same timestamp because it is too fast
-        Task task2 = addTask();
-        systemClock.timeTravelBy(Duration.ofSeconds(1));
-        Task task3 = addTask();
+        Task task1 = addTask(systemClock.now());
+        systemClock.timeTravelBy(Duration.ofMillis(1)); // next added task could get same timestamp because it is too fast
+        Task task2 = addTask(systemClock.now());
+        systemClock.timeTravelBy(Duration.ofMillis(1));
+        Task task3 = addTask(systemClock.now());
 
         List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
@@ -257,8 +257,9 @@ class TaskRepositoryShould {
     void find_only_registered_tasks() {
         addTask();
         addTask();
-        taskRepository.add(new Task(UUID.randomUUID().toString(), taskParameter, "OtherTaskName", plannedExecutionTime));
+        addTask("OtherTaskName", plannedExecutionTime);
         processableTasks.add("Some other");
+
         List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
         assertEquals(tasks.size(), 2);
 
@@ -267,6 +268,7 @@ class TaskRepositoryShould {
 
         Set<String> unknownTasks = new HashSet<>();
         unknownTasks.add("UnknownTaskName");
+
         tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(unknownTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
         assertEquals(tasks.size(), 0);
 
@@ -279,6 +281,20 @@ class TaskRepositoryShould {
     }
 
     private Task addTask(String id) {
+        String taskName = this.taskName;
+        LocalDateTime plannedExecutionTime = this.plannedExecutionTime;
+        return addTask(id, taskName, plannedExecutionTime);
+    }
+
+    private Task addTask(LocalDateTime plannedExecutionTime) {
+        return addTask(UUID.randomUUID().toString(), taskName, plannedExecutionTime);
+    }
+
+    private Task addTask(String taskName, LocalDateTime plannedExecutionTime) {
+        return addTask(UUID.randomUUID().toString(), taskName, plannedExecutionTime);
+    }
+
+    private Task addTask(String id, String taskName, LocalDateTime plannedExecutionTime) {
         return taskRepository.add(new Task(id, taskParameter, taskName, plannedExecutionTime));
     }
 }

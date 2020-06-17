@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
 public class TestSystemClock implements SystemClock {
 
@@ -12,7 +13,7 @@ public class TestSystemClock implements SystemClock {
 
     @Override
     public LocalDateTime now() {
-        return LocalDateTime.now(clock).withNano(0);
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MILLIS);
     }
 
     public void timeTravelBy(Duration duration) {
