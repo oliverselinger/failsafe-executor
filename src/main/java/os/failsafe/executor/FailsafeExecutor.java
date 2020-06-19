@@ -75,6 +75,9 @@ public class FailsafeExecutor {
         this.pollingInterval = pollingInterval;
     }
 
+    /**
+     * Start execution of any submitted tasks.
+     */
     public void start() {
         boolean shouldStart = running.compareAndSet(false, true);
         if (!shouldStart) {
@@ -87,9 +90,17 @@ public class FailsafeExecutor {
     }
 
     private void executeNextTasks() {
-        for (;;) if (executeNextTask() == null) break;
+        for (; ; ) if (executeNextTask() == null) break;
     }
 
+    /**
+     * Initiates an orderly shutdown in which previously locked tasks are executed,
+     * but no new tasks will be locked.
+     *
+     * <p>Blocks until all locked tasks have completed execution,
+     * or the timeout of 15 seconds occurs, or the current thread is
+     * interrupted, whichever happens first.</p>
+     */
     public void stop() {
         this.workerPool.stop();
         shutdownAndAwaitTermination(executor);
@@ -97,8 +108,12 @@ public class FailsafeExecutor {
     }
 
     /**
-     * @param name unique name of the task that should be registered
-     * @param function the function that should should assigned to the unique name
+     * Registers the given function under the provided name.
+     *
+     * <p>Make sure your function is idempotent, since it gets executed at least once per task execution.</p>
+     *
+     * @param name     unique name of the task that should be registered
+     * @param function the function that should be assigned to the unique name, accepting a parameter.
      * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been registered already
      */
     public boolean registerTask(String name, Consumer<String> function) {
@@ -109,23 +124,75 @@ public class FailsafeExecutor {
         return true;
     }
 
+    /**
+     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
+     *
+     * @param taskName  the name of the task that should be executed
+     * @param parameter the parameter that should be passed to the function
+     * @return taskId
+     */
     public String execute(String taskName, String parameter) {
         return database.connect(connection -> execute(connection, taskName, parameter));
     }
 
+    /**
+     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * @param connection the JDBC connection used to persist the task in the database
+     * @param taskName   the name of the task that should be executed
+     * @param parameter  the parameter that should be passed to the function
+     * @return taskId
+     */
     public String execute(Connection connection, String taskName, String parameter) {
         Task taskInstance = new Task(UUID.randomUUID().toString(), parameter, taskName, systemClock.now());
         return enqueue(connection, taskInstance);
     }
 
-    public String schedule(String taskName, Schedule schedule) {
-        return database.connect(connection -> schedule(connection, taskName, schedule));
+    /**
+     * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
+     * defined by the schedule.
+     *
+     * <p>With a {@link Schedule} you can either plan a one time execution in future or a recurring execution.</p>
+     *
+     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
+     *
+     * @param taskName the name of the task that should be executed
+     * @param schedule the schedule that defines the planned execution times
+     * @param runnable the runnable
+     * @return taskId
+     */
+    public String schedule(String taskName, Schedule schedule, Runnable runnable) {
+        return database.connect(connection -> schedule(connection, taskName, schedule, runnable));
     }
 
-    public String schedule(Connection connection, String taskName, Schedule schedule) {
+    /**
+     * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
+     * defined by the schedule.
+     *
+     * <p>With a {@link Schedule} you can either plan a one time execution in future or a recurring execution.</p>
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
+     *
+     * @param connection the JDBC connection used to persist the task in the database
+     * @param taskName   the name of the task that should be executed
+     * @param schedule   the schedule that defines the planned execution times
+     * @return taskId
+     */
+    public String schedule(Connection connection, String taskName, Schedule schedule, Runnable runnable) {
         if (!scheduleByName.containsKey(taskName)) {
             scheduleByName.put(taskName, schedule);
         }
+
+        if (!tasksByName.containsKey(taskName)) {
+            tasksByName.put(taskName, ignore -> runnable.run());
+        }
+
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
@@ -133,30 +200,68 @@ public class FailsafeExecutor {
         return enqueue(connection, task);
     }
 
+    /**
+     * Returns all persisted tasks.
+     *
+     * @return list of all persisted tasks
+     */
     public List<Task> allTasks() {
         return taskRepository.findAll();
     }
 
+    /**
+     * Returns a single task.
+     *
+     * @param taskId the id of the task
+     * @return the task
+     */
     public Optional<Task> task(String taskId) {
         return Optional.ofNullable(taskRepository.findOne(taskId));
     }
 
+    /**
+     * Returns all tasks that failed during execution.
+     *
+     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
+     *
+     * @return list of all failed tasks
+     */
     public List<Task> failedTasks() {
         return taskRepository.findAllFailedTasks();
     }
 
+    /**
+     * Registers a listener to observe task execution.
+     *
+     * @param listener the listener to register
+     */
     public void subscribe(TaskExecutionListener listener) {
         listeners.add(listener);
     }
 
+    /**
+     * Removes the given listener from the list of observers.
+     *
+     * @param listener the listener to remove
+     */
     public void unsubscribe(TaskExecutionListener listener) {
         listeners.remove(listener);
     }
 
+    /**
+     * Returns if last run of {@link FailsafeExecutor} was successful.
+     *
+     * @return true if no exception occured during last run of {@link FailsafeExecutor}
+     */
     public boolean isLastRunFailed() {
         return lastRunException != null;
     }
 
+    /**
+     * Returns the exception of last run of {@link FailsafeExecutor} if an error occured.
+     *
+     * @return the exception of last run or null if last run was successful.
+     */
     public Exception lastRunException() {
         return lastRunException;
     }
