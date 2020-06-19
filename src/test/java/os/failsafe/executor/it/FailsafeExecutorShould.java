@@ -118,7 +118,36 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void execute_a_daily_scheduled_task_every_day() {
+    void defer_task_execution_to_the_planned_time() {
+        failsafeExecutor.start();
+
+        LocalDateTime plannedExecutionTime = LocalDateTime.of(2020, 5, 1, 10, 0);
+        systemClock.fixedTime(plannedExecutionTime.minusDays(1));
+
+        String taskId = failsafeExecutor.defer(TASK_NAME, parameter, plannedExecutionTime);
+        assertListenerOnRegistration(TASK_NAME, taskId, parameter);
+
+        verify(taskExecutionListener, times(0)).succeeded(TASK_NAME, taskId, parameter);
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        assertListenerOnSucceeded(TASK_NAME, taskId, parameter);
+
+        assertEquals(0, failsafeExecutor.allTasks().size());
+    }
+
+    @Test
+    void not_throw_an_exception_if_defered_task_is_already_existing() {
+        String taskId = "taskId";
+        String actualTaskId = failsafeExecutor.defer(taskId, TASK_NAME, parameter, systemClock.now());
+
+        assertDoesNotThrow(() -> failsafeExecutor.defer(taskId, TASK_NAME, parameter, systemClock.now()));
+
+        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(taskId, actualTaskId);
+    }
+
+    @Test
+    void schedule_execution_a_daily_task_every_day() {
         LocalTime dailyTime = LocalTime.of(1, 0);
 
         LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
@@ -148,10 +177,13 @@ class FailsafeExecutorShould {
 
         final String scheduleTaskName = "ScheduledTestTask";
 
-        failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
+        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
 
         FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
+
+        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(scheduleTaskName, taskId);
     }
 
     @Test
@@ -160,8 +192,11 @@ class FailsafeExecutorShould {
 
         final String scheduleTaskName = "ScheduledTestTask";
 
-        failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
+        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
         assertDoesNotThrow(() -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
+
+        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(scheduleTaskName, taskId);
     }
 
     @Test
