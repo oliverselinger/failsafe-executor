@@ -127,16 +127,20 @@ public class FailsafeExecutor {
     /**
      * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
      *
+     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
+     *
      * @param taskName  the name of the task that should be executed
      * @param parameter the parameter that should be passed to the function
      * @return taskId
      */
     public String execute(String taskName, String parameter) {
-        return database.connect(connection -> execute(connection, taskName, parameter));
+        return execute(UUID.randomUUID().toString(), taskName, parameter);
     }
 
     /**
      * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
+     *
+     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
      *
      * <p>The provided connection is used for persisting the task in the database. Neither commit
      * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
@@ -147,7 +151,92 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String execute(Connection connection, String taskName, String parameter) {
-        Task taskInstance = new Task(UUID.randomUUID().toString(), parameter, taskName, systemClock.now());
+        return execute(connection, UUID.randomUUID().toString(), taskName, parameter);
+    }
+
+    /**
+     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * @param taskId    the id of the task used as unique constraint in database
+     * @param taskName  the name of the task that should be executed
+     * @param parameter the parameter that should be passed to the function
+     * @return taskId
+     */
+    public String execute(String taskId, String taskName, String parameter) {
+        return database.connect(connection -> execute(connection, taskId, taskName, parameter));
+    }
+
+    /**
+     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * @param connection the JDBC connection used to persist the task in the database
+     * @param taskId     the id of the task used as unique constraint in database
+     * @param taskName   the name of the task that should be executed
+     * @param parameter  the parameter that should be passed to the function
+     * @return taskId
+     */
+    public String execute(Connection connection, String taskId, String taskName, String parameter) {
+        Task taskInstance = new Task(taskId, parameter, taskName, systemClock.now());
+        return enqueue(connection, taskInstance);
+    }
+
+    /**
+     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
+     *
+     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
+     *
+     * @param taskName             the name of the task that should be executed
+     * @param parameter            the parameter that should be passed to the function
+     * @param plannedExecutionTime the time when the task should be executed
+     * @return taskId
+     */
+    public String defer(String taskName, String parameter, LocalDateTime plannedExecutionTime) {
+        return defer(UUID.randomUUID().toString(), taskName, parameter, plannedExecutionTime);
+    }
+
+    /**
+     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * @param taskId               the id of the task used as unique constraint in database
+     * @param taskName             the name of the task that should be executed
+     * @param parameter            the parameter that should be passed to the function
+     * @param plannedExecutionTime the time when the task should be executed
+     * @return taskId
+     */
+    public String defer(String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
+        return database.connect(connection -> defer(connection, taskId, taskName, parameter, plannedExecutionTime));
+    }
+
+    /**
+     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * @param connection           the JDBC connection used to persist the task in the database
+     * @param taskId               the id of the task used as unique constraint in database
+     * @param taskName             the name of the task that should be executed
+     * @param parameter            the parameter that should be passed to the function
+     * @param plannedExecutionTime the time when the task should be executed
+     * @return taskId
+     */
+    public String defer(Connection connection, String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
+        Task taskInstance = new Task(taskId, parameter, taskName, plannedExecutionTime);
         return enqueue(connection, taskInstance);
     }
 
@@ -155,7 +244,7 @@ public class FailsafeExecutor {
      * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
      * defined by the schedule.
      *
-     * <p>With a {@link Schedule} you can either plan a one time execution in future or a recurring execution.</p>
+     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
      *
      * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
      *
@@ -172,12 +261,12 @@ public class FailsafeExecutor {
      * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
      * defined by the schedule.
      *
-     * <p>With a {@link Schedule} you can either plan a one time execution in future or a recurring execution.</p>
+     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
+     *
+     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
      *
      * <p>The provided connection is used for persisting the task in the database. Neither commit
      * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
      *
      * @param connection the JDBC connection used to persist the task in the database
      * @param taskName   the name of the task that should be executed
@@ -196,7 +285,7 @@ public class FailsafeExecutor {
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
-        Task task = new Task(UUID.randomUUID().toString(), null, taskName, plannedExecutionTime);
+        Task task = new Task(taskName, null, taskName, plannedExecutionTime);
         return enqueue(connection, task);
     }
 
