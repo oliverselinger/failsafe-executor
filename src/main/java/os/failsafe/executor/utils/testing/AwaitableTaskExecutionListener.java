@@ -23,11 +23,13 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void registered(String name, String taskId, String parameter) {
-        taskMap.computeIfAbsent(taskId, key -> {
-            phaser.register();
-            return taskId;
-        });
+    public void persisted(String name, String taskId, String parameter) {
+        register(taskId);
+    }
+
+    @Override
+    public void retrying(String name, String taskId, String parameter) {
+        register(taskId);
     }
 
     @Override
@@ -39,6 +41,13 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     public void failed(String name, String taskId, String parameter, Exception exception) {
         failedTasksByIds.add(taskId);
         arrive(taskId);
+    }
+
+    private void register(String taskId) {
+        taskMap.computeIfAbsent(taskId, key -> {
+            phaser.register();
+            return taskId;
+        });
     }
 
     private void arrive(String taskId) {

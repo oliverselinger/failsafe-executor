@@ -32,9 +32,17 @@ class AwaitableTaskExecutionListenerShould {
     }
 
     @Test
-    void throw_exception_on_timeout() {
+    void block_on_persisted_task_and_throw_timeout() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.NANOSECONDS);
-        listener.registered("TaskName", "taskId", "parameter");
+        listener.persisted("TaskName", "taskId", "parameter");
+
+        assertThrows(RuntimeException.class, listener::awaitAllTasks);
+    }
+
+    @Test
+    void block_on_retrying_task_and_throw_timeout() {
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.NANOSECONDS);
+        listener.retrying("TaskName", "taskId", "parameter");
 
         assertThrows(RuntimeException.class, listener::awaitAllTasks);
     }
@@ -42,7 +50,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void release_block_when_task_fails() throws InterruptedException {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
-        listener.registered("TaskName", "taskId", "parameter");
+        listener.persisted("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -56,9 +64,25 @@ class AwaitableTaskExecutionListenerShould {
     }
 
     @Test
+    void release_block_when_retried_task_succeeds() throws InterruptedException {
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
+        listener.retrying("TaskName", "taskId", "parameter");
+
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        executeInThread(() -> {
+            listener.awaitAllTasks();
+            countDownLatch.countDown();
+        });
+
+        listener.succeeded("TaskName", "taskId", "parameter");
+        countDownLatch.await(1, TimeUnit.SECONDS);
+    }
+
+    @Test
     void return_all_failed_tasks_by_id() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
-        listener.registered("TaskName", "taskId", "parameter");
+        listener.persisted("TaskName", "taskId", "parameter");
         listener.failed("TaskName", "taskId", "parameter", new Exception());
 
         assertTrue(listener.isAnyExecutionFailed());

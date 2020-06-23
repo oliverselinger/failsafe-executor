@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-class TaskRepository implements TaskLifecycleListener {
+class TaskRepository {
 
     private final Database database;
     private final SystemClock systemClock;
@@ -121,7 +121,7 @@ class TaskRepository implements TaskLifecycleListener {
                 toLock.getVersion());
 
         if (updateCount == 1) {
-            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1, this);
+            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1);
         }
 
         return null;
@@ -238,8 +238,7 @@ class TaskRepository implements TaskLifecycleListener {
                     rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                     lockTime != null ? lockTime.toLocalDateTime() : null,
                     mapToExecutionFailure(rs),
-                    rs.getLong("VERSION"),
-                    this);
+                    rs.getLong("VERSION"));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -259,15 +258,5 @@ class TaskRepository implements TaskLifecycleListener {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    @Override
-    public void cancel(Task toCancel) {
-        delete(toCancel);
-    }
-
-    @Override
-    public void retry(Task toRetry) {
-        deleteFailure(toRetry);
     }
 }

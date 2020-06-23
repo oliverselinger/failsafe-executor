@@ -106,7 +106,7 @@ class FailsafeExecutorShould {
     @Test
     void notify_listeners_about_task_registration() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnRegistration(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
     }
 
     @Test
@@ -125,7 +125,7 @@ class FailsafeExecutorShould {
         systemClock.fixedTime(plannedExecutionTime.minusDays(1));
 
         String taskId = failsafeExecutor.defer(TASK_NAME, parameter, plannedExecutionTime);
-        assertListenerOnRegistration(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
 
         verify(taskExecutionListener, times(0)).succeeded(TASK_NAME, taskId, parameter);
 
@@ -158,7 +158,7 @@ class FailsafeExecutorShould {
         final String scheduleTaskName = "ScheduledTestTask";
 
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
-        assertListenerOnRegistration(scheduleTaskName, taskId, null);
+        assertListenerOnPersisted(scheduleTaskName, taskId, null);
 
         failsafeExecutor.start();
 
@@ -204,7 +204,7 @@ class FailsafeExecutorShould {
         executionShouldFail = true;
 
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnRegistration(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
 
         failsafeExecutor.start();
 
@@ -219,8 +219,9 @@ class FailsafeExecutorShould {
 
         executionShouldFail = false;
 
-        failedTask.retry();
+        failsafeExecutor.retry(failedTask);
 
+        assertListenerOnRetrying(TASK_NAME, taskId, parameter);
         assertListenerOnSucceeded(TASK_NAME, taskId, parameter);
 
         verifyNoMoreInteractions(taskExecutionListener);
@@ -231,7 +232,7 @@ class FailsafeExecutorShould {
         executionShouldFail = true;
 
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnRegistration(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
 
         failsafeExecutor.start();
 
@@ -242,7 +243,7 @@ class FailsafeExecutorShould {
 
         Task failedTask = failedTasks.get(0);
 
-        failedTask.cancel();
+        failsafeExecutor.cancel(failedTask);
 
         verifyNoMoreInteractions(taskExecutionListener);
         assertTrue(failsafeExecutor.allTasks().isEmpty());
@@ -296,10 +297,29 @@ class FailsafeExecutorShould {
         }, failedTasks -> fail(failedTasks.toString()));
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
-        verify(taskExecutionListener, times(taskCount)).registered(eq(TASK_NAME), any(), any());
+        verify(taskExecutionListener, times(taskCount)).persisted(eq(TASK_NAME), any(), any());
         verify(taskExecutionListener, times(taskCount)).succeeded(eq(TASK_NAME), any(), parameterCaptor.capture());
 
         assertTrue(parameterCaptor.getAllValues().containsAll(parameters));
+    }
+
+    @Test
+    void retry_a_failed_task_on_demand_and_wait_for_its_execution() {
+        executionShouldFail = true;
+        failsafeExecutor.start();
+
+        awaitAllTasks(failsafeExecutor, () -> failsafeExecutor.execute(TASK_NAME, parameter), failures -> {
+            assertEquals(1, failures.size());
+            assertEquals(TASK_NAME, failures.get(0).getName());
+            assertEquals(parameter, failures.get(0).getParameter());
+        });
+
+        executionShouldFail = false;
+        Task failedTask = failsafeExecutor.failedTasks().get(0);
+
+        awaitAllTasks(failsafeExecutor, () -> failsafeExecutor.retry(failedTask), failures -> fail());
+
+        assertTrue(failsafeExecutor.allTasks().isEmpty());
     }
 
     private Connection createFailingJdbcConnection(RuntimeException e) throws SQLException {
@@ -309,11 +329,15 @@ class FailsafeExecutorShould {
         return connection;
     }
 
-    private void assertListenerOnSucceeded(String name, String taskId, String parameter) {
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(name, taskId, parameter);
+    private void assertListenerOnPersisted(String name, String taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).persisted(name, taskId, parameter);
     }
 
-    private void assertListenerOnRegistration(String name, String taskId, String parameter) {
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).registered(name, taskId, parameter);
+    private void assertListenerOnRetrying(String name, String taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).retrying(name, taskId, parameter);
+    }
+
+    private void assertListenerOnSucceeded(String name, String taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(name, taskId, parameter);
     }
 }

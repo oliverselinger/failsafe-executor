@@ -112,9 +112,9 @@ public class FailsafeExecutor {
      *
      * <p>Make sure your function is idempotent, since it gets executed at least once per task execution.</p>
      *
-     * @param name     unique name of the task that should be registered
+     * @param name     unique name of the task that should be persisted
      * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been registered already
+     * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been persisted already
      */
     public boolean registerTask(String name, Consumer<String> function) {
         if (tasksByName.containsKey(name)) {
@@ -319,6 +319,25 @@ public class FailsafeExecutor {
         return taskRepository.findAllFailedTasks();
     }
 
+    public boolean retry(Task failedTask) {
+        if (failedTask.isRetryable()) {
+            taskRepository.deleteFailure(failedTask);
+            listeners.forEach(listener -> listener.retrying(failedTask.getName(), failedTask.getId(), failedTask.getParameter()));
+            return true;
+        }
+
+        return false;
+    }
+
+    public boolean cancel(Task failedTask) {
+        if (failedTask.isCancelable()) {
+            taskRepository.delete(failedTask);
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * Registers a listener to observe task execution.
      *
@@ -397,7 +416,6 @@ public class FailsafeExecutor {
     }
 
     private void notifyRegistration(Task task, String taskId) {
-        listeners.forEach(listener -> listener.registered(task.getName(), taskId, task.getParameter()));
+        listeners.forEach(listener -> listener.persisted(task.getName(), taskId, task.getParameter()));
     }
-
 }

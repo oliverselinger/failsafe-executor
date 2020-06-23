@@ -12,13 +12,12 @@ public class Task {
     private final LocalDateTime lockTime;
     private final ExecutionFailure executionFailure;
     private final Long version;
-    private final TaskLifecycleListener taskLifecycleListener;
 
     public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
-        this(id, parameter, name, plannedExecutionTime, null, null, 0L, null);
+        this(id, parameter, name, plannedExecutionTime, null, null, 0L);
     }
 
-    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version, TaskLifecycleListener taskLifecycleListener) {
+    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
@@ -26,7 +25,6 @@ public class Task {
         this.lockTime = lockTime;
         this.executionFailure = executionFailure;
         this.version = version;
-        this.taskLifecycleListener = taskLifecycleListener;
     }
 
     public String getId() {
@@ -69,26 +67,8 @@ public class Task {
         return !isLocked();
     }
 
-    public boolean cancel() {
-        if (isCancelable()) {
-            taskLifecycleListener.cancel(this);
-            return true;
-        }
-
-        return false;
-    }
-
     public boolean isRetryable() {
         return isExecutionFailed();
-    }
-
-    public boolean retry() {
-        if (isRetryable()) {
-            taskLifecycleListener.retry(this);
-            return true;
-        }
-
-        return false;
     }
 
     @Override
@@ -101,7 +81,6 @@ public class Task {
                 ", lockTime=" + lockTime +
                 ", executionFailure=" + executionFailure +
                 ", version=" + version +
-                ", taskLifecycleListener=" + taskLifecycleListener +
                 '}';
     }
 

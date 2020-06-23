@@ -1,7 +1,9 @@
 package os.failsafe.executor;
 
 public interface TaskExecutionListener {
-    void registered(String name, String id, String parameter);
+    void persisted(String name, String id, String parameter);
+
+    void retrying(String name, String id, String parameter);
 
     void succeeded(String name, String id, String parameter);
 

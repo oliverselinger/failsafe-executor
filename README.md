@@ -119,13 +119,13 @@ List<Task> failedTasks = failsafeExecutor.failedTasks();
 Two options are offered to handle a failed task. Either retry it:
 
 ```java
-failedTask.retry();
+failsafeExecutor.retry(failedTask);
 ```
 
 Or cancel it:
 
 ```java
-failedTask.cancel();
+failsafeExecutor.cancel(failedTask);
 ```
 
 Cancel deletes the task from database.
@@ -138,7 +138,8 @@ The result of an execution can be observed by subscribing a listener at the `Fai
 failsafeExecutor.subscribe(executionListener);
 ```
 
-The `registered` method gets called after task is persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
+The `persisted` method gets called after a task is persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
+A retry of a failed task causes a call of method `retrying`.
 
 ## Health check
 
