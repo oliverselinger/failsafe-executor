@@ -30,14 +30,15 @@ class Execution {
         try {
             runnable.run();
 
-            notifySuccess();
-
             Optional<LocalDateTime> nextExecutionTime = schedule.nextExecutionTime(systemClock.now());
             if (nextExecutionTime.isPresent()) {
                 taskRepository.unlock(task, nextExecutionTime.get());
             } else {
                 taskRepository.delete(task);
             }
+
+            notifySuccess();
+
         } catch (Exception exception) {
             taskRepository.saveFailure(task, exception);
 
