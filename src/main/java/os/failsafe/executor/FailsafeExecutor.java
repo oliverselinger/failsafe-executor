@@ -25,8 +25,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static os.failsafe.executor.utils.ExecutorServiceUtil.shutdownAndAwaitTermination;
-
 public class FailsafeExecutor {
 
     public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
@@ -90,7 +88,15 @@ public class FailsafeExecutor {
     }
 
     private void executeNextTasks() {
-        for (; ; ) if (executeNextTask() == null) break;
+        for (; ; ) {
+            if (executeNextTask() == null) {
+                break;
+            }
+
+            if (Thread.interrupted()) {
+                break;
+            }
+        }
     }
 
     /**
@@ -98,12 +104,23 @@ public class FailsafeExecutor {
      * but no new tasks will be locked.
      *
      * <p>Blocks until all locked tasks have completed execution,
-     * or the timeout of 15 seconds occurs, or the current thread is
+     * or the provided timeout occurs, or the current thread is
      * interrupted, whichever happens first.</p>
+     *
+     * @param timeout  maximum time to block until all locked tasks have completed execution
+     * @param timeUnit the unit of the given timeout
      */
-    public void stop() {
-        this.workerPool.stop();
-        shutdownAndAwaitTermination(executor);
+    public void stop(long timeout, TimeUnit timeUnit) {
+        executor.shutdownNow();
+        try {
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            // ignore
+        }
+
+        workerPool.stop(timeout, timeUnit);
+
         running.set(false);
     }
 

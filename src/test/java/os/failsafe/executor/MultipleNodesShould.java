@@ -69,8 +69,8 @@ class MultipleNodesShould {
 
     @AfterEach
     void stop() {
-        executorA.stop();
-        executorB.stop();
+        executorA.stop(15, TimeUnit.SECONDS);
+        executorB.stop(15, TimeUnit.SECONDS);
     }
 
     @Test

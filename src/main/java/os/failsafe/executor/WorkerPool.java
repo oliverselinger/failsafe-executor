@@ -5,9 +5,8 @@ import os.failsafe.executor.utils.NamedThreadFactory;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static os.failsafe.executor.utils.ExecutorServiceUtil.shutdownAndAwaitTermination;
 
 class WorkerPool {
 
@@ -35,8 +34,14 @@ class WorkerPool {
         return !(idleWorkerCount.get() > 0);
     }
 
-    public void stop() {
-        shutdownAndAwaitTermination(workers);
+    void stop(long timeout, TimeUnit timeUnit) {
+        workers.shutdown();
+        try {
+            workers.awaitTermination(timeout, timeUnit);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            // ignore
+        }
     }
 
 }
