@@ -37,7 +37,7 @@ class PersistentQueue {
             return null;
         }
 
-        if (Thread.interrupted()) {
+        if (Thread.currentThread().isInterrupted()) {
             return null;
         }
 
@@ -51,7 +51,7 @@ class PersistentQueue {
                 return locked.get();
             }
 
-            if (Thread.interrupted()) {
+            if (Thread.currentThread().isInterrupted()) {
                 break;
             }
         } while (!(nextTasksToLock = findNextForExecution(processableTasks)).isEmpty());

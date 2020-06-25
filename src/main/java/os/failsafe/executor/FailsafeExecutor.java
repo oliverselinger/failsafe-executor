@@ -93,7 +93,7 @@ public class FailsafeExecutor {
                 break;
             }
 
-            if (Thread.interrupted()) {
+            if (Thread.currentThread().isInterrupted()) {
                 break;
             }
         }
