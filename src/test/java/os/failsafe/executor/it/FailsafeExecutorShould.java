@@ -85,7 +85,7 @@ class FailsafeExecutorShould {
 
     @AfterEach
     void stop() {
-        failsafeExecutor.stop();
+        failsafeExecutor.stop(15, TimeUnit.SECONDS);
     }
 
     @Test
@@ -271,7 +271,7 @@ class FailsafeExecutorShould {
         failsafeExecutor.start();
 
         verify(connection, timeout(TimeUnit.SECONDS.toMillis(50))).prepareStatement(any());
-        failsafeExecutor.stop();
+        failsafeExecutor.stop(5, TimeUnit.SECONDS);
 
         assertTrue(failsafeExecutor.isLastRunFailed());
         assertEquals(connectionException, failsafeExecutor.lastRunException());

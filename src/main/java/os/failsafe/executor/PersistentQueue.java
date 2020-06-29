@@ -37,6 +37,10 @@ class PersistentQueue {
             return null;
         }
 
+        if (Thread.currentThread().isInterrupted()) {
+            return null;
+        }
+
         do {
             Optional<Task> locked = nextTasksToLock.stream()
                     .map(taskRepository::lock)
@@ -45,6 +49,10 @@ class PersistentQueue {
 
             if (locked.isPresent()) {
                 return locked.get();
+            }
+
+            if (Thread.currentThread().isInterrupted()) {
+                break;
             }
         } while (!(nextTasksToLock = findNextForExecution(processableTasks)).isEmpty());
 

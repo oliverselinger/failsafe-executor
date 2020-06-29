@@ -163,7 +163,7 @@ It is important to shutdown the FailsafeExecutor properly by calling the `stop` 
 Runtime.getRuntime().addShutdownHook(new Thread() {
     @Override
     public void run() {
-        failsafeExecutor.stop();
+        failsafeExecutor.stop(15, TimeUnit.SECONDS);
     }
 });
 ```
