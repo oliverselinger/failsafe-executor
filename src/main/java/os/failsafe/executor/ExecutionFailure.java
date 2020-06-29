@@ -25,4 +25,13 @@ public class ExecutionFailure {
     public String getStackTrace() {
         return stackTrace;
     }
+
+    @Override
+    public String toString() {
+        return "ExecutionFailure{" +
+                "failTime=" + failTime +
+                ", exceptionMessage='" + exceptionMessage + '\'' +
+                ", stackTrace='" + stackTrace + '\'' +
+                '}';
+    }
 }

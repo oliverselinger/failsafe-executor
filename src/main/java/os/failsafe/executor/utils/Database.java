@@ -18,14 +18,18 @@ public class Database {
     private final boolean h2Database;
     private final DataSource dataSource;
 
-    public Database(DataSource dataSource) {
+    public Database(DataSource dataSource) throws SQLException {
         this.dataSource = dataSource;
 
         String databaseName = determineDatabase();
-        this.oracleDatabase = databaseName.equalsIgnoreCase("Oracle");
-        this.mysqlDatabase = databaseName.equalsIgnoreCase("MySQL");
-        this.postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
-        this.h2Database = databaseName.equalsIgnoreCase("H2");
+        oracleDatabase = databaseName.equalsIgnoreCase("Oracle");
+        mysqlDatabase = databaseName.equalsIgnoreCase("MySQL");
+        postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
+        h2Database = databaseName.equalsIgnoreCase("H2");
+
+        if (!oracleDatabase && !mysqlDatabase && !postgresDatabase && !h2Database) {
+            throw new RuntimeException("Unsupported database");
+        }
     }
 
     public boolean isOracle() {
@@ -45,10 +49,10 @@ public class Database {
     }
 
     public <T> T selectOne(String sql,
-                           Function<ResultSet, T> mapper,
+                           RowMapper<T> rowMapper,
                            Object... params) {
         return connect(connection -> {
-            List<T> selection = selectAll(connection, sql, mapper, params);
+            List<T> selection = selectAll(connection, sql, rowMapper, params);
 
             if (selection.isEmpty()) {
                 return null;
@@ -62,11 +66,11 @@ public class Database {
         });
     }
 
-    public <T> List<T> selectAll(String sql, Function<ResultSet, T> mapper, Object[] params) {
-        return connect(connection -> selectAll(connection, sql, mapper, params));
+    public <T> List<T> selectAll(String sql, RowMapper<T> rowMapper, Object[] params) {
+        return connect(connection -> selectAll(connection, sql, rowMapper, params));
     }
 
-    public <T> List<T> selectAll(Connection connection, String sql, Function<ResultSet, T> resultSetConsumer, Object[] params) {
+    public <T> List<T> selectAll(Connection connection, String sql, RowMapper<T> rowMapper, Object[] params) {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int cnt = 0;
@@ -80,7 +84,7 @@ public class Database {
             try (ResultSet rs = ps.executeQuery()) {
                 List<T> result = new ArrayList<>();
                 while (rs.next()) {
-                    result.add(resultSetConsumer.apply(rs));
+                    result.add(rowMapper.map(rs));
                 }
                 return result;
             }
@@ -93,12 +97,6 @@ public class Database {
                        String sql,
                        Object... params) {
         executeUpdate(connection, sql, params);
-    }
-
-    public int update(Connection connection,
-                      String sql,
-                      Object... params) {
-        return executeUpdate(connection, sql, params);
     }
 
     public int update(String sql,
@@ -151,11 +149,13 @@ public class Database {
         }
     }
 
-    private String determineDatabase() {
+    private String determineDatabase() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             return connection.getMetaData().getDatabaseProductName();
-        } catch (SQLException e) {
-            throw new RuntimeException("Unable to determine database product name", e);
         }
+    }
+
+    public interface RowMapper<R> {
+        R map(ResultSet rs) throws SQLException;
     }
 }

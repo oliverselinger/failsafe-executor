@@ -37,8 +37,6 @@ class TaskRepository {
             addTaskInMysql(connection, task);
         } else if (database.isPostgres()) {
             addTaskInPostgres(connection, task);
-        } else {
-            throw new RuntimeException("Unsupported database");
         }
 
         return new Task(task.getId(), task.getParameter(), task.getName(), task.getPlannedExecutionTime());
@@ -103,10 +101,6 @@ class TaskRepository {
     }
 
     Task lock(Task toLock) {
-        if (toLock.isLocked()) {
-            return toLock;
-        }
-
         String updateStmt = "" +
                 "UPDATE FAILSAFE_TASK" +
                 " SET" +
@@ -128,10 +122,6 @@ class TaskRepository {
     }
 
     void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
-        if (!toUnLock.isLocked()) {
-            return;
-        }
-
         String updateStmt = "" +
                 "UPDATE FAILSAFE_TASK" +
                 " SET" +
@@ -150,7 +140,7 @@ class TaskRepository {
     }
 
     List<Task> findAllNotLockedOrderedByCreatedDate(Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
-        if (processableTasks == null || processableTasks.size() == 0) {
+        if (processableTasks.isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -174,7 +164,7 @@ class TaskRepository {
         params.addAll(processableTasks);
         params.add(limit);
 
-        return database.selectAll(selectStmt, this::mapToPersistentTask,params.toArray());
+        return database.selectAll(selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
     void saveFailure(Task failed, Exception exception) {
@@ -227,36 +217,28 @@ class TaskRepository {
         }
     }
 
-    Task mapToPersistentTask(ResultSet rs) {
-        try {
-            Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
+    Task mapToPersistentTask(ResultSet rs) throws SQLException {
+        Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
 
-            return new Task(
-                    rs.getString("ID"),
-                    rs.getString("PARAMETER"),
-                    rs.getString("NAME"),
-                    rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
-                    lockTime != null ? lockTime.toLocalDateTime() : null,
-                    mapToExecutionFailure(rs),
-                    rs.getLong("VERSION"));
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        return new Task(
+                rs.getString("ID"),
+                rs.getString("PARAMETER"),
+                rs.getString("NAME"),
+                rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
+                lockTime != null ? lockTime.toLocalDateTime() : null,
+                mapToExecutionFailure(rs),
+                rs.getLong("VERSION"));
     }
 
-    ExecutionFailure mapToExecutionFailure(ResultSet rs) {
-        try {
-            Timestamp failTime = rs.getTimestamp("FAIL_TIME");
-            String exceptionMessage = rs.getString("EXCEPTION_MESSAGE");
-            String stackTrace = rs.getString("STACK_TRACE");
+    ExecutionFailure mapToExecutionFailure(ResultSet rs) throws SQLException {
+        Timestamp failTime = rs.getTimestamp("FAIL_TIME");
+        String exceptionMessage = rs.getString("EXCEPTION_MESSAGE");
+        String stackTrace = rs.getString("STACK_TRACE");
 
-            if (failTime == null) {
-                return null;
-            }
-
-            return new ExecutionFailure(failTime.toLocalDateTime(), exceptionMessage, stackTrace);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        if (failTime == null) {
+            return null;
         }
+
+        return new ExecutionFailure(failTime.toLocalDateTime(), exceptionMessage, stackTrace);
     }
 }

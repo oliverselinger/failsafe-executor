@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class TaskShould {
@@ -20,6 +21,15 @@ class TaskShould {
         Task task = new Task("id", "parameter", "name", LocalDateTime.now(), null, null, 0L);
 
         assertFalse(task.isRetryable());
+    }
+
+    @Test
+    void print_its_internal_state() {
+        LocalDateTime dateTime = LocalDateTime.of(2020, 5, 5, 10, 30);
+        Task task = new Task("id", "parameter", "name", dateTime, dateTime, new ExecutionFailure(dateTime, "exceptionMsg", "stackTrace"), 0L);
+
+        assertEquals("Task{id='id', parameter='parameter', name='name', plannedExecutionTime=2020-05-05T10:30, lockTime=2020-05-05T10:30, executionFailure=ExecutionFailure{failTime=2020-05-05T10:30, exceptionMessage='exceptionMsg', stackTrace='stackTrace'}, version=0}",
+                task.toString());
     }
 
 }

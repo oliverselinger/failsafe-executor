@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.utils.Database;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 
 public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
 
@@ -22,7 +23,7 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
     private HikariDataSource dataSource;
 
     @Override
-    public void beforeAll(ExtensionContext extensionContext) {
+    public void beforeAll(ExtensionContext extensionContext) throws SQLException {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(databaseTestConfig.jdbcUrl());
         config.setDriverClassName(databaseTestConfig.driver());

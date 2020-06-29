@@ -12,6 +12,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -45,7 +46,7 @@ class MultipleNodesShould {
     Consumer<String> task2;
 
     @BeforeEach
-    void init() {
+    void init() throws SQLException {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 

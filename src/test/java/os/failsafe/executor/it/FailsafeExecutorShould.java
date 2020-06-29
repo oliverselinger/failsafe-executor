@@ -65,7 +65,7 @@ class FailsafeExecutorShould {
     private final RuntimeException runtimeException = new RuntimeException();
 
     @BeforeEach
-    void init() {
+    void init() throws SQLException {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
@@ -172,7 +172,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void not_throw_an_exception_if_scheduled_task_already_exists_in_db() {
+    void not_throw_an_exception_if_scheduled_task_already_exists_in_db() throws SQLException {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
