@@ -11,8 +11,8 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 ## Features
 
 * **Failsafe** tasks. Requires only one database-table for persistence.
-* **Reliable** execution. Guarantees at least once execution of a submitted tasks
-* **Multi-node compatible**. Coordination between nodes with optimistic locking
+* **Reliable** execution. Guarantees at least once execution of a submitted task.
+* **Multi-node compatible**. Coordination between nodes with optimistic locking.
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
 * **Routing** tasks amongst different nodes. An executor only picks up registered tasks.
 * **Lightweight**. Small code base.
@@ -87,7 +87,7 @@ String taskId = failsafeExecutor.execute("UniqueTaskId", "TaskName", parameter);
 
 #### Defer execution
 
-You can plan a **one-time execution** in future with the use os FailsafeExecutor's `defer` method.
+You can plan a **one-time execution** in future with method `defer`.
 
 ```java
 String taskId = failsafeExecutor.defer("TaskName", parameter, plannedExecutionTime);
