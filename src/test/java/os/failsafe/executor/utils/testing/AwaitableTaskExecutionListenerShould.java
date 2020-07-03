@@ -34,9 +34,10 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void block_on_persisted_task_and_throw_timeout() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.NANOSECONDS);
-        listener.persisted("TaskName", "taskId", "parameter");
+        listener.persisting("TaskName", "taskId", "parameter");
 
-        assertThrows(RuntimeException.class, listener::awaitAllTasks);
+        RuntimeException thrown = assertThrows(RuntimeException.class, listener::awaitAllTasks);
+        assertEquals("Only 0/1 tasks finished! Waiting for: {taskId=TaskName#parameter}", thrown.getMessage());
     }
 
     @Test
@@ -50,7 +51,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void release_block_when_task_fails() throws InterruptedException {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
-        listener.persisted("TaskName", "taskId", "parameter");
+        listener.persisting("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -82,7 +83,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void return_all_failed_tasks_by_id() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
-        listener.persisted("TaskName", "taskId", "parameter");
+        listener.persisting("TaskName", "taskId", "parameter");
         listener.failed("TaskName", "taskId", "parameter", new Exception());
 
         assertTrue(listener.isAnyExecutionFailed());

@@ -23,13 +23,13 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void persisted(String name, String taskId, String parameter) {
-        register(taskId);
+    public void persisting(String name, String taskId, String parameter) {
+        register(name, taskId, parameter);
     }
 
     @Override
     public void retrying(String name, String taskId, String parameter) {
-        register(taskId);
+        register(name, taskId, parameter);
     }
 
     @Override
@@ -43,15 +43,15 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
         arrive(taskId);
     }
 
-    private void register(String taskId) {
+    private void register(String name, String taskId, String parameter) {
         taskMap.computeIfAbsent(taskId, key -> {
             phaser.register();
-            return taskId;
+            return name + "#" + parameter;
         });
     }
 
     private void arrive(String taskId) {
-        if (taskMap.containsKey(taskId)) {
+        if (taskMap.remove(taskId) != null) {
             phaser.arrive();
         }
     }
@@ -64,7 +64,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
         try {
             phaser.awaitAdvanceInterruptibly(0, timeout, timeUnit);
         } catch (InterruptedException | TimeoutException e) {
-            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished");
+            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished! Waiting for: " + taskMap.toString());
         }
     }
 

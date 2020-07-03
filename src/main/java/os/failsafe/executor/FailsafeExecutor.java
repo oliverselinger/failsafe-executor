@@ -339,8 +339,8 @@ public class FailsafeExecutor {
 
     public boolean retry(Task failedTask) {
         if (failedTask.isRetryable()) {
-            taskRepository.deleteFailure(failedTask);
             listeners.forEach(listener -> listener.retrying(failedTask.getName(), failedTask.getId(), failedTask.getParameter()));
+            taskRepository.deleteFailure(failedTask);
             return true;
         }
 
@@ -393,10 +393,8 @@ public class FailsafeExecutor {
     }
 
     private String enqueue(Connection connection, Task task) {
-        String taskId = persistentQueue.add(connection, task);
-        notifyRegistration(task, taskId);
-
-        return taskId;
+        notifyPersisting(task, task.getId());
+        return persistentQueue.add(connection, task);
     }
 
     private Future<String> executeNextTask() {
@@ -433,7 +431,7 @@ public class FailsafeExecutor {
         lastRunException = null;
     }
 
-    private void notifyRegistration(Task task, String taskId) {
-        listeners.forEach(listener -> listener.persisted(task.getName(), taskId, task.getParameter()));
+    private void notifyPersisting(Task task, String taskId) {
+        listeners.forEach(listener -> listener.persisting(task.getName(), taskId, task.getParameter()));
     }
 }

@@ -138,8 +138,8 @@ The result of an execution can be observed by subscribing a listener at the `Fai
 failsafeExecutor.subscribe(executionListener);
 ```
 
-The `persisted` method gets called after a task is persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
-A retry of a failed task causes a call of method `retrying`.
+The `persisting` method gets called before a task gets persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
+A retry of a failed task causes a call of method `retrying` before failure state gets deleted in database.
 
 ## Health check
 

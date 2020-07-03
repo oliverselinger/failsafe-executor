@@ -297,7 +297,7 @@ class FailsafeExecutorShould {
         }, failedTasks -> fail(failedTasks.toString()));
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
-        verify(taskExecutionListener, times(taskCount)).persisted(eq(TASK_NAME), any(), any());
+        verify(taskExecutionListener, times(taskCount)).persisting(eq(TASK_NAME), any(), any());
         verify(taskExecutionListener, times(taskCount)).succeeded(eq(TASK_NAME), any(), parameterCaptor.capture());
 
         assertTrue(parameterCaptor.getAllValues().containsAll(parameters));
@@ -330,7 +330,7 @@ class FailsafeExecutorShould {
     }
 
     private void assertListenerOnPersisted(String name, String taskId, String parameter) {
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).persisted(name, taskId, parameter);
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).persisting(name, taskId, parameter);
     }
 
     private void assertListenerOnRetrying(String name, String taskId, String parameter) {
