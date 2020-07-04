@@ -85,7 +85,7 @@ class FailsafeExecutorShould {
 
     @AfterEach
     void stop() {
-        failsafeExecutor.stop(15, TimeUnit.SECONDS);
+        failsafeExecutor.stop();
     }
 
     @Test

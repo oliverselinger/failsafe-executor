@@ -105,6 +105,18 @@ public class FailsafeExecutor {
      * but no new tasks will be locked.
      *
      * <p>Blocks until all locked tasks have completed execution,
+     * or a timeout of 15 seconds occurs, or the current thread is
+     * interrupted, whichever happens first.</p>
+     */
+    public void stop() {
+        stop(15, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Initiates an orderly shutdown in which previously locked tasks are executed,
+     * but no new tasks will be locked.
+     *
+     * <p>Blocks until all locked tasks have completed execution,
      * or the provided timeout occurs, or the current thread is
      * interrupted, whichever happens first.</p>
      *
