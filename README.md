@@ -34,7 +34,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>0.16.0</version>
+    <version>0.17.0</version>
 </dependency>
 ```
 
@@ -196,6 +196,8 @@ awaitAllTasks(failsafeExecutor, () -> {
 ```
 
 After all tasks finished execution, failed tasks are collected and are passed to the callback consumer function. E.g. with that call you can let your test case fail immediately.
+
+In some cases you don't want to wait for certain tasks to finish, like deferred ones. You can ignore certain tasks by passing a `NoWaitPredicate` as parameter.
 
 **Note:** In your business logic all tasks should be created transactionally with a single commit. Otherwise `awaitAllTasks` cannot exactly determine how many tasks belong to your block of business logic.
 If you do not follow this, a race condition occurs.
