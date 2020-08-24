@@ -2,6 +2,7 @@ package os.failsafe.executor.utils.testing;
 
 import os.failsafe.executor.TaskExecutionListener;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -11,15 +12,21 @@ import java.util.concurrent.TimeoutException;
 
 public class AwaitableTaskExecutionListener implements TaskExecutionListener {
 
-    private final long timeout;
-    private final TimeUnit timeUnit;
+    public static final NoWaitPredicate WAIT_FOR_ALL_TASKS = (name, taskId, parameter) -> false;
+    private final Duration timeout;
+    private final NoWaitPredicate taskFilter;
     private final ConcurrentHashMap<String, String> taskMap = new ConcurrentHashMap<>();
     private final Phaser phaser = new Phaser();
     private final List<String> failedTasksByIds = new CopyOnWriteArrayList<>();
 
-    public AwaitableTaskExecutionListener(long timeout, TimeUnit timeUnit) {
+    public AwaitableTaskExecutionListener(Duration timeout) {
         this.timeout = timeout;
-        this.timeUnit = timeUnit;
+        this.taskFilter = WAIT_FOR_ALL_TASKS;
+    }
+
+    public AwaitableTaskExecutionListener(Duration timeout, NoWaitPredicate taskFilter) {
+        this.timeout = timeout;
+        this.taskFilter = taskFilter;
     }
 
     @Override
@@ -44,6 +51,10 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     private void register(String name, String taskId, String parameter) {
+        if (taskFilter.shouldNotWaitForTask(name, taskId, parameter)) {
+            return;
+        }
+
         taskMap.computeIfAbsent(taskId, key -> {
             phaser.register();
             return name + "#" + parameter;
@@ -62,7 +73,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
         }
 
         try {
-            phaser.awaitAdvanceInterruptibly(0, timeout, timeUnit);
+            phaser.awaitAdvanceInterruptibly(0, timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException | TimeoutException e) {
             throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished! Waiting for: " + taskMap.toString());
         }

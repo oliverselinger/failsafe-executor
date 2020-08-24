@@ -2,6 +2,7 @@ package os.failsafe.executor.utils.testing;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -14,12 +15,12 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void not_throw_an_exception_if_no_parties_have_registered() {
-        assertDoesNotThrow(() -> new AwaitableTaskExecutionListener(1, TimeUnit.MINUTES).awaitAllTasks());
+        assertDoesNotThrow(() -> new AwaitableTaskExecutionListener(Duration.ofMinutes(1)).awaitAllTasks());
     }
 
     @Test
     void not_block_if_no_parties_have_registered() throws InterruptedException {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.MINUTES);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofMinutes(1));
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -33,7 +34,7 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void block_on_persisted_task_and_throw_timeout() {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.NANOSECONDS);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofNanos(1));
         listener.persisting("TaskName", "taskId", "parameter");
 
         RuntimeException thrown = assertThrows(RuntimeException.class, listener::awaitAllTasks);
@@ -42,7 +43,7 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void block_on_retrying_task_and_throw_timeout() {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.NANOSECONDS);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofNanos(1));
         listener.retrying("TaskName", "taskId", "parameter");
 
         assertThrows(RuntimeException.class, listener::awaitAllTasks);
@@ -50,7 +51,7 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void release_block_when_task_fails() throws InterruptedException {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(1));
         listener.persisting("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -66,7 +67,7 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void release_block_when_retried_task_succeeds() throws InterruptedException {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(1));
         listener.retrying("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -82,7 +83,7 @@ class AwaitableTaskExecutionListenerShould {
 
     @Test
     void return_all_failed_tasks_by_id() {
-        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(1, TimeUnit.SECONDS);
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(1));
         listener.persisting("TaskName", "taskId", "parameter");
         listener.failed("TaskName", "taskId", "parameter", new Exception());
 
@@ -91,6 +92,21 @@ class AwaitableTaskExecutionListenerShould {
         assertTrue(listener.failedTasksByIds().contains("taskId"));
     }
 
+    @Test
+    void not_wait_for_ignored_task() throws InterruptedException {
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofMinutes(1), (name, id, param) -> true);
+        listener.persisting("TaskName", "taskId", "parameter");
+        listener.retrying("TaskName", "taskId", "parameter");
+
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        executeInThread(() -> {
+            listener.awaitAllTasks();
+            countDownLatch.countDown();
+        });
+
+        countDownLatch.await(100, TimeUnit.MILLISECONDS);
+    }
 
     private void executeInThread(Runnable runnable) {
         new Thread(runnable).start();
