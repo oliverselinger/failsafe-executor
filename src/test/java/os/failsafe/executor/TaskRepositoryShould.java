@@ -56,6 +56,7 @@ class TaskRepositoryShould {
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
         assertEquals(0L, actual.getVersion());
+        assertNotNull(actual.getCreationTime());
         assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
         assertNull(actual.getLockTime());
     }

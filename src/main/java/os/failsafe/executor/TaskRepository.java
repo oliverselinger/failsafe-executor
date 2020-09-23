@@ -31,18 +31,20 @@ class TaskRepository {
     }
 
     Task add(Connection connection, Task task) {
+        LocalDateTime creationTime = systemClock.now();
+
         if (database.isOracle() || database.isH2()) {
-            addTaskInOracle(connection, task);
+            addTaskInOracle(connection, task, creationTime);
         } else if (database.isMysql()) {
-            addTaskInMysql(connection, task);
+            addTaskInMysql(connection, task, creationTime);
         } else if (database.isPostgres()) {
-            addTaskInPostgres(connection, task);
+            addTaskInPostgres(connection, task, creationTime);
         }
 
-        return new Task(task.getId(), task.getParameter(), task.getName(), task.getPlannedExecutionTime());
+        return new Task(task.getId(), task.getParameter(), task.getName(), creationTime, task.getPlannedExecutionTime(), null, null, 0L);
     }
 
-    private void addTaskInMysql(Connection connection, Task task) {
+    private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT IGNORE INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -54,10 +56,10 @@ class TaskRepository {
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
-                Timestamp.valueOf(systemClock.now()));
+                Timestamp.valueOf(creationTime));
     }
 
-    private void addTaskInPostgres(Connection connection, Task task) {
+    private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -70,10 +72,10 @@ class TaskRepository {
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
-                Timestamp.valueOf(systemClock.now()));
+                Timestamp.valueOf(creationTime));
     }
 
-    private void addTaskInOracle(Connection connection, Task task) {
+    private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
@@ -86,7 +88,7 @@ class TaskRepository {
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
-                Timestamp.valueOf(systemClock.now()),
+                Timestamp.valueOf(creationTime),
                 task.getId());
     }
 
@@ -115,7 +117,7 @@ class TaskRepository {
                 toLock.getVersion());
 
         if (updateCount == 1) {
-            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1);
+            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1);
         }
 
         return null;
@@ -204,7 +206,7 @@ class TaskRepository {
     }
 
     List<Task> findAllFailedTasks() {
-        String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE FAIL_TIME IS NOT NULL";
+        String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE FAIL_TIME IS NOT NULL ORDER BY CREATED_DATE DESC";
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
@@ -224,6 +226,7 @@ class TaskRepository {
                 rs.getString("ID"),
                 rs.getString("PARAMETER"),
                 rs.getString("NAME"),
+                rs.getTimestamp("CREATED_DATE").toLocalDateTime(),
                 rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                 lockTime != null ? lockTime.toLocalDateTime() : null,
                 mapToExecutionFailure(rs),

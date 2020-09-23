@@ -8,19 +8,21 @@ public class Task {
     private final String id;
     private final String parameter;
     private final String name;
+    private final LocalDateTime creationTime;
     private final LocalDateTime plannedExecutionTime;
     private final LocalDateTime lockTime;
     private final ExecutionFailure executionFailure;
     private final Long version;
 
     public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
-        this(id, parameter, name, plannedExecutionTime, null, null, 0L);
+        this(id, parameter, name, null, plannedExecutionTime, null, null, 0L);
     }
 
-    public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version) {
+    public Task(String id, String parameter, String name, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
+        this.creationTime = creationTime;
         this.plannedExecutionTime = plannedExecutionTime;
         this.lockTime = lockTime;
         this.executionFailure = executionFailure;
@@ -37,6 +39,10 @@ public class Task {
 
     public String getParameter() {
         return parameter;
+    }
+
+    public LocalDateTime getCreationTime() {
+        return creationTime;
     }
 
     public LocalDateTime getPlannedExecutionTime() {
@@ -77,6 +83,7 @@ public class Task {
                 "id='" + id + '\'' +
                 ", parameter='" + parameter + '\'' +
                 ", name='" + name + '\'' +
+                ", creationTime=" + creationTime +
                 ", plannedExecutionTime=" + plannedExecutionTime +
                 ", lockTime=" + lockTime +
                 ", executionFailure=" + executionFailure +
@@ -92,6 +99,7 @@ public class Task {
         return Objects.equals(id, task.id) &&
                 Objects.equals(parameter, task.parameter) &&
                 Objects.equals(name, task.name) &&
+                Objects.equals(creationTime, task.creationTime) &&
                 Objects.equals(plannedExecutionTime, task.plannedExecutionTime) &&
                 Objects.equals(lockTime, task.lockTime) &&
                 Objects.equals(executionFailure, task.executionFailure) &&
@@ -100,6 +108,6 @@ public class Task {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, parameter, name, plannedExecutionTime, lockTime, executionFailure, version);
+        return Objects.hash(id, parameter, name, creationTime, plannedExecutionTime, lockTime, executionFailure, version);
     }
 }
