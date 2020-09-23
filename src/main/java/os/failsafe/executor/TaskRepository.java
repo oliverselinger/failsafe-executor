@@ -41,7 +41,7 @@ class TaskRepository {
             addTaskInPostgres(connection, task, creationTime);
         }
 
-        return new Task(task.getId(), task.getParameter(), task.getName(), creationTime, task.getPlannedExecutionTime(), null, null, 0L);
+        return new Task(task.getId(), task.getParameter(), task.getName(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
     }
 
     private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
@@ -117,7 +117,7 @@ class TaskRepository {
                 toLock.getVersion());
 
         if (updateCount == 1) {
-            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getVersion() + 1);
+            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getRetryCount(), toLock.getVersion() + 1);
         }
 
         return null;
@@ -195,10 +195,10 @@ class TaskRepository {
         String updateStmt = "" +
                 "UPDATE FAILSAFE_TASK" +
                 " SET" +
-                " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, VERSION=?" +
+                " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
                 " WHERE ID=? AND VERSION=?";
 
-        int updateCount = database.update(updateStmt, failed.getVersion() + 1, failed.getId(), failed.getVersion());
+        int updateCount = database.update(updateStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete failure of task %s", failed.getId()));
@@ -230,6 +230,7 @@ class TaskRepository {
                 rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                 lockTime != null ? lockTime.toLocalDateTime() : null,
                 mapToExecutionFailure(rs),
+                rs.getInt("RETRY_COUNT"),
                 rs.getLong("VERSION"));
     }
 

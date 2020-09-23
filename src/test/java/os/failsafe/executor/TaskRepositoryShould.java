@@ -55,6 +55,7 @@ class TaskRepositoryShould {
         assertEquals(task.getId(), actual.getId());
         assertEquals(taskName, actual.getName());
         assertEquals(taskParameter, actual.getParameter());
+        assertEquals(0, actual.getRetryCount());
         assertEquals(0L, actual.getVersion());
         assertNotNull(actual.getCreationTime());
         assertEquals(plannedExecutionTime, actual.getPlannedExecutionTime());
@@ -236,12 +237,11 @@ class TaskRepositoryShould {
     }
 
     @Test
-    void delete_failure_of_a_task() {
+    void delete_failure_of_a_task_and_increase_retry_count() {
         Task task = addTask();
 
         RuntimeException exception = new RuntimeException("Sorry");
         taskRepository.saveFailure(task, exception);
-
 
         Task failedTask = taskRepository.findAllFailedTasks().get(0);
         taskRepository.deleteFailure(failedTask);
@@ -252,6 +252,7 @@ class TaskRepositoryShould {
         Task taskWithoutFailure = taskRepository.findOne(task.getId());
         assertNull(taskWithoutFailure.getExecutionFailure());
         assertFalse(taskWithoutFailure.isExecutionFailed());
+        assertEquals(1, taskWithoutFailure.getRetryCount());
     }
 
     @Test

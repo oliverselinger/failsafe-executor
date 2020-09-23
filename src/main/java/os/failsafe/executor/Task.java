@@ -12,13 +12,14 @@ public class Task {
     private final LocalDateTime plannedExecutionTime;
     private final LocalDateTime lockTime;
     private final ExecutionFailure executionFailure;
+    private final int retryCount;
     private final Long version;
 
     public Task(String id, String parameter, String name, LocalDateTime plannedExecutionTime) {
-        this(id, parameter, name, null, plannedExecutionTime, null, null, 0L);
+        this(id, parameter, name, null, plannedExecutionTime, null, null, 0, 0L);
     }
 
-    public Task(String id, String parameter, String name, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, Long version) {
+    public Task(String id, String parameter, String name, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, int retryCount, Long version) {
         this.id = id;
         this.parameter = parameter;
         this.name = name;
@@ -26,6 +27,7 @@ public class Task {
         this.plannedExecutionTime = plannedExecutionTime;
         this.lockTime = lockTime;
         this.executionFailure = executionFailure;
+        this.retryCount = retryCount;
         this.version = version;
     }
 
@@ -55,6 +57,10 @@ public class Task {
 
     public ExecutionFailure getExecutionFailure() {
         return executionFailure;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
     }
 
     public Long getVersion() {
