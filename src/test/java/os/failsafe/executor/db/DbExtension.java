@@ -35,7 +35,7 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
         database = new Database(dataSource);
 
-        databaseTestConfig.createTable(database);
+        createTable();
     }
 
     @Override
@@ -49,6 +49,18 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
     public Database database() {
         return database;
+    }
+
+    public void createTable() {
+        databaseTestConfig.createTable(database);
+    }
+
+    public void dropTable() {
+        database.execute("DROP TABLE FAILSAFE_TASK");
+    }
+
+    public void deleteColumn(String columnName) {
+        database.execute("ALTER TABLE FAILSAFE_TASK DROP COLUMN " + columnName);
     }
 
     @Override

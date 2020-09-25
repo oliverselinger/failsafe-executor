@@ -47,24 +47,25 @@ class TaskRepository {
     private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT IGNORE INTO FAILSAFE_TASK" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                 " VALUES" +
-                " (?, ?, ?, ?, ?)";
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         database.insert(connection, insertStmt,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
-                Timestamp.valueOf(creationTime));
+                Timestamp.valueOf(creationTime),
+                null, null, null, null, 0, 0);
     }
 
     private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                 " VALUES" +
-                " (?, ?, ?, ?, ?)" +
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
                 " ON CONFLICT DO NOTHING";
 
         database.insert(connection, insertStmt,
@@ -72,14 +73,15 @@ class TaskRepository {
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
-                Timestamp.valueOf(creationTime));
+                Timestamp.valueOf(creationTime),
+                null, null, null, null, 0, 0);
     }
 
     private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT INTO FAILSAFE_TASK" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE)" +
-                " SELECT ?, ?, ?, ?, ? FROM DUAL" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
                 " WHERE NOT EXISTS" +
                 " (SELECT ID FROM FAILSAFE_TASK WHERE ID = ?)";
 
@@ -89,6 +91,7 @@ class TaskRepository {
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
+                null, null, null, null, 0, 0,
                 task.getId());
     }
 

@@ -6,6 +6,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
+import os.failsafe.executor.utils.Transaction;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -72,6 +73,8 @@ public class FailsafeExecutor {
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
+
+        validateDatabaseTableStructure(dataSource);
     }
 
     /**
@@ -445,5 +448,13 @@ public class FailsafeExecutor {
 
     private void notifyPersisting(Task task, String taskId) {
         listeners.forEach(listener -> listener.persisting(task.getName(), taskId, task.getParameter()));
+    }
+
+    private void validateDatabaseTableStructure(DataSource dataSource) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             Transaction transaction = new Transaction(connection)) { // no commit of trx
+            Task testTask = new Task(UUID.randomUUID().toString(), null, "validateDatabaseTableTask", systemClock.now());
+            taskRepository.add(connection, testTask);
+        }
     }
 }

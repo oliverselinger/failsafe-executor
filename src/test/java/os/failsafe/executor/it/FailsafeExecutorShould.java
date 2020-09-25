@@ -1,8 +1,12 @@
 package os.failsafe.executor.it;
 
+import org.awaitility.Awaitility;
+import org.awaitility.Durations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -36,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -88,6 +93,17 @@ class FailsafeExecutorShould {
         failsafeExecutor.stop();
     }
 
+    @AfterEach
+    void createTable(TestInfo info) {
+        if (info.getTags().contains("dropTable")) {
+            DB_EXTENSION.dropTable();
+        }
+
+        if (info.getTags().contains("createTable")) {
+            DB_EXTENSION.createTable();
+        }
+    }
+
     @Test
     void throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
@@ -107,6 +123,11 @@ class FailsafeExecutorShould {
     void notify_listeners_about_task_registration() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
         assertListenerOnPersisted(TASK_NAME, taskId, parameter);
+    }
+
+    @Test
+    void not_commit_test_task_of_table_structure_validation() {
+        assertTrue(failsafeExecutor.allTasks().isEmpty());
     }
 
     @Test
@@ -250,28 +271,38 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    @Tag("createTable")
+    void fail_on_instantiation_when_table_does_not_exist() {
+        DB_EXTENSION.dropTable();
+        assertThrows(RuntimeException.class, () -> new FailsafeExecutor(dataSource));
+    }
+
+    @Test
+    @Tag("dropTable")
+    @Tag("createTable")
+    void fail_on_instantiation_when_column_is_missing() {
+        DB_EXTENSION.deleteColumn("RETRY_COUNT");
+        assertThrows(RuntimeException.class, () -> new FailsafeExecutor(dataSource));
+    }
+
+    @Test
     void report_failures() throws SQLException {
-        RuntimeException connectionException = new RuntimeException("Error");
-
-        Connection connection = createFailingJdbcConnection(connectionException);
-
-        DataSource failingDataSource = Mockito.mock(DataSource.class);
-        when(failingDataSource.getConnection()).thenReturn(connection);
-
-        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofSeconds(15), DEFAULT_LOCK_TIMEOUT);
-
+        DataSource failingDataSource = Mockito.spy(dataSource);
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
-            if (executionShouldFail) {
-                throw new RuntimeException();
-            }
-
-            log.info("Hello {}", parameter);
         });
-
         failsafeExecutor.start();
 
-        verify(connection, timeout(TimeUnit.SECONDS.toMillis(50))).prepareStatement(any());
-        failsafeExecutor.stop(5, TimeUnit.SECONDS);
+        RuntimeException connectionException = new RuntimeException("Error");
+        doThrow(connectionException).when(failingDataSource).getConnection();
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(3))
+                .until(failsafeExecutor::isLastRunFailed);
+
+        failsafeExecutor.stop(3, TimeUnit.SECONDS);
 
         assertTrue(failsafeExecutor.isLastRunFailed());
         assertEquals(connectionException, failsafeExecutor.lastRunException());
