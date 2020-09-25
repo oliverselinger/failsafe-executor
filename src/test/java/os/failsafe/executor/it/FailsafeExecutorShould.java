@@ -291,10 +291,11 @@ class FailsafeExecutorShould {
         FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
         });
-        failsafeExecutor.start();
 
         RuntimeException connectionException = new RuntimeException("Error");
         doThrow(connectionException).when(failingDataSource).getConnection();
+
+        failsafeExecutor.start();
 
         Awaitility
                 .await()
