@@ -304,6 +304,7 @@ public class FailsafeExecutor {
      * @param connection the JDBC connection used to persist the task in the database
      * @param taskName   the name of the task that should be executed
      * @param schedule   the schedule that defines the planned execution times
+     * @param runnable   the runnable to execute
      * @return taskId
      */
     public String schedule(Connection connection, String taskName, Schedule schedule, Runnable runnable) {
