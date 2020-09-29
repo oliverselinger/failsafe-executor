@@ -4,7 +4,7 @@
 [![CircleCI](https://circleci.com/gh/oliverselinger/failsafe-executor.svg?style=svg)](https://circleci.com/gh/oliverselinger/failsafe-executor)
 [![codecov](https://codecov.io/gh/oliverselinger/failsafe-executor/branch/master/graph/badge.svg)](https://codecov.io/gh/oliverselinger/failsafe-executor)
 
-Persistent executor service for Java that was inspired by the need for a reliable and multi-node compatible execution of processes simpler than BPMN workflow engines provide.
+Persistent executor service for Java that was inspired by the need for a reliable and multi-node compatible execution of processes.
 
 ## Features
 
@@ -19,22 +19,12 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 
 ## Getting started
 
-1. Add the JitPack repository to your build file
-```xml
-<repositories>
-    <repository>
-        <id>jitpack.io</id>
-        <url>https://jitpack.io</url>
-    </repository>
-</repositories>
-```
-
-2. Add the dependency
+1.  Add the dependency
 ```xml
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>0.18.0</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
@@ -236,3 +226,20 @@ public FailsafeExecutor failsafeExecutor(DataSource dataSource) {
 #### Is it running in production?
 
 Yes.
+
+#### What Java versions are supported?
+
+Requires Java 8+.
+
+#### Are the artifacts available in other repositories than Maven Central Repository?
+
+Yes, in the JitPack repository. For usage add the JitPack repository to your build file:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
