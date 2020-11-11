@@ -190,9 +190,6 @@ After all tasks finished execution, failed tasks are collected and are passed to
 
 In some cases you don't want to wait for certain tasks to finish, like deferred ones. You can ignore certain tasks by passing a `NoWaitPredicate` as parameter.
 
-**Note:** In your business logic all tasks should be created transactionally with a single commit. Otherwise `awaitAllTasks` cannot exactly determine how many tasks belong to your block of business logic.
-If you do not follow this, a race condition occurs.
-
 ## FAQ
 
 #### How is an at-least-once execution guaranteed?

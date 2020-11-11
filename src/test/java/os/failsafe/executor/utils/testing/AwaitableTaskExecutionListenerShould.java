@@ -1,13 +1,17 @@
 package os.failsafe.executor.utils.testing;
 
+import org.awaitility.Awaitility;
+import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,7 +112,44 @@ class AwaitableTaskExecutionListenerShould {
         countDownLatch.await(100, TimeUnit.MILLISECONDS);
     }
 
-    private void executeInThread(Runnable runnable) {
-        new Thread(runnable).start();
+    @Test
+    void block_until_even_if_first_task_registers_and_arrives_before_next_task_registers() throws InterruptedException {
+        AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(3));
+
+        String firstTaskId = "firstTaskId";
+        listener.persisting("Task1", firstTaskId, "parameter");
+        listener.succeeded("Task1", firstTaskId, "parameter");
+
+        String secondTaskId = "firstTaskId";
+        listener.persisting("Task2", secondTaskId, "parameter");
+
+        AtomicBoolean done = new AtomicBoolean(false);
+
+        Thread thread = executeInThread(() -> {
+            listener.awaitAllTasks();
+            done.set(true);
+        });
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(2))
+                .until(() -> thread.getState() == Thread.State.TIMED_WAITING);
+
+        assertFalse(done.get());
+
+        listener.succeeded("Task2", secondTaskId, "parameter");
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(2))
+                .until(done::get);
+    }
+
+    private Thread executeInThread(Runnable runnable) {
+        Thread thread = new Thread(runnable);
+        thread.start();
+        return thread;
     }
 }

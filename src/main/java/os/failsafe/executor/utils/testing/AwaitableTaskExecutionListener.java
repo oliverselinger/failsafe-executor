@@ -16,7 +16,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     private final Duration timeout;
     private final NoWaitPredicate taskFilter;
     private final ConcurrentHashMap<String, String> taskMap = new ConcurrentHashMap<>();
-    private final Phaser phaser = new Phaser();
+    private final Phaser phaser = new Phaser(1);
     private final List<String> failedTasksByIds = new CopyOnWriteArrayList<>();
 
     public AwaitableTaskExecutionListener(Duration timeout) {
@@ -68,14 +68,12 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     public void awaitAllTasks() {
-        if (phaser.getRegisteredParties() == 0) {
-            return;
-        }
+        phaser.arrive();
 
         try {
             phaser.awaitAdvanceInterruptibly(0, timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException | TimeoutException e) {
-            throw new RuntimeException("Only " + phaser.getArrivedParties() + "/" + phaser.getRegisteredParties() + " tasks finished! Waiting for: " + taskMap.toString());
+            throw new RuntimeException("Only " + (phaser.getArrivedParties()-1) + "/" + (phaser.getRegisteredParties()-1) + " tasks finished! Waiting for: " + taskMap.toString());
         }
     }
 
