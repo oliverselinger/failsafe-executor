@@ -35,7 +35,7 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
 
-    private final Map<String, Consumer<String>> tasksByName = new ConcurrentHashMap<>();
+    private final Map<String, TaskFunction<String>> tasksByName = new ConcurrentHashMap<>();
     private final Map<String, Schedule> scheduleByName = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -149,7 +149,7 @@ public class FailsafeExecutor {
      * @param function the function that should be assigned to the unique name, accepting a parameter.
      * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been persisted already
      */
-    public boolean registerTask(String name, Consumer<String> function) {
+    public boolean registerTask(String name, TaskFunction<String> function) {
         if (tasksByName.containsKey(name)) {
             return false;
         }
@@ -424,7 +424,7 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            Consumer<String> consumer = tasksByName.get(toExecute.getName());
+            TaskFunction<String> consumer = tasksByName.get(toExecute.getName());
             Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
             Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
             Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);

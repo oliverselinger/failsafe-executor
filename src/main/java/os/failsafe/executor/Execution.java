@@ -11,15 +11,15 @@ import java.util.Optional;
 class Execution {
 
     private final Task task;
-    private final Runnable runnable;
+    private final Job job;
     private final List<TaskExecutionListener> listeners;
     private final Schedule schedule;
     private final SystemClock systemClock;
     private final TaskRepository taskRepository;
 
-    Execution(Task task, Runnable runnable, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, TaskRepository taskRepository) {
+    Execution(Task task, Job job, List<TaskExecutionListener> listeners, Schedule schedule, SystemClock systemClock, TaskRepository taskRepository) {
         this.task = task;
-        this.runnable = runnable;
+        this.job = job;
         this.listeners = listeners;
         this.schedule = schedule;
         this.systemClock = systemClock;
@@ -28,7 +28,7 @@ class Execution {
 
     public String perform() {
         try {
-            runnable.run();
+            job.run();
 
             Optional<LocalDateTime> nextExecutionTime = schedule.nextExecutionTime(systemClock.now());
             if (nextExecutionTime.isPresent()) {
@@ -54,5 +54,9 @@ class Execution {
 
     private void notifyFailed(Exception exception) {
         listeners.forEach(l -> l.failed(task.getName(), task.getId(), task.getParameter(), exception));
+    }
+
+    public interface Job {
+        void run() throws Exception;
     }
 }

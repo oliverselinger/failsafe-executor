@@ -12,6 +12,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -42,8 +43,8 @@ class MultipleNodesShould {
     TaskExecutionListener listenerA;
     TaskExecutionListener listenerB;
 
-    Consumer<String> task1;
-    Consumer<String> task2;
+    TaskFunction<String> task1;
+    TaskFunction<String> task2;
 
     @BeforeEach
     void init() throws SQLException {
