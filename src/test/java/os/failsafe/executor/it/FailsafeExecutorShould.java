@@ -39,13 +39,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
@@ -120,9 +118,15 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void notify_listeners_about_task_registration() {
+    void notify_listeners_about_task_execution() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisting(TASK_NAME, taskId, parameter);
+    }
+
+    @Test
+    void notify_listeners_about_task_execution_for_not_registered_task() {
+        String taskId = failsafeExecutor.execute("UNKNOWN", parameter);
+        assertListenerOnPersisting("UNKNOWN", taskId, parameter, false);
     }
 
     @Test
@@ -146,7 +150,7 @@ class FailsafeExecutorShould {
         systemClock.fixedTime(plannedExecutionTime.minusDays(1));
 
         String taskId = failsafeExecutor.defer(TASK_NAME, parameter, plannedExecutionTime);
-        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisting(TASK_NAME, taskId, parameter);
 
         verify(taskExecutionListener, times(0)).succeeded(TASK_NAME, taskId, parameter);
 
@@ -179,7 +183,7 @@ class FailsafeExecutorShould {
         final String scheduleTaskName = "ScheduledTestTask";
 
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
-        assertListenerOnPersisted(scheduleTaskName, taskId, null);
+        assertListenerOnPersisting(scheduleTaskName, taskId, null);
 
         failsafeExecutor.start();
 
@@ -225,7 +229,7 @@ class FailsafeExecutorShould {
         executionShouldFail = true;
 
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisting(TASK_NAME, taskId, parameter);
 
         failsafeExecutor.start();
 
@@ -253,7 +257,7 @@ class FailsafeExecutorShould {
         executionShouldFail = true;
 
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
-        assertListenerOnPersisted(TASK_NAME, taskId, parameter);
+        assertListenerOnPersisting(TASK_NAME, taskId, parameter);
 
         failsafeExecutor.start();
 
@@ -329,7 +333,7 @@ class FailsafeExecutorShould {
         }, failedTasks -> fail(failedTasks.toString()));
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
-        verify(taskExecutionListener, times(taskCount)).persisting(eq(TASK_NAME), any(), any());
+        verify(taskExecutionListener, times(taskCount)).persisting(eq(TASK_NAME), any(), any(), eq(true));
         verify(taskExecutionListener, times(taskCount)).succeeded(eq(TASK_NAME), any(), parameterCaptor.capture());
 
         assertTrue(parameterCaptor.getAllValues().containsAll(parameters));
@@ -354,15 +358,12 @@ class FailsafeExecutorShould {
         assertTrue(failsafeExecutor.allTasks().isEmpty());
     }
 
-    private Connection createFailingJdbcConnection(RuntimeException e) throws SQLException {
-        Connection connection = Mockito.mock(Connection.class, RETURNS_DEEP_STUBS);
-        when(connection.getMetaData().getDatabaseProductName()).thenReturn("H2");
-        when(connection.prepareStatement(any())).thenThrow(e);
-        return connection;
+    private void assertListenerOnPersisting(String name, String taskId, String parameter) {
+        assertListenerOnPersisting(name, taskId, parameter, true);
     }
 
-    private void assertListenerOnPersisted(String name, String taskId, String parameter) {
-        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).persisting(name, taskId, parameter);
+    private void assertListenerOnPersisting(String name, String taskId, String parameter, boolean registered) {
+        verify(taskExecutionListener).persisting(name, taskId, parameter, registered);
     }
 
     private void assertListenerOnRetrying(String name, String taskId, String parameter) {

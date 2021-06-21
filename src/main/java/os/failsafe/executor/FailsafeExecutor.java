@@ -448,7 +448,13 @@ public class FailsafeExecutor {
     }
 
     private void notifyPersisting(Task task, String taskId) {
-        listeners.forEach(listener -> listener.persisting(task.getName(), taskId, task.getParameter()));
+        String name = task.getName();
+        String parameter = task.getParameter();
+        boolean taskRegistered = tasksByName.containsKey(name);
+
+        listeners.forEach(listener -> {
+            listener.persisting(name, taskId, parameter, taskRegistered);
+        });
     }
 
     private void validateDatabaseTableStructure(DataSource dataSource) throws SQLException {

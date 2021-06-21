@@ -30,7 +30,7 @@ public class AwaitableTaskExecutionListener implements TaskExecutionListener {
     }
 
     @Override
-    public void persisting(String name, String taskId, String parameter) {
+    public void persisting(String name, String taskId, String parameter, boolean registered) {
         register(name, taskId, parameter);
     }
 
