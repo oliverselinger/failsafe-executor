@@ -297,6 +297,6 @@ class TaskRepositoryShould {
     }
 
     private Task addTask(String id, String taskName, LocalDateTime plannedExecutionTime) {
-        return taskRepository.add(new Task(id, taskParameter, taskName, plannedExecutionTime));
+        return taskRepository.add(new Task(id, taskName, taskParameter, plannedExecutionTime));
     }
 }

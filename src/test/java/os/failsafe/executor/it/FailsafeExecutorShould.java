@@ -75,7 +75,7 @@ class FailsafeExecutorShould {
         failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         taskExecutionListener = Mockito.mock(TaskExecutionListener.class);
 
-        failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
+        failsafeExecutor.registerTask(TASK_NAME, parameter -> {
             if (executionShouldFail) {
                 throw runtimeException;
             }
@@ -118,15 +118,38 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void throw_exception_if_task_is_already_registered() {
+        String taskName = "task1";
+        failsafeExecutor.registerTask(taskName, parameter -> {
+        });
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerTask(taskName, parameter -> {
+        }));
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerRemoteTask(taskName));
+
+        String remoteTaskName = "remotetask1";
+        failsafeExecutor.registerRemoteTask(remoteTaskName);
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerRemoteTask(remoteTaskName));
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerTask(remoteTaskName, parameter -> {
+        }));
+    }
+
+    @Test
+    void throw_exception_if_no_task_is_registered() {
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.execute("UNKOWN", parameter));
+    }
+
+    @Test
     void notify_listeners_about_task_execution() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
         assertListenerOnPersisting(TASK_NAME, taskId, parameter);
     }
 
     @Test
-    void notify_listeners_about_task_execution_for_not_registered_task() {
-        String taskId = failsafeExecutor.execute("UNKNOWN", parameter);
-        assertListenerOnPersisting("UNKNOWN", taskId, parameter, false);
+    void notify_listeners_about_remote_task_execution() {
+        String taskName = "remoteTask";
+        failsafeExecutor.registerRemoteTask(taskName);
+        String taskId = failsafeExecutor.execute(taskName, parameter);
+        assertListenerOnPersisting(taskName, taskId, parameter);
     }
 
     @Test
@@ -212,13 +235,13 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void not_throw_an_exception_if_task_is_already_scheduled() {
+    void throw_an_exception_if_task_is_already_scheduled() {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
         final String scheduleTaskName = "ScheduledTestTask";
 
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
-        assertDoesNotThrow(() -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
 
         assertEquals(1, failsafeExecutor.allTasks().size());
         assertEquals(scheduleTaskName, taskId);
@@ -293,7 +316,7 @@ class FailsafeExecutorShould {
     void report_failures() throws SQLException {
         DataSource failingDataSource = Mockito.spy(dataSource);
         FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, failingDataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
-        failsafeExecutor.registerTask(TASK_NAME, (parameter) -> {
+        failsafeExecutor.registerTask(TASK_NAME, parameter -> {
         });
 
         RuntimeException connectionException = new RuntimeException("Error");
@@ -333,7 +356,7 @@ class FailsafeExecutorShould {
         }, failedTasks -> fail(failedTasks.toString()));
 
         ArgumentCaptor<String> parameterCaptor = ArgumentCaptor.forClass(String.class);
-        verify(taskExecutionListener, times(taskCount)).persisting(eq(TASK_NAME), any(), any(), eq(true));
+        verify(taskExecutionListener, times(taskCount)).persisting(eq(TASK_NAME), any(), any());
         verify(taskExecutionListener, times(taskCount)).succeeded(eq(TASK_NAME), any(), parameterCaptor.capture());
 
         assertTrue(parameterCaptor.getAllValues().containsAll(parameters));
@@ -359,11 +382,7 @@ class FailsafeExecutorShould {
     }
 
     private void assertListenerOnPersisting(String name, String taskId, String parameter) {
-        assertListenerOnPersisting(name, taskId, parameter, true);
-    }
-
-    private void assertListenerOnPersisting(String name, String taskId, String parameter, boolean registered) {
-        verify(taskExecutionListener).persisting(name, taskId, parameter, registered);
+        verify(taskExecutionListener).persisting(name, taskId, parameter);
     }
 
     private void assertListenerOnRetrying(String name, String taskId, String parameter) {

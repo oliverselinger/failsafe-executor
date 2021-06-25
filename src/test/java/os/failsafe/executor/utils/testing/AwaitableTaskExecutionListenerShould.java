@@ -39,7 +39,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void block_on_persisted_task_and_throw_timeout() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofNanos(1));
-        listener.persisting("TaskName", "taskId", "parameter", true);
+        listener.persisting("TaskName", "taskId", "parameter");
 
         RuntimeException thrown = assertThrows(RuntimeException.class, listener::awaitAllTasks);
         assertEquals("Only 0/1 tasks finished! Waiting for: {taskId=TaskName#parameter}", thrown.getMessage());
@@ -56,7 +56,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void release_block_when_task_fails() throws InterruptedException {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(1));
-        listener.persisting("TaskName", "taskId", "parameter", true);
+        listener.persisting("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -88,7 +88,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void return_all_failed_tasks_by_id() {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(1));
-        listener.persisting("TaskName", "taskId", "parameter", true);
+        listener.persisting("TaskName", "taskId", "parameter");
         listener.failed("TaskName", "taskId", "parameter", new Exception());
 
         assertTrue(listener.isAnyExecutionFailed());
@@ -99,7 +99,7 @@ class AwaitableTaskExecutionListenerShould {
     @Test
     void not_wait_for_ignored_task() throws InterruptedException {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofMinutes(1), (name, id, param) -> true);
-        listener.persisting("TaskName", "taskId", "parameter", true);
+        listener.persisting("TaskName", "taskId", "parameter");
         listener.retrying("TaskName", "taskId", "parameter");
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -117,11 +117,11 @@ class AwaitableTaskExecutionListenerShould {
         AwaitableTaskExecutionListener listener = new AwaitableTaskExecutionListener(Duration.ofSeconds(3));
 
         String firstTaskId = "firstTaskId";
-        listener.persisting("Task1", firstTaskId, "parameter", true);
+        listener.persisting("Task1", firstTaskId, "parameter");
         listener.succeeded("Task1", firstTaskId, "parameter");
 
         String secondTaskId = "firstTaskId";
-        listener.persisting("Task2", secondTaskId, "parameter", true);
+        listener.persisting("Task2", secondTaskId, "parameter");
 
         AtomicBoolean done = new AtomicBoolean(false);
 

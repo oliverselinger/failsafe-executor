@@ -52,7 +52,8 @@ failsafeExecutor.registerTask("TaskName", param -> {
 });
 ```
 
-An executor only picks up tasks which have been registered. This allows for simple **routing**, based on task names amongst different nodes.
+An executor only picks up tasks which have been registered with a function. If you desire task execution on a different node, you only need to register the remote task's name via the`registerRemoteTask` method.
+This allows for simple **routing**, based on task names amongst different nodes.
 
 Make sure your business logic is **idempotent**, since it gets executed at least once per task execution.
 

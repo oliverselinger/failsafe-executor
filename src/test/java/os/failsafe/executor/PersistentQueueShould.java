@@ -97,6 +97,6 @@ class PersistentQueueShould {
     }
 
     private Task createTask(LocalDateTime plannedExecutionTime) {
-        return new Task(UUID.randomUUID().toString(), "Hello World!", "TaskName", plannedExecutionTime);
+        return new Task(UUID.randomUUID().toString(), "TaskName", "Hello World!", plannedExecutionTime);
     }
 }

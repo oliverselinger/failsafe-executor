@@ -17,15 +17,16 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 
 public class FailsafeExecutor {
 
@@ -35,7 +36,8 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
 
-    private final Map<String, TaskFunction<String>> tasksByName = new ConcurrentHashMap<>();
+    private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
+    private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
     private final Map<String, Schedule> scheduleByName = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -145,16 +147,28 @@ public class FailsafeExecutor {
      *
      * <p>Make sure your function is idempotent, since it gets executed at least once per task execution.</p>
      *
-     * @param name     unique name of the task that should be persisted
+     * @param name     unique name of the task
      * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @return true if the initial registration of the task with the unique name has been successfully completed, false if the task has been persisted already
+     * @throws IllegalArgumentException if a task with the given name is already registered
      */
-    public boolean registerTask(String name, TaskFunction<String> function) {
-        if (tasksByName.containsKey(name)) {
-            return false;
+    public void registerTask(String name, TaskFunction<String> function) {
+        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, function)) != null) {
+            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
         }
-        tasksByName.put(name, function);
-        return true;
+
+        if (function != null) {
+            taskNamesWithFunctions.add(name);
+        }
+    }
+
+    /**
+     * Registers a task under the provided name that runs remotely (in another FailsafeExecutor).
+     *
+     * @param name unique name of the task
+     * @throws IllegalArgumentException if a task with the given name is already registered
+     */
+    public void registerRemoteTask(String name) {
+        registerTask(name, null);
     }
 
     /**
@@ -218,7 +232,7 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String execute(Connection connection, String taskId, String taskName, String parameter) {
-        Task taskInstance = new Task(taskId, parameter, taskName, systemClock.now());
+        Task taskInstance = new Task(taskId, taskName, parameter, systemClock.now());
         return enqueue(connection, taskInstance);
     }
 
@@ -269,7 +283,7 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String defer(Connection connection, String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
-        Task taskInstance = new Task(taskId, parameter, taskName, plannedExecutionTime);
+        Task taskInstance = new Task(taskId, taskName, parameter, plannedExecutionTime);
         return enqueue(connection, taskInstance);
     }
 
@@ -308,18 +322,13 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String schedule(Connection connection, String taskName, Schedule schedule, Runnable runnable) {
-        if (!scheduleByName.containsKey(taskName)) {
-            scheduleByName.put(taskName, schedule);
-        }
-
-        if (!tasksByName.containsKey(taskName)) {
-            tasksByName.put(taskName, ignore -> runnable.run());
-        }
+        registerTask(taskName, ignore -> runnable.run());
+        scheduleByName.put(taskName, schedule);
 
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
 
-        Task task = new Task(taskName, null, taskName, plannedExecutionTime);
+        Task task = new Task(taskName, taskName, null, plannedExecutionTime);
         return enqueue(connection, task);
     }
 
@@ -409,6 +418,10 @@ public class FailsafeExecutor {
     }
 
     private String enqueue(Connection connection, Task task) {
+        if (!taskRegistrationsByName.containsKey(task.getName())) {
+            throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", task.getName()));
+        }
+
         notifyPersisting(task, task.getId());
         return persistentQueue.add(connection, task);
     }
@@ -419,14 +432,14 @@ public class FailsafeExecutor {
                 return null;
             }
 
-            Task toExecute = persistentQueue.peekAndLock(tasksByName.keySet());
+            Task toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions);
             if (toExecute == null) {
                 return null;
             }
 
-            TaskFunction<String> consumer = tasksByName.get(toExecute.getName());
+            TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
             Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
-            Execution execution = new Execution(toExecute, () -> consumer.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
+            Execution execution = new Execution(toExecute, () -> registration.function.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
             Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
 
             clearException();
@@ -450,18 +463,24 @@ public class FailsafeExecutor {
     private void notifyPersisting(Task task, String taskId) {
         String name = task.getName();
         String parameter = task.getParameter();
-        boolean taskRegistered = tasksByName.containsKey(name);
-
-        listeners.forEach(listener -> {
-            listener.persisting(name, taskId, parameter, taskRegistered);
-        });
+        listeners.forEach(listener -> listener.persisting(name, taskId, parameter));
     }
 
     private void validateDatabaseTableStructure(DataSource dataSource) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Transaction transaction = new Transaction(connection)) { // no commit of trx
-            Task testTask = new Task(UUID.randomUUID().toString(), null, "validateDatabaseTableTask", systemClock.now());
+            Task testTask = new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now());
             taskRepository.add(connection, testTask);
+        }
+    }
+
+    private static class TaskRegistration {
+        private final String name;
+        private final TaskFunction<String> function;
+
+        private TaskRegistration(String name, TaskFunction<String> function) {
+            this.name = name;
+            this.function = function;
         }
     }
 }

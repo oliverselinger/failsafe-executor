@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -51,8 +52,8 @@ class MultipleNodesShould {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
-        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
-        executorB = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
+        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(5), DEFAULT_LOCK_TIMEOUT);
+        executorB = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(5), DEFAULT_LOCK_TIMEOUT);
         listenerA = Mockito.mock(TaskExecutionListener.class);
         listenerB = Mockito.mock(TaskExecutionListener.class);
 
@@ -100,6 +101,7 @@ class MultipleNodesShould {
     void run_only_processable_tasks() {
         final int total = 15;
         executorA.registerTask("Task2", task1);
+        executorA.registerRemoteTask("Task3");
         executorB.registerTask("Task3", task2);
 
 
