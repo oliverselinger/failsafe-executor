@@ -41,7 +41,7 @@ class TaskRepository {
             addTaskInPostgres(connection, task, creationTime);
         }
 
-        return new Task(task.getId(), task.getParameter(), task.getName(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
+        return new Task(task.getId(), task.getName(), task.getParameter(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
     }
 
     private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
@@ -120,7 +120,7 @@ class TaskRepository {
                 toLock.getVersion());
 
         if (updateCount == 1) {
-            return new Task(toLock.getId(), toLock.getParameter(), toLock.getName(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getRetryCount(), toLock.getVersion() + 1);
+            return new Task(toLock.getId(), toLock.getName(), toLock.getParameter(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getRetryCount(), toLock.getVersion() + 1);
         }
 
         return null;
@@ -227,8 +227,7 @@ class TaskRepository {
 
         return new Task(
                 rs.getString("ID"),
-                rs.getString("PARAMETER"),
-                rs.getString("NAME"),
+                rs.getString("NAME"), rs.getString("PARAMETER"),
                 rs.getTimestamp("CREATED_DATE").toLocalDateTime(),
                 rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                 lockTime != null ? lockTime.toLocalDateTime() : null,

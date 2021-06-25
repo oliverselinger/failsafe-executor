@@ -8,9 +8,8 @@ public interface TaskExecutionListener {
      * @param name       the name of the task that should be executed
      * @param id         the id of the task used as unique constraint in database
      * @param parameter  the parameter that should be passed to the function
-     * @param registered indicates if a task function is registered under the provided name
      */
-    void persisting(String name, String id, String parameter, boolean registered);
+    void persisting(String name, String id, String parameter);
 
     /**
      * Called, before a task is retried.
