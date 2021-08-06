@@ -39,7 +39,7 @@ public class Database {
     }
 
     public boolean isMysqlOrMariaDb() {
-        return mysqlDatabase;
+        return mysqlDatabase || mariaDatabase;
     }
 
     public boolean isPostgres() {

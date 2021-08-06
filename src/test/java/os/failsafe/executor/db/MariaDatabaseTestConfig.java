@@ -29,7 +29,7 @@ class MariaDatabaseTestConfig implements DatabaseTestConfig {
     }
 
     public String jdbcUrl() {
-        return "jdbc:mariadb://localhost:3306/failsafe";
+        return "jdbc:mariadb://localhost:3307/failsafe";
     }
 
     public int maxPoolSize() {
