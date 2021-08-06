@@ -71,7 +71,7 @@ jobs:
           command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
 
-test-maria:
+  test-maria:
     docker:
       - image: circleci/openjdk:8-jdk-stretch
       - image: circleci/mariadb:10.2
