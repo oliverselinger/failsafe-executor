@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static os.failsafe.executor.FailsafeExecutor.DEFAULT_TABLE_NAME;
 
 class TaskRepositoryShould {
 
@@ -41,7 +42,7 @@ class TaskRepositoryShould {
     void init() {
         database = DB_EXTENSION.database();
         systemClock.resetTime();
-        taskRepository = new TaskRepository(database, systemClock);
+        taskRepository = new TaskRepository(database, DEFAULT_TABLE_NAME, systemClock);
         processableTasks = new HashSet<>();
         processableTasks.add(taskName);
     }
