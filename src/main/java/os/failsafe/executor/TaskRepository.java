@@ -35,8 +35,8 @@ class TaskRepository {
 
         if (database.isOracle() || database.isH2()) {
             addTaskInOracle(connection, task, creationTime);
-        } else if (database.isMysql()) {
-            addTaskInMysql(connection, task, creationTime);
+        } else if (database.isMysqlOrMariaDb()) {
+            addTaskInMysqlOrMariaDb(connection, task, creationTime);
         } else if (database.isPostgres()) {
             addTaskInPostgres(connection, task, creationTime);
         }
@@ -44,7 +44,7 @@ class TaskRepository {
         return new Task(task.getId(), task.getName(), task.getParameter(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
     }
 
-    private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
+    private void addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
         String insertStmt = "" +
                 "INSERT IGNORE INTO FAILSAFE_TASK" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
@@ -157,7 +157,7 @@ class TaskRepository {
                 " AND PLANNED_EXECUTION_TIME <= ? " + whereIn +
                 " ORDER BY CREATED_DATE";
 
-        if (database.isMysql()) {
+        if (database.isMysqlOrMariaDb()) {
             selectStmt += " LIMIT ?";
         } else {
             selectStmt += " FETCH FIRST (?) ROWS ONLY";

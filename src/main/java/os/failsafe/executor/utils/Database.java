@@ -14,6 +14,7 @@ public class Database {
 
     private final boolean oracleDatabase;
     private final boolean mysqlDatabase;
+    private final boolean mariaDatabase;
     private final boolean postgresDatabase;
     private final boolean h2Database;
     private final DataSource dataSource;
@@ -26,8 +27,9 @@ public class Database {
         mysqlDatabase = databaseName.equalsIgnoreCase("MySQL");
         postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
         h2Database = databaseName.equalsIgnoreCase("H2");
+        mariaDatabase = databaseName.equalsIgnoreCase("MariaDB");
 
-        if (!oracleDatabase && !mysqlDatabase && !postgresDatabase && !h2Database) {
+        if (!oracleDatabase && !mysqlDatabase && !postgresDatabase && !h2Database && !mariaDatabase) {
             throw new RuntimeException("Unsupported database");
         }
     }
@@ -36,7 +38,7 @@ public class Database {
         return oracleDatabase;
     }
 
-    public boolean isMysql() {
+    public boolean isMysqlOrMariaDb() {
         return mysqlDatabase;
     }
 
