@@ -71,6 +71,24 @@ jobs:
           command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - maven-package
 
+  test-maria:
+    docker:
+      - image: circleci/openjdk:8-jdk-stretch
+      - image: circleci/mariadb:10.2
+        environment:
+          MYSQL_ROOT_PASSWORD: failsafe
+          MYSQL_DATABASE: failsafe
+          MYSQL_USER: failsafe
+          MYSQL_PASSWORD: failsafe
+    environment:
+      TEST_DB: MARIA
+    steps:
+      - install-dockerize
+      - run:
+          name: Wait for db
+          command: dockerize -wait tcp://localhost:3306 -timeout 1m
+      - maven-package
+
 workflows:
   version: 2
   build_and_test:
@@ -79,3 +97,4 @@ workflows:
       - jdk-11-build
       - test-postgres
       - test-mysql
+      - test-maria

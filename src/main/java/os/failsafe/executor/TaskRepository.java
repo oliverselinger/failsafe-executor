@@ -19,10 +19,12 @@ import java.util.stream.Collectors;
 class TaskRepository {
 
     private final Database database;
+    private final String tableName;
     private final SystemClock systemClock;
 
-    public TaskRepository(Database database, SystemClock systemClock) {
+    public TaskRepository(Database database, String tableName, SystemClock systemClock) {
         this.database = database;
+        this.tableName = tableName;
         this.systemClock = systemClock;
     }
 
@@ -35,8 +37,8 @@ class TaskRepository {
 
         if (database.isOracle() || database.isH2()) {
             addTaskInOracle(connection, task, creationTime);
-        } else if (database.isMysql()) {
-            addTaskInMysql(connection, task, creationTime);
+        } else if (database.isMysqlOrMariaDb()) {
+            addTaskInMysqlOrMariaDb(connection, task, creationTime);
         } else if (database.isPostgres()) {
             addTaskInPostgres(connection, task, creationTime);
         }
@@ -44,12 +46,12 @@ class TaskRepository {
         return new Task(task.getId(), task.getName(), task.getParameter(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
     }
 
-    private void addTaskInMysql(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = "" +
-                "INSERT IGNORE INTO FAILSAFE_TASK" +
+    private void addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
+        String insertStmt = String.format("" +
+                "INSERT IGNORE INTO %s" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                 " VALUES" +
-                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName);
 
         database.insert(connection, insertStmt,
                 task.getId(),
@@ -61,12 +63,12 @@ class TaskRepository {
     }
 
     private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = "" +
-                "INSERT INTO FAILSAFE_TASK" +
+        String insertStmt = String.format("" +
+                "INSERT INTO %s" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                 " VALUES" +
                 " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
-                " ON CONFLICT DO NOTHING";
+                " ON CONFLICT DO NOTHING", tableName);
 
         database.insert(connection, insertStmt,
                 task.getId(),
@@ -78,12 +80,12 @@ class TaskRepository {
     }
 
     private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = "" +
-                "INSERT INTO FAILSAFE_TASK" +
+        String insertStmt = String.format("" +
+                "INSERT INTO %s" +
                 " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                 " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
                 " WHERE NOT EXISTS" +
-                " (SELECT ID FROM FAILSAFE_TASK WHERE ID = ?)";
+                " (SELECT ID FROM %s WHERE ID = ?)", tableName, tableName);
 
         database.insert(connection, insertStmt,
                 task.getId(),
@@ -96,21 +98,21 @@ class TaskRepository {
     }
 
     Task findOne(String id) {
-        String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE ID = ?";
+        String selectStmt = String.format("SELECT * FROM %s WHERE ID = ?", tableName);
         return database.selectOne(selectStmt, this::mapToPersistentTask, id);
     }
 
     List<Task> findAll() {
-        String selectStmt = "SELECT * FROM FAILSAFE_TASK";
+        String selectStmt = String.format("SELECT * FROM %s", tableName);
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
     Task lock(Task toLock) {
-        String updateStmt = "" +
-                "UPDATE FAILSAFE_TASK" +
+        String updateStmt = String.format("" +
+                "UPDATE %s" +
                 " SET" +
                 " LOCK_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?";
+                " WHERE ID=? AND VERSION=?", tableName);
 
         LocalDateTime lockTime = systemClock.now();
         int updateCount = database.update(updateStmt,
@@ -127,11 +129,11 @@ class TaskRepository {
     }
 
     void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
-        String updateStmt = "" +
-                "UPDATE FAILSAFE_TASK" +
+        String updateStmt = String.format("" +
+                "UPDATE %s" +
                 " SET" +
                 " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?";
+                " WHERE ID=? AND VERSION=?", tableName);
 
         int effectedRows = database.update(updateStmt,
                 Timestamp.valueOf(nextPlannedExecutionTime),
@@ -149,15 +151,13 @@ class TaskRepository {
             return Collections.emptyList();
         }
 
-        String whereIn = "AND NAME IN (" + processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")) + ")";
-
-        String selectStmt = "" +
-                "SELECT * FROM FAILSAFE_TASK" +
+        String selectStmt = String.format("" +
+                "SELECT * FROM %s" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
-                " AND PLANNED_EXECUTION_TIME <= ? " + whereIn +
-                " ORDER BY CREATED_DATE";
+                " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
+                " ORDER BY CREATED_DATE", tableName, processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")));
 
-        if (database.isMysql()) {
+        if (database.isMysqlOrMariaDb()) {
             selectStmt += " LIMIT ?";
         } else {
             selectStmt += " FETCH FIRST (?) ROWS ONLY";
@@ -176,11 +176,11 @@ class TaskRepository {
         String message = StringUtils.abbreviate(exception.getMessage(), 1000);
         String stackTrace = ExceptionUtils.stackTraceAsString(exception);
 
-        String updateStmt = "" +
-                "UPDATE FAILSAFE_TASK" +
+        String updateStmt = String.format("" +
+                "UPDATE %s" +
                 " SET" +
                 " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
-                " WHERE ID=?";
+                " WHERE ID=?", tableName);
 
         int updateCount = database.update(updateStmt,
                 Timestamp.valueOf(systemClock.now()),
@@ -195,11 +195,11 @@ class TaskRepository {
     }
 
     void deleteFailure(Task failed) {
-        String updateStmt = "" +
-                "UPDATE FAILSAFE_TASK" +
+        String updateStmt = String.format("" +
+                "UPDATE %s" +
                 " SET" +
                 " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?";
+                " WHERE ID=? AND VERSION=?", tableName);
 
         int updateCount = database.update(updateStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
@@ -209,12 +209,12 @@ class TaskRepository {
     }
 
     List<Task> findAllFailedTasks() {
-        String selectStmt = "SELECT * FROM FAILSAFE_TASK WHERE FAIL_TIME IS NOT NULL ORDER BY CREATED_DATE DESC";
+        String selectStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY CREATED_DATE DESC", tableName);
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
     void delete(Task toDelete) {
-        String deleteStmt = "DELETE FROM FAILSAFE_TASK WHERE ID = ? AND VERSION = ?";
+        String deleteStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
         int deleteCount = database.delete(deleteStmt, toDelete.getId(), toDelete.getVersion());
 
         if (deleteCount != 1) {

@@ -35,6 +35,7 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
+    public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
@@ -60,6 +61,10 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout) throws SQLException {
+        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME);
+    }
+
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName) throws SQLException {
         if (queueSize < workerThreadCount) {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
@@ -70,7 +75,7 @@ public class FailsafeExecutor {
 
         this.database = new Database(dataSource);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
-        this.taskRepository = new TaskRepository(database, systemClock);
+        this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;

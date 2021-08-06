@@ -29,7 +29,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 </dependency>
 ```
 
-3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql](src/main/resources/mysql.sql)
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql/mariadb](src/main/resources/mysql.sql)
 
 3. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
 
@@ -170,6 +170,7 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
 | `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum lockTimeout is 5 min. |
+| `tableName` | `String` |  `FAILSAFE_TASK` | Name of the database table. |
 
 **Note:** Consider the lockTimeout must be longer than `(queueSize / workerThreadCount) * task-max-execution-time`. We expect the maximum execution time of a task as 3 min.
 With the default configuration you get `(4*5 / 5) * 3 min = 12 min`. Therefore default lockTimeout is 13 min.

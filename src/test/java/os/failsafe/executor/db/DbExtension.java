@@ -83,6 +83,9 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
             case "MYSQL":
                 log.info("Configuring MySql database");
                 return new MySqlDatabaseTestConfig();
+            case "MARIA":
+                log.info("Configuring Maria database");
+                return new MariaDatabaseTestConfig();
             default:
                 throw new IllegalArgumentException("Unknown test database");
         }

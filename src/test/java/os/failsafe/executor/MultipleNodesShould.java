@@ -12,12 +12,9 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,6 +24,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_LOCK_TIMEOUT;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_QUEUE_SIZE;
+import static os.failsafe.executor.FailsafeExecutor.DEFAULT_TABLE_NAME;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_WORKER_THREAD_COUNT;
 
 class MultipleNodesShould {
@@ -57,7 +55,7 @@ class MultipleNodesShould {
         listenerA = Mockito.mock(TaskExecutionListener.class);
         listenerB = Mockito.mock(TaskExecutionListener.class);
 
-        taskRepository = new TaskRepository(new Database(dataSource), systemClock);
+        taskRepository = new TaskRepository(new Database(dataSource), DEFAULT_TABLE_NAME, systemClock);
 
         executorA.subscribe(listenerA);
         executorB.subscribe(listenerB);
