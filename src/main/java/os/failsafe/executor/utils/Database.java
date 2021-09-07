@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Database {
@@ -116,7 +117,7 @@ public class Database {
         return connect(connection -> executeUpdate(connection, sql, params));
     }
 
-    private int executeUpdate(Connection connection,
+    public int executeUpdate(Connection connection,
                               String sql,
                               Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -151,6 +152,23 @@ public class Database {
         }
     }
 
+    public void connectNoResult(Consumer<Connection> connectionConsumer) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            connectionConsumer.accept(connection);
+        }
+    }
+
+    public void transaction(ConnectionConsumer connectionConsumer) throws SQLException {
+        connectNoResult(connection -> {
+            try (DbTransaction dbTransaction = new DbTransaction(connection)) {
+                    connectionConsumer.accept(connection);
+                    dbTransaction.commit();
+            } catch (Exception exception) {
+                throw new RuntimeException(exception);
+            }
+        });
+    }
+
     private String determineDatabase() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             return connection.getMetaData().getDatabaseProductName();
@@ -160,4 +178,9 @@ public class Database {
     public interface RowMapper<R> {
         R map(ResultSet rs) throws SQLException;
     }
+
+    public interface ConnectionConsumer {
+        void accept(Connection connection) throws Exception;
+    }
+
 }

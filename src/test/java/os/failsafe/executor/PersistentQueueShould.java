@@ -53,7 +53,7 @@ class PersistentQueueShould {
     void return_null_if_no_task_exists() {
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        assertNull(persistentQueue.peekAndLock(processableTasks));
+        assertNull(persistentQueue.peekAndLock(processableTasks, 3));
     }
 
     @Test
@@ -63,7 +63,7 @@ class PersistentQueueShould {
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Collections.singletonList(task));
         when(taskRepository.lock(task)).thenReturn(task);
 
-        Task nextTask = persistentQueue.peekAndLock(processableTasks);
+        Task nextTask = persistentQueue.peekAndLock(processableTasks, 3);
 
         verify(taskRepository).lock(task);
         assertEquals(task, nextTask);
@@ -79,7 +79,7 @@ class PersistentQueueShould {
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.singletonList(toLock));
 
-        Task nextTask = persistentQueue.peekAndLock(processableTasks);
+        Task nextTask = persistentQueue.peekAndLock(processableTasks, 3);
 
         verify(taskRepository).lock(toLock);
         assertEquals(toLock, nextTask);
@@ -93,7 +93,7 @@ class PersistentQueueShould {
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
 
-        assertNull(persistentQueue.peekAndLock(processableTasks));
+        assertNull(persistentQueue.peekAndLock(processableTasks, 3));
     }
 
     private Task createTask(LocalDateTime plannedExecutionTime) {

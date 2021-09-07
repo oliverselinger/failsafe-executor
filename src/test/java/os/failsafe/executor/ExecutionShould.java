@@ -4,14 +4,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import os.failsafe.executor.schedule.OneTimeSchedule;
+import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,10 +24,11 @@ import static org.mockito.Mockito.when;
 class ExecutionShould {
 
     private final TestSystemClock systemClock = new TestSystemClock();
-    private Execution execution;
     private TaskExecutionListener listener;
     private Task task;
     private Consumer<String> runnable;
+    private Database database;
+    private Connection connection;
     private OneTimeSchedule oneTimeSchedule;
     private TaskRepository taskRepository;
     private final String taskId = "123";
@@ -31,7 +36,7 @@ class ExecutionShould {
     private final String taskName = "TestTask";
 
     @BeforeEach
-    void init() {
+    void init() throws SQLException {
         runnable = Mockito.mock(Consumer.class);
 
         oneTimeSchedule = Mockito.mock(OneTimeSchedule.class);
@@ -46,36 +51,48 @@ class ExecutionShould {
 
         taskRepository = Mockito.mock(TaskRepository.class);
 
-        execution = new Execution(task, () -> runnable.accept(parameter), Collections.singletonList(listener), oneTimeSchedule, systemClock, taskRepository);
+        database = Mockito.mock(Database.class);
+        connection = Mockito.mock(Connection.class);
+
+        doAnswer(ans -> {
+            Database.ConnectionConsumer connectionConsumer = (Database.ConnectionConsumer) ans.getArguments()[0];
+            connectionConsumer.accept(connection);
+            return null;
+        }).when(database).transaction(any());
     }
 
     @Test
-    void execute_task_with_parameter() {
+    void execute_regular_task_with_parameter() {
+        Execution execution = createExecutionForRegularTask();
         execution.perform();
 
         verify(runnable).accept(parameter);
-    }
-
-    @Test
-    void notify_listeners_after_successful_execution() {
-        execution.perform();
-
+        // notify_listeners_after_successful_execution
         verify(listener).succeeded(taskName, taskId, parameter);
-    }
-
-    @Test
-    void delete_task_after_successful_execution() {
-        execution.perform();
-
+        // delete_task_after_successful_execution
         verify(taskRepository).delete(task);
     }
 
     @Test
+    void execute_transactional_task_with_parameter() {
+        Execution execution = createExecutionForTransactionalTask();
+        execution.perform();
+
+        verify(runnable).accept(parameter);
+        // notify_listeners_after_successful_execution
+        verify(listener).succeeded(taskName, taskId, parameter);
+        // delete_task_after_successful_execution
+        verify(taskRepository).delete(connection, task);
+    }
+
+    @Test
     void unlock_task_and_set_next_planned_execution_time_if_one_is_available() {
+        Execution scheduledExecution = createExecutionForScheduledTask();
+
         LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
         when(oneTimeSchedule.nextExecutionTime(any())).thenReturn(Optional.of(nextPlannedExecutionTime));
 
-        execution.perform();
+        scheduledExecution.perform();
 
         verify(taskRepository).unlock(task, nextPlannedExecutionTime);
         verify(taskRepository, never()).delete(any());
@@ -83,22 +100,30 @@ class ExecutionShould {
 
     @Test
     void save_failure_on_exception() {
+        Execution execution = createExecutionForRegularTask();
+
         RuntimeException exception = new RuntimeException();
         doThrow(exception).when(runnable).accept(any());
 
         execution.perform();
 
         verify(taskRepository).saveFailure(task, exception);
-    }
-
-    @Test
-    void notify_listeners_after_failed_execution() {
-        RuntimeException exception = new RuntimeException();
-        doThrow(exception).when(runnable).accept(any());
-
-        execution.perform();
-
+        // notify_listeners_after_failed_execution
         verify(listener).failed(taskName, taskId, parameter, exception);
     }
 
+    private Execution createExecutionForRegularTask() {
+        FailsafeExecutor.TaskRegistration taskRegistration = new FailsafeExecutor.TaskRegistration(taskName, param -> runnable.accept(param));
+        return new Execution(database, task, taskRegistration, Collections.singletonList(listener), systemClock, taskRepository);
+    }
+
+    private Execution createExecutionForTransactionalTask() {
+        FailsafeExecutor.TaskRegistration taskRegistration = new FailsafeExecutor.TaskRegistration(taskName, (con, param) -> runnable.accept(param));
+        return new Execution(database, task, taskRegistration, Collections.singletonList(listener), systemClock, taskRepository);
+    }
+
+    private Execution createExecutionForScheduledTask() {
+        FailsafeExecutor.TaskRegistration taskRegistration = new FailsafeExecutor.TaskRegistration(taskName, oneTimeSchedule, param -> runnable.accept(param));
+        return new Execution(database, task, taskRegistration, Collections.singletonList(listener), systemClock, taskRepository);
+    }
 }

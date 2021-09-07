@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,7 +38,7 @@ class WorkerPoolShould {
 
     @Test
     void accept_more_tasks_if_workers_are_idle() {
-        assertFalse(workerPool.allWorkersBusy());
+        assertEquals(queueSize, workerPool.spareQueueCount());
     }
 
     @Test
@@ -50,17 +51,17 @@ class WorkerPoolShould {
                 .peek(blockingRunnable -> workerPool.execute(UUID.randomUUID().toString(), blockingRunnable))
                 .collect(Collectors.toList());
 
-        assertTrue(workerPool.allWorkersBusy());
+        assertEquals(0, workerPool.spareQueueCount());
 
         firstBlockingRunnable.release();
         execution.get();
 
-        assertFalse(workerPool.allWorkersBusy());
+        assertEquals(1, workerPool.spareQueueCount());
 
         BlockingRunnable nextBlockingRunnable = new BlockingRunnable();
         workerPool.execute(UUID.randomUUID().toString(), nextBlockingRunnable);
 
-        assertTrue(workerPool.allWorkersBusy());
+        assertEquals(0, workerPool.spareQueueCount());
 
         nextBlockingRunnable.release();
         blockingRunnables.forEach(BlockingRunnable::release);

@@ -34,6 +34,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -163,6 +164,31 @@ class FailsafeExecutorShould {
         failsafeExecutor.start();
 
         assertListenerOnSucceeded(TASK_NAME, taskId, parameter);
+    }
+
+    @Test
+    void execute_a_transactional_task() {
+        String taskName = "transactionalTask";
+        failsafeExecutor.registerTask(taskName, (con, param) -> {
+        });
+        String taskId = failsafeExecutor.execute(taskName, parameter);
+        failsafeExecutor.start();
+
+        assertListenerOnSucceeded(taskName, taskId, parameter);
+        assertEquals(0, failsafeExecutor.allTasks().size());
+    }
+
+    @Test
+    void execute_and_rollback_a_transactional_task() {
+        String taskName = "transactionalTask";
+        failsafeExecutor.registerTask(taskName, (con, param) -> {
+            throw new RuntimeException("Rollback");
+        });
+        String taskId = failsafeExecutor.execute(taskName, parameter);
+        failsafeExecutor.start();
+
+        assertListenerOnFailed(taskName, taskId, parameter);
+        assertEquals(1, failsafeExecutor.failedTasks().size());
     }
 
     @Test
@@ -391,5 +417,9 @@ class FailsafeExecutorShould {
 
     private void assertListenerOnSucceeded(String name, String taskId, String parameter) {
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).succeeded(name, taskId, parameter);
+    }
+
+    private void assertListenerOnFailed(String name, String taskId, String parameter) {
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(eq(name), eq(taskId), eq(parameter), any());
     }
 }

@@ -39,10 +39,7 @@ public class FailsafeExecutor {
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
-    private final Map<String, Schedule> scheduleByName = new ConcurrentHashMap<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
-
-    private final OneTimeSchedule oneTimeSchedule = new OneTimeSchedule();
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
@@ -161,9 +158,24 @@ public class FailsafeExecutor {
             throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
         }
 
-        if (function != null) {
-            taskNamesWithFunctions.add(name);
+        taskNamesWithFunctions.add(name);
+    }
+
+    /**
+     * Registers the given function under the provided name.
+     *
+     * <p>Before task execution a transaction is created. This transaction is committed after the given function executes without execptions. Furthermore the transaction is used to remove the task execution entry from database.</p>
+     *
+     * @param name     unique name of the task
+     * @param function the function that should be assigned to the unique name, accepting a parameter.
+     * @throws IllegalArgumentException if a task with the given name is already registered
+     */
+    public void registerTask(String name, TransactionalTaskFunction<String> function) {
+        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, function)) != null) {
+            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
         }
+
+        taskNamesWithFunctions.add(name);
     }
 
     /**
@@ -173,7 +185,9 @@ public class FailsafeExecutor {
      * @throws IllegalArgumentException if a task with the given name is already registered
      */
     public void registerRemoteTask(String name) {
-        registerTask(name, null);
+        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name)) != null) {
+            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
+        }
     }
 
     /**
@@ -327,8 +341,11 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String schedule(Connection connection, String taskName, Schedule schedule, Runnable runnable) {
-        registerTask(taskName, ignore -> runnable.run());
-        scheduleByName.put(taskName, schedule);
+        if (taskRegistrationsByName.putIfAbsent(taskName, new TaskRegistration(taskName, schedule, ignore -> runnable.run())) != null) {
+            throw new IllegalArgumentException(String.format("Task '%s' is already registered", taskName));
+        }
+
+        taskNamesWithFunctions.add(taskName);
 
         LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
                 .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
@@ -433,18 +450,18 @@ public class FailsafeExecutor {
 
     private Future<String> executeNextTask() {
         try {
-            if (workerPool.allWorkersBusy()) {
+            int idleWorkerCount = workerPool.spareQueueCount();
+            if (idleWorkerCount == 0) {
                 return null;
             }
 
-            Task toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions);
+            Task toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
             if (toExecute == null) {
                 return null;
             }
 
             TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
-            Schedule schedule = scheduleByName.getOrDefault(toExecute.getName(), oneTimeSchedule);
-            Execution execution = new Execution(toExecute, () -> registration.function.accept(toExecute.getParameter()), listeners, schedule, systemClock, taskRepository);
+            Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
             Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
 
             clearException();
@@ -479,13 +496,50 @@ public class FailsafeExecutor {
         }
     }
 
-    private static class TaskRegistration {
-        private final String name;
-        private final TaskFunction<String> function;
+    static class TaskRegistration {
+        final String name;
+        final Schedule schedule;
+        final TaskFunction<String> function;
+        final TransactionalTaskFunction<String> transactionalFunction;
 
-        private TaskRegistration(String name, TaskFunction<String> function) {
+        TaskRegistration(String name) {
             this.name = name;
+            this.schedule = null;
+            this.function = null;
+            this.transactionalFunction = null;
+        }
+
+        TaskRegistration(String name, TaskFunction<String> function) {
+            this.name = name;
+            this.schedule = null;
             this.function = function;
+            this.transactionalFunction = null;
+        }
+
+        TaskRegistration(String name, TransactionalTaskFunction<String> transactionalFunction) {
+            this.name = name;
+            this.schedule = null;
+            this.function = null;
+            this.transactionalFunction = transactionalFunction;
+        }
+
+        TaskRegistration(String name, Schedule schedule, TaskFunction<String> function) {
+            this.name = name;
+            this.schedule = schedule;
+            this.function = function;
+            this.transactionalFunction = null;
+        }
+
+        boolean requiresTransaction() {
+            return transactionalFunction != null;
+        }
+
+        boolean isScheduled() {
+            return schedule != null;
+        }
+
+        boolean isRegularTask() {
+            return !isScheduled() && !requiresTransaction();
         }
     }
 }

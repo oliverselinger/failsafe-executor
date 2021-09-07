@@ -30,8 +30,8 @@ class PersistentQueue {
         return taskRepository.add(connection, task).getId();
     }
 
-    Task peekAndLock(Set<String> processableTasks) {
-        List<Task> nextTasksToLock = findNextForExecution(processableTasks);
+    Task peekAndLock(Set<String> processableTasks, int limit) {
+        List<Task> nextTasksToLock = findNextForExecution(processableTasks, limit);
 
         if (nextTasksToLock.isEmpty()) {
             return null;
@@ -54,13 +54,13 @@ class PersistentQueue {
             if (Thread.currentThread().isInterrupted()) {
                 break;
             }
-        } while (!(nextTasksToLock = findNextForExecution(processableTasks)).isEmpty());
+        } while (!(nextTasksToLock = findNextForExecution(processableTasks, limit)).isEmpty());
 
         return null;
     }
 
-    private List<Task> findNextForExecution(Set<String> processableTasks) {
-        return taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, plannedExecutionTime(), currentLockTimeout(), 3);
+    private List<Task> findNextForExecution(Set<String> processableTasks, int limit) {
+        return taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, plannedExecutionTime(), currentLockTimeout(), limit);
     }
 
     private LocalDateTime plannedExecutionTime() {

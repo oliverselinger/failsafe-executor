@@ -10,28 +10,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 class WorkerPool {
 
-    private final AtomicInteger idleWorkerCount;
+    private final AtomicInteger spareQueueCount;
     private final ExecutorService workers;
 
     WorkerPool(int threadCount, int queueSize) {
-        idleWorkerCount = new AtomicInteger(queueSize);
+        spareQueueCount = new AtomicInteger(queueSize);
         workers = Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
     }
 
     public Future<String> execute(String taskId, Runnable runnable) {
-        idleWorkerCount.decrementAndGet();
+        spareQueueCount.decrementAndGet();
         return workers.submit(() -> {
             try {
                 runnable.run();
             } finally {
-                idleWorkerCount.incrementAndGet();
+                spareQueueCount.incrementAndGet();
             }
             return taskId;
         });
     }
 
-    boolean allWorkersBusy() {
-        return !(idleWorkerCount.get() > 0);
+    int spareQueueCount() {
+        return spareQueueCount.get();
     }
 
     void stop(long timeout, TimeUnit timeUnit) {
