@@ -1,5 +1,8 @@
 package os.failsafe.executor;
 
+import os.failsafe.executor.utils.ExceptionUtils;
+import os.failsafe.executor.utils.StringUtils;
+
 import java.time.LocalDateTime;
 
 public class ExecutionFailure {
@@ -12,6 +15,12 @@ public class ExecutionFailure {
         this.failTime = failTime;
         this.exceptionMessage = exceptionMessage;
         this.stackTrace = stackTrace;
+    }
+
+    public ExecutionFailure(LocalDateTime failTime, Exception exception) {
+        this.failTime = failTime;
+        this.exceptionMessage = StringUtils.abbreviate(exception.getMessage(), 1000);
+        this.stackTrace = ExceptionUtils.stackTraceAsString(exception);
     }
 
     public LocalDateTime getFailTime() {

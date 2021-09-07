@@ -8,6 +8,7 @@ import os.failsafe.executor.utils.SystemClock;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -53,13 +54,19 @@ class TaskRepository {
                 " VALUES" +
                 " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName);
 
+        ExecutionFailure executionFailure = task.getExecutionFailure();
         database.insert(connection, insertStmt,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
-                null, null, null, null, 0, 0);
+                null,
+                executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
+                executionFailure != null ? executionFailure.getExceptionMessage() : null,
+                executionFailure != null ? executionFailure.getStackTrace() : null,
+                task.getRetryCount(),
+                task.getVersion());
     }
 
     private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
@@ -70,13 +77,19 @@ class TaskRepository {
                 " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
                 " ON CONFLICT DO NOTHING", tableName);
 
+        ExecutionFailure executionFailure = task.getExecutionFailure();
         database.insert(connection, insertStmt,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
-                null, null, null, null, 0, 0);
+                null,
+                executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
+                executionFailure != null ? executionFailure.getExceptionMessage() : null,
+                executionFailure != null ? executionFailure.getStackTrace() : null,
+                task.getRetryCount(),
+                task.getVersion());
     }
 
     private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
@@ -87,13 +100,19 @@ class TaskRepository {
                 " WHERE NOT EXISTS" +
                 " (SELECT ID FROM %s WHERE ID = ?)", tableName, tableName);
 
+        ExecutionFailure executionFailure = task.getExecutionFailure();
         database.insert(connection, insertStmt,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
-                null, null, null, null, 0, 0,
+                null,
+                executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
+                executionFailure != null ? executionFailure.getExceptionMessage() : null,
+                executionFailure != null ? executionFailure.getStackTrace() : null,
+                task.getRetryCount(),
+                task.getVersion(),
                 task.getId());
     }
 
@@ -172,10 +191,7 @@ class TaskRepository {
         return database.selectAll(selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
-    void saveFailure(Task failed, Exception exception) {
-        String message = StringUtils.abbreviate(exception.getMessage(), 1000);
-        String stackTrace = ExceptionUtils.stackTraceAsString(exception);
-
+    void saveFailure(Task failed, ExecutionFailure executionFailure) {
         String updateStmt = String.format("" +
                 "UPDATE %s" +
                 " SET" +
@@ -183,9 +199,9 @@ class TaskRepository {
                 " WHERE ID=?", tableName);
 
         int updateCount = database.update(updateStmt,
-                Timestamp.valueOf(systemClock.now()),
-                message,
-                stackTrace,
+                Timestamp.valueOf(executionFailure.getFailTime()),
+                executionFailure.getExceptionMessage(),
+                executionFailure.getStackTrace(),
                 failed.getVersion() + 1,
                 failed.getId());
 

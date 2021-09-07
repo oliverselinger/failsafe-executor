@@ -194,7 +194,7 @@ class TaskRepositoryShould {
         String exceptionMessage = "Exception message";
         Exception exception = new Exception(exceptionMessage);
 
-        taskRepository.saveFailure(task, exception);
+        taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
         List<Task> failedTasks = taskRepository.findAllFailedTasks();
         assertEquals(1, failedTasks.size());
@@ -213,7 +213,7 @@ class TaskRepositoryShould {
     void never_return_a_failed_task() {
         Task task = addTask();
 
-        taskRepository.saveFailure(task, new Exception());
+        taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), new Exception()));
 
         List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
 
@@ -242,7 +242,7 @@ class TaskRepositoryShould {
         Task task = addTask();
 
         RuntimeException exception = new RuntimeException("Sorry");
-        taskRepository.saveFailure(task, exception);
+        taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
         Task failedTask = taskRepository.findAllFailedTasks().get(0);
         taskRepository.deleteFailure(failedTask);
