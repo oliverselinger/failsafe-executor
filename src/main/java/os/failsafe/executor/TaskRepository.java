@@ -214,8 +214,16 @@ class TaskRepository {
     }
 
     void delete(Task toDelete) {
+        try {
+            database.connectNoResult(con -> delete(con, toDelete));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    void delete(Connection connection, Task toDelete) {
         String deleteStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
-        int deleteCount = database.delete(deleteStmt, toDelete.getId(), toDelete.getVersion());
+        int deleteCount = database.executeUpdate(connection, deleteStmt, toDelete.getId(), toDelete.getVersion());
 
         if (deleteCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete task %s", toDelete.getId()));
