@@ -72,7 +72,7 @@ public class FailsafeExecutor {
         this.database = new Database(dataSource);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
-        this.persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
+        this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
@@ -96,7 +96,7 @@ public class FailsafeExecutor {
 
     private void executeNextTasks() {
         for (; ; ) {
-            if (executeNextTask() == null) {
+            if (!executeNextTask()) {
                 break;
             }
 
@@ -491,30 +491,32 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
-    private Future<String> executeNextTask() {
+    private boolean executeNextTask() {
         try {
             int idleWorkerCount = workerPool.spareQueueCount();
             if (idleWorkerCount == 0) {
-                return null;
+                return false;
             }
 
-            Task toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
-            if (toExecute == null) {
-                return null;
+            List<Task> tasksToExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+            if (tasksToExecute == null || tasksToExecute.isEmpty()) {
+                return false;
             }
 
-            TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
-            Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
-            Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
+            for (Task toExecute : tasksToExecute) {
+                TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
+                Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
+                Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
+            }
 
             clearException();
 
-            return future;
+            return workerPool.spareQueueCount() > 0;
         } catch (Exception e) {
             storeException(e);
         }
 
-        return null;
+        return false;
     }
 
     private void storeException(Exception e) {

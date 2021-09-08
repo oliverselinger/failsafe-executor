@@ -120,6 +120,20 @@ failsafeExecutor.cancel(failedTask);
 
 Cancel deletes the task from database.
 
+### Record other failures
+
+We recognized, that it can be useful to record other incidents/exceptions in FailsafeExecutor's context. Exceptions that are thrown not within a failsafe task but in regular synchronous program execution. 
+So other exceptions can be recorded and be made visible through the `failsafeExecutor.failedTasks()` method. Furthermore, you can
+utilize the FailsafeExecutor's retry mechanism.
+
+The method 
+
+```java
+failsafeExecutor.recordFailure(...);
+```
+
+persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
+
 ## Monitoring the execution
 
 The result of an execution can be observed by subscribing a listener at the `FailsafeExecutor`:
