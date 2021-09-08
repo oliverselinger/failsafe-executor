@@ -1,6 +1,5 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.schedule.Schedule;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
@@ -353,6 +352,50 @@ public class FailsafeExecutor {
         Task task = new Task(taskName, taskName, null, plannedExecutionTime);
         return enqueue(connection, task);
     }
+
+    /**
+     * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
+     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * @param taskId     the id of the task used as unique constraint in database
+     * @param taskName   the name of the task that should be executed
+     * @param parameter  the parameter that should be passed to the function
+     * @param exception  the exception to store
+     * @return taskId
+     */
+    public String recordFailure(String taskId, String taskName, String parameter, Exception exception) {
+        return database.connect(con -> recordFailure(con, taskId, taskName, parameter, exception));
+    }
+
+    /**
+     * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
+     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
+     *
+     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
+     * In this case no exception will be thrown. Method returns gracefully.</p>
+     *
+     * <p>The provided connection is used for persisting the task in the database. Neither commit
+     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
+     *
+     * @param connection the JDBC connection used to persist the task in the database
+     * @param taskId     the id of the task used as unique constraint in database
+     * @param taskName   the name of the task that should be executed
+     * @param parameter  the parameter that should be passed to the function
+     * @param exception  the exception to store
+     * @return taskId
+     */
+    public String recordFailure(Connection connection, String taskId, String taskName, String parameter, Exception exception) {
+        LocalDateTime now = systemClock.now();
+        Task toSave = new Task(taskId, taskName, parameter, now, now, null, new ExecutionFailure(now, exception), 0, 0L);
+        return taskRepository.add(connection, toSave).getId();
+    }
+
 
     /**
      * Returns all persisted tasks.

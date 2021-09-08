@@ -54,7 +54,7 @@ class Execution {
             notifySuccess();
 
         } catch (Exception exception) {
-            taskRepository.saveFailure(task, exception);
+            taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
             notifyFailed(exception);
         }

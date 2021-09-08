@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -107,7 +108,7 @@ class ExecutionShould {
 
         execution.perform();
 
-        verify(taskRepository).saveFailure(task, exception);
+        verify(taskRepository).saveFailure(eq(task), any(ExecutionFailure.class));
         // notify_listeners_after_failed_execution
         verify(listener).failed(taskName, taskId, parameter, exception);
     }
