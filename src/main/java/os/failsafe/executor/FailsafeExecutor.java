@@ -1,12 +1,9 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.schedule.OneTimeSchedule;
 import os.failsafe.executor.schedule.Schedule;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
-import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.NamedThreadFactory;
-import os.failsafe.executor.utils.StringUtils;
 import os.failsafe.executor.utils.SystemClock;
 import os.failsafe.executor.utils.Transaction;
 
@@ -358,7 +355,7 @@ public class FailsafeExecutor {
 
     /**
      * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
-     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor and reuse its retry mechanism.
+     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
      *
      * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
      * In this case no exception will be thrown. Method returns gracefully.</p>
@@ -372,13 +369,13 @@ public class FailsafeExecutor {
      * @param exception  the exception to store
      * @return taskId
      */
-    public String createFailedTask(String taskId, String taskName, String parameter, Exception exception) {
-        return database.connect(con -> createFailedTask(con, taskId, taskName, parameter, exception));
+    public String recordFailure(String taskId, String taskName, String parameter, Exception exception) {
+        return database.connect(con -> recordFailure(con, taskId, taskName, parameter, exception));
     }
 
     /**
      * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
-     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor and reuse its retry mechanism.
+     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
      *
      * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
      * In this case no exception will be thrown. Method returns gracefully.</p>
@@ -393,7 +390,7 @@ public class FailsafeExecutor {
      * @param exception  the exception to store
      * @return taskId
      */
-    public String createFailedTask(Connection connection, String taskId, String taskName, String parameter, Exception exception) {
+    public String recordFailure(Connection connection, String taskId, String taskName, String parameter, Exception exception) {
         LocalDateTime now = systemClock.now();
         Task toSave = new Task(taskId, taskName, parameter, now, now, null, new ExecutionFailure(now, exception), 0, 0L);
         return taskRepository.add(connection, toSave).getId();

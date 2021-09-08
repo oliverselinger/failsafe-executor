@@ -409,7 +409,7 @@ class FailsafeExecutorShould {
 
     @Test
     void persist_a_task_as_failed_so_no_execution_is_triggered() {
-        failsafeExecutor.createFailedTask(TASK_NAME, TASK_NAME, parameter, new RuntimeException("Error"));
+        failsafeExecutor.recordFailure(TASK_NAME, TASK_NAME, parameter, new RuntimeException("Error"));
         List<Task> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
         assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
