@@ -10,6 +10,7 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -151,8 +152,32 @@ class TaskRepositoryShould {
     }
 
     @Test
-    void
-    unlock_a_task_and_set_next_planned_execution_time() {
+    void only_lock_unlocked_tasks_by_using_optimistic_locking_strategy() {
+        Task taskToLock1 = addTask();
+        Task taskMeanwhileLockedByOtherNode = addTask();
+        Task taskToLock2 = addTask();
+
+        LocalDateTime lockTime = systemClock.now();
+        systemClock.fixedTime(lockTime);
+
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(taskMeanwhileLockedByOtherNode)));
+
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Arrays.asList(taskToLock1, taskMeanwhileLockedByOtherNode, taskToLock2)));
+        assertEquals(2, locked.size());
+
+        Task lockedTask = locked.get(0);
+        assertEquals(taskToLock1.getId(), lockedTask.getId());
+        assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
+
+        lockedTask = locked.get(1);
+        assertEquals(taskToLock2.getId(), lockedTask.getId());
+        assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
+    }
+
+    @Test
+    void unlock_a_task_and_set_next_planned_execution_time() {
         Task task = addTask();
 
         List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
