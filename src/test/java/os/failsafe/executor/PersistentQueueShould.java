@@ -52,7 +52,7 @@ class PersistentQueueShould {
         doAnswer(ans -> {
             Function connectionConsumer = (Function) ans.getArguments()[0];
             return connectionConsumer.apply(connection);
-        }).when(database).transaction(any());
+        }).when(database).connect(any());
 
         persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
         processableTasks = new HashSet<>();

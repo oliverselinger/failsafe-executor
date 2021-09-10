@@ -8,8 +8,10 @@ class MySqlDatabaseTestConfig implements DatabaseTestConfig {
     public void createTable(Database database) {
         String createTableSql = FileUtil.readResourceFile("mysql.sql");
 
+        String[] split = createTableSql.split("\\n\\n");
+
         database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK",
-                createTableSql);
+                split[0], split[1]);
     }
 
     public void truncateTable(Database database) {

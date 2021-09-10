@@ -175,18 +175,6 @@ public class Database {
         }
     }
 
-    public <T> T transaction(Function<Connection, T> updateFunction) {
-        return connect(connection -> {
-            try (DbTransaction dbTransaction = new DbTransaction(connection)) {
-                T t = updateFunction.apply(connection);
-                dbTransaction.commit();
-                return t;
-            } catch (Exception exception) {
-                throw new RuntimeException(exception);
-            }
-        });
-    }
-
     public void transactionNoResult(ConnectionConsumer connectionConsumer) throws SQLException {
         connectNoResult(connection -> {
             try (DbTransaction dbTransaction = new DbTransaction(connection)) {

@@ -196,7 +196,7 @@ class TaskRepository {
         }
     }
 
-    List<Task> findAllNotLockedOrderedByCreatedDate(Connection trx, Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+    List<Task> findAllNotLockedOrderedByCreatedDate(Connection connection, Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
         if (processableTasks.isEmpty()) {
             return Collections.emptyList();
         }
@@ -209,7 +209,7 @@ class TaskRepository {
         params.addAll(processableTasks);
         params.add(limit);
 
-        return database.selectAll(trx, selectStmt, this::mapToPersistentTask, params.toArray());
+        return database.selectAll(connection, selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
     void saveFailure(Task failed, ExecutionFailure executionFailure) {
