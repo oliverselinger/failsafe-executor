@@ -133,6 +133,23 @@ public class Database {
         }
     }
 
+    public int[] executeBatchUpdate(Connection connection, String sql, Object[][] batchParams) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+
+            for (Object[] batch : batchParams) {
+                int cnt = 0;
+                for(Object param : batch) {
+                    ps.setObject(++cnt, param);
+                }
+                ps.addBatch();
+            }
+
+            return ps.executeBatch();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public void execute(String... sqlStatements) {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
@@ -158,7 +175,7 @@ public class Database {
         }
     }
 
-    public void transaction(ConnectionConsumer connectionConsumer) throws SQLException {
+    public void transactionNoResult(ConnectionConsumer connectionConsumer) throws SQLException {
         connectNoResult(connection -> {
             try (DbTransaction dbTransaction = new DbTransaction(connection)) {
                     connectionConsumer.accept(connection);

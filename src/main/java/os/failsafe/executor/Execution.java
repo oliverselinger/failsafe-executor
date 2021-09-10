@@ -29,7 +29,7 @@ class Execution {
     public String perform() {
         try {
             if (taskRegistration.requiresTransaction()) {
-                database.transaction(connection  -> {
+                database.transactionNoResult(connection  -> {
                     taskRegistration.transactionalFunction.accept(connection, task.getParameter());
                     taskRepository.delete(connection, task);
                 });

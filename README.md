@@ -29,9 +29,10 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 </dependency>
 ```
 
-3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql/mariadb](src/main/resources/mysql.sql)
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql/mariadb](src/main/resources/mysql.sql).
+    We recommend creating an index on created_date to make ordering fast.
 
-3. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
+5. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
 
 ```java
 FailsafeExecutor failsafeExecutor = new FailsafeExecutor(dataSource);
@@ -120,6 +121,20 @@ failsafeExecutor.cancel(failedTask);
 
 Cancel deletes the task from database.
 
+### Record other failures
+
+We recognized, that it can be useful to record other incidents/exceptions in FailsafeExecutor's context. Exceptions that are thrown not within a failsafe task but in regular synchronous program execution. 
+So other exceptions can be recorded and be made visible through the `failsafeExecutor.failedTasks()` method. Furthermore, you can
+utilize the FailsafeExecutor's retry mechanism.
+
+The method 
+
+```java
+failsafeExecutor.recordFailure(...);
+```
+
+persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
+
 ## Monitoring the execution
 
 The result of an execution can be observed by subscribing a listener at the `FailsafeExecutor`:
@@ -171,6 +186,7 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
 | `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum lockTimeout is 5 min. |
 | `tableName` | `String` |  `FAILSAFE_TASK` | Name of the database table. |
+| `immediateReRunThreshold` | `int` |  `queuesize * 0.25` | Determines if FailsafeExecutor should immediately try to lock more tasks after current select and lock run. In this default setting threshold value is 5. That means if there are more than 5 entries free in the queue after a select and lock run, FailsafeExecutor does not wait for the next polling interval. Instead it immediately reruns trying to lock more tasks. |
 
 **Note:** Consider the lockTimeout must be longer than `(queueSize / workerThreadCount) * task-max-execution-time`. We expect the maximum execution time of a task as 3 min.
 With the default configuration you get `(4*5 / 5) * 3 min = 12 min`. Therefore default lockTimeout is 13 min.

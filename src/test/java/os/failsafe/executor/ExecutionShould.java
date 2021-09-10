@@ -59,7 +59,7 @@ class ExecutionShould {
             Database.ConnectionConsumer connectionConsumer = (Database.ConnectionConsumer) ans.getArguments()[0];
             connectionConsumer.accept(connection);
             return null;
-        }).when(database).transaction(any());
+        }).when(database).transactionNoResult(any());
     }
 
     @Test

@@ -10,6 +10,7 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -97,14 +98,15 @@ class TaskRepositoryShould {
 
     @Test
     void return_empty_list_if_no_unlocked_task_exists() {
-        assertEquals(0, taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3).size());
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
+        assertEquals(0, tasks.size());
     }
 
     @Test
     void return_empty_list_if_tasks_planned_execution_time_is_not_reached_yet() {
         addTask();
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now().minusMinutes(1), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(0, tasks.size());
     }
@@ -113,7 +115,7 @@ class TaskRepositoryShould {
     void return_task_if_planned_execution_time_is_reached() {
         Task task = addTask();
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -127,7 +129,7 @@ class TaskRepositoryShould {
         systemClock.timeTravelBy(Duration.ofMillis(1));
         Task task3 = addTask(systemClock.now());
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(task1.getId(), tasks.get(0).getId());
         assertEquals(task2.getId(), tasks.get(1).getId());
@@ -141,21 +143,48 @@ class TaskRepositoryShould {
         LocalDateTime lockTime = systemClock.now();
         systemClock.fixedTime(lockTime);
 
-        Task locked = taskRepository.lock(task);
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        assertEquals(1, locked.size());
 
-        assertEquals(lockTime, locked.getLockTime());
-        assertTrue(locked.isLocked());
+        Task lockedTask = locked.get(0);
+        assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
     }
 
     @Test
-    void
-    unlock_a_task_and_set_next_planned_execution_time() {
+    void only_lock_unlocked_tasks_by_using_optimistic_locking_strategy() {
+        Task taskToLock1 = addTask();
+        Task taskMeanwhileLockedByOtherNode = addTask();
+        Task taskToLock2 = addTask();
+
+        LocalDateTime lockTime = systemClock.now();
+        systemClock.fixedTime(lockTime);
+
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(taskMeanwhileLockedByOtherNode)));
+
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Arrays.asList(taskToLock1, taskMeanwhileLockedByOtherNode, taskToLock2)));
+        assertEquals(2, locked.size());
+
+        Task lockedTask = locked.get(0);
+        assertEquals(taskToLock1.getId(), lockedTask.getId());
+        assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
+
+        lockedTask = locked.get(1);
+        assertEquals(taskToLock2.getId(), lockedTask.getId());
+        assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
+    }
+
+    @Test
+    void unlock_a_task_and_set_next_planned_execution_time() {
         Task task = addTask();
 
-        Task locked = taskRepository.lock(task);
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        assertEquals(1, locked.size());
 
         LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
-        taskRepository.unlock(locked, nextPlannedExecutionTime);
+        taskRepository.unlock(locked.get(0), nextPlannedExecutionTime);
 
         Task unlocked = taskRepository.findOne(task.getId());
 
@@ -168,9 +197,9 @@ class TaskRepositoryShould {
     void never_return_a_locked_task_before_lock_timeout() {
         Task task = addTask();
 
-        taskRepository.lock(task);
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(0, tasks.size());
     }
@@ -179,9 +208,9 @@ class TaskRepositoryShould {
     void return_a_locked_task_after_lock_timeout_is_reached() {
         Task task = addTask();
 
-        taskRepository.lock(task);
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now().plusDays(1), systemClock.now(), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now().plusDays(1), systemClock.now(), 3));
 
         assertEquals(1, tasks.size());
         assertEquals(task.getId(), tasks.get(0).getId());
@@ -215,7 +244,7 @@ class TaskRepositoryShould {
 
         taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), new Exception()));
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(0, tasks.size());
     }
@@ -263,16 +292,16 @@ class TaskRepositoryShould {
         addTask("OtherTaskName", plannedExecutionTime);
         processableTasks.add("Some other");
 
-        List<Task> tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
         assertEquals(tasks.size(), 2);
 
-        tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(Collections.emptySet(), systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, Collections.emptySet(), systemClock.now(), systemClock.now().minusMinutes(10), 3));
         assertEquals(tasks.size(), 0);
 
         Set<String> unknownTasks = new HashSet<>();
         unknownTasks.add("UnknownTaskName");
 
-        tasks = taskRepository.findAllNotLockedOrderedByCreatedDate(unknownTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3);
+        tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, unknownTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
         assertEquals(tasks.size(), 0);
 
         assertEquals(taskRepository.findAll().size(), 3);
