@@ -35,8 +35,8 @@ class PersistentQueue {
     }
 
     List<Task> peekAndLock(Set<String> processableTasks, int limit) {
-        return database.connect(con -> {
-            List<Task> nextTasksToLock = findNextForExecution(con, processableTasks, limit);
+        return database.transaction(trx -> {
+            List<Task> nextTasksToLock = findNextForExecution(trx, processableTasks, limit);
 
             if (nextTasksToLock.isEmpty()) {
                 return Collections.emptyList();
@@ -47,7 +47,7 @@ class PersistentQueue {
             }
 
             do {
-                List<Task> locked = taskRepository.lock(con, nextTasksToLock);
+                List<Task> locked = taskRepository.lock(trx, nextTasksToLock);
 
                 if (locked.size() > 0) {
                     return locked;
@@ -56,7 +56,7 @@ class PersistentQueue {
                 if (Thread.currentThread().isInterrupted()) {
                     break;
                 }
-            } while (!(nextTasksToLock = findNextForExecution(con, processableTasks, limit)).isEmpty());
+            } while (!(nextTasksToLock = findNextForExecution(trx, processableTasks, limit)).isEmpty());
 
             return Collections.emptyList();
         });

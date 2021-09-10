@@ -159,7 +159,7 @@ class TaskRepository {
         return database.selectAll(selectStmtFindAll, this::mapToPersistentTask, null);
     }
 
-    List<Task> lock(Connection con, List<Task> toLock) {
+    List<Task> lock(Connection trx, List<Task> toLock) {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
@@ -171,7 +171,7 @@ class TaskRepository {
             entries[i] = entry;
         }
 
-        int[] updateCount = database.executeBatchUpdate(con, lockStmt, entries);
+        int[] updateCount = database.executeBatchUpdate(trx, lockStmt, entries);
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
@@ -196,7 +196,7 @@ class TaskRepository {
         }
     }
 
-    List<Task> findAllNotLockedOrderedByCreatedDate(Connection connection, Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+    List<Task> findAllNotLockedOrderedByCreatedDate(Connection trx, Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
         if (processableTasks.isEmpty()) {
             return Collections.emptyList();
         }
@@ -209,7 +209,7 @@ class TaskRepository {
         params.addAll(processableTasks);
         params.add(limit);
 
-        return database.selectAll(connection, selectStmt, this::mapToPersistentTask, params.toArray());
+        return database.selectAll(trx, selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
     void saveFailure(Task failed, ExecutionFailure executionFailure) {

@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.LongAdder;
 
 public class FailsafeExecutor {
 
@@ -48,6 +49,7 @@ public class FailsafeExecutor {
     private final Duration pollingInterval;
     private final Database database;
     private final SystemClock systemClock;
+    private final long immediateReRunThreshold;
 
     private volatile Exception lastRunException;
     private AtomicBoolean running = new AtomicBoolean();
@@ -57,10 +59,10 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout) throws SQLException {
-        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME);
+        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME, (long) (queueSize * 0.25));
     }
 
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName) throws SQLException {
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName, long immediateReRunThreshold) throws SQLException {
         if (queueSize < workerThreadCount) {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
@@ -76,6 +78,7 @@ public class FailsafeExecutor {
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
+        this.immediateReRunThreshold = immediateReRunThreshold;
 
         validateDatabaseTableStructure(dataSource);
     }
@@ -491,6 +494,10 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
+    /**
+     *
+     * @return true if there are still spare entries inside the queue
+     */
     private boolean executeNextTask() {
         try {
             int idleWorkerCount = workerPool.spareQueueCount();
@@ -506,12 +513,12 @@ public class FailsafeExecutor {
             for (Task toExecute : tasksToExecute) {
                 TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
                 Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
-                Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
+                workerPool.execute(toExecute.getId(), execution::perform);
             }
 
             clearException();
 
-            return workerPool.spareQueueCount() > 0;
+            return workerPool.spareQueueCount() >= immediateReRunThreshold;
         } catch (Exception e) {
             storeException(e);
         }
