@@ -25,7 +25,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
@@ -145,6 +145,16 @@ failsafeExecutor.subscribe(executionListener);
 
 The `persisting` method gets called before a task gets persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
 A retry of a failed task causes a call of method `retrying` before failure state gets deleted in database.
+
+### Monitoring the persistent queue with its lock mechanism
+
+You can pass an implementation of the `PersistentQueue.Observer` interface to the following method:
+
+```java
+failsafeExecutor.observeQueue(observer);
+```
+
+On each select/lock run of the persistent queue the observer is called back. Three parameters are passed, indicating the limit used for the select query (spare space in queue), the result count of the select query for the next tasks and the lock count. The lock count states how many tasks of the select result got locked for execution.
 
 ## Health check
 
