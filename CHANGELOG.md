@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2021-09-12
+### Added
+- Register transactional task functions. Those task functions receive, apart from the parameter, a connection object with an active transaction. This transaction is then used
+  to remove the task entry from the table after the execution of the task function ends successfully.
+- A custom table name can be set via parameter in constructor.
+- Index for created_date in sql scripts to make select query for next tasks fast (ordering)
+- Support to record other failures in FailsafeExecutor's context. 
+  It can be useful to record exceptions that are thrown not within a failsafe task but in regular synchronous program execution.
+  So you can make other exceptions visible and utilize the FailsafeExecutor's retry mechanism.
+- Method to register an persistent queue observer to make behavior and select query results visible. 
+- Rerun threshold can be configured via parameter in constructor. Determines if FailsafeExecutor should immediately try to lock more tasks after current select and lock run. In the default setting threshold value is 5. That means if there are more than 5 entries free in the queue after a select and lock run, FailsafeExecutor does not wait for the next polling interval. Instead, it immediately reruns trying to lock more tasks.
+  
+### Changed
+- Improvement (performance/pressure on resources): The limit of the select query to get the next tasks for execution is set dynamically based on the value of the spare space in the queue.
+- Improvement (performance/pressure on resources): The update queries to lock the next tasks for execution are getting executed as batchUpdate.
+
+### Fixed
+- Fixed PK definition in SQL scripts
+
 ## [1.2.0] - 2021-08-06
 ### Added
 - Make table name configurable via FailsafeExecutor's constructor.

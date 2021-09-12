@@ -22,11 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.LongAdder;
 
 public class FailsafeExecutor {
 
@@ -95,18 +93,6 @@ public class FailsafeExecutor {
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    private void executeNextTasks() {
-        for (; ; ) {
-            if (!executeNextTask()) {
-                break;
-            }
-
-            if (Thread.currentThread().isInterrupted()) {
-                break;
-            }
-        }
     }
 
     /**
@@ -366,10 +352,10 @@ public class FailsafeExecutor {
      * <p>The provided connection is used for persisting the task in the database. Neither commit
      * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
      *
-     * @param taskId     the id of the task used as unique constraint in database
-     * @param taskName   the name of the task that should be executed
-     * @param parameter  the parameter that should be passed to the function
-     * @param exception  the exception to store
+     * @param taskId    the id of the task used as unique constraint in database
+     * @param taskName  the name of the task that should be executed
+     * @param parameter the parameter that should be passed to the function
+     * @param exception the exception to store
      * @return taskId
      */
     public String recordFailure(String taskId, String taskName, String parameter, Exception exception) {
@@ -485,6 +471,22 @@ public class FailsafeExecutor {
         return lastRunException;
     }
 
+    /**
+     * Register an observer to make selection/query behavior of the persistent queue visible.
+     *
+     * @param observer the callback method that receives the latest queue selection results.
+     */
+    public void observeQueue(PersistentQueue.Observer observer) {
+        persistentQueue.setObserver(observer);
+    }
+
+    /**
+     * Removes the queue observer. Callbacks are stopped.
+     */
+    public void stopQueueObservation() {
+        persistentQueue.setObserver(null);
+    }
+
     private String enqueue(Connection connection, Task task) {
         if (!taskRegistrationsByName.containsKey(task.getName())) {
             throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", task.getName()));
@@ -495,35 +497,38 @@ public class FailsafeExecutor {
     }
 
     /**
-     *
      * @return true if there are still spare entries inside the queue
      */
-    private boolean executeNextTask() {
+    private void executeNextTasks() {
+        int idleWorkerCount = workerPool.spareQueueCount();
+        if (idleWorkerCount == 0) {
+            return;
+        }
+
         try {
-            int idleWorkerCount = workerPool.spareQueueCount();
-            if (idleWorkerCount == 0) {
-                return false;
+            while (true) {
+                List<Task> tasksToExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+
+                for (Task toExecute : tasksToExecute) {
+                    TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
+                    Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
+                    workerPool.execute(toExecute.getId(), execution::perform);
+                }
+
+                clearException();
+
+                if (Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+
+                idleWorkerCount = workerPool.spareQueueCount();
+                if (idleWorkerCount < immediateReRunThreshold) {
+                    break;
+                }
             }
-
-            List<Task> tasksToExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
-            if (tasksToExecute == null || tasksToExecute.isEmpty()) {
-                return false;
-            }
-
-            for (Task toExecute : tasksToExecute) {
-                TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
-                Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
-                workerPool.execute(toExecute.getId(), execution::perform);
-            }
-
-            clearException();
-
-            return workerPool.spareQueueCount() >= immediateReRunThreshold;
         } catch (Exception e) {
             storeException(e);
         }
-
-        return false;
     }
 
     private void storeException(Exception e) {

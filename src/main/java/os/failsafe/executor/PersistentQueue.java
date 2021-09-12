@@ -8,8 +8,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 class PersistentQueue {
@@ -18,6 +16,7 @@ class PersistentQueue {
     private final SystemClock systemClock;
     private final Duration lockTimeout;
     private final TaskRepository taskRepository;
+    private volatile Observer observer;
 
     public PersistentQueue(Database database, TaskRepository taskRepository, SystemClock systemClock, Duration lockTimeout) {
         this.database = database;
@@ -39,6 +38,7 @@ class PersistentQueue {
             List<Task> nextTasksToLock = findNextForExecution(connection, processableTasks, limit);
 
             if (nextTasksToLock.isEmpty()) {
+                onPeek(limit, 0, 0);
                 return Collections.emptyList();
             }
 
@@ -46,17 +46,13 @@ class PersistentQueue {
                 return Collections.emptyList();
             }
 
-            do {
-                List<Task> locked = taskRepository.lock(connection, nextTasksToLock);
+            List<Task> locked = taskRepository.lock(connection, nextTasksToLock);
 
-                if (locked.size() > 0) {
-                    return locked;
-                }
-
-                if (Thread.currentThread().isInterrupted()) {
-                    break;
-                }
-            } while (!(nextTasksToLock = findNextForExecution(connection, processableTasks, limit)).isEmpty());
+            int lockCount = locked.size();
+            onPeek(limit, nextTasksToLock.size(), lockCount);
+            if (lockCount > 0) {
+                return locked;
+            }
 
             return Collections.emptyList();
         });
@@ -64,6 +60,14 @@ class PersistentQueue {
 
     private List<Task> findNextForExecution(Connection connection, Set<String> processableTasks, int limit) {
         return taskRepository.findAllNotLockedOrderedByCreatedDate(connection, processableTasks, plannedExecutionTime(), currentLockTimeout(), limit);
+    }
+
+    private void onPeek(int limit, int selected, int locked) {
+        if (observer == null) {
+            return;
+        }
+
+        observer.onPeek(limit, selected, locked);
     }
 
     private LocalDateTime plannedExecutionTime() {
@@ -74,4 +78,12 @@ class PersistentQueue {
         return systemClock.now().minus(lockTimeout);
     }
 
+    void setObserver(Observer observer) {
+        this.observer = observer;
+    }
+
+    public interface Observer {
+
+        void onPeek(int limit, int selected, int locked);
+    }
 }

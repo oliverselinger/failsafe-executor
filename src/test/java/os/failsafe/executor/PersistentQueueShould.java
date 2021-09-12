@@ -6,7 +6,6 @@ import org.mockito.Mockito;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
-import javax.xml.crypto.Data;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -25,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,31 +94,55 @@ class PersistentQueueShould {
     }
 
     @Test
-    void find_next_tasks_for_execution_if_tasks_of_first_result_list_cannot_be_locked() {
-        Task alreadyLocked = Mockito.mock(Task.class);
-        Task toLock = Mockito.mock(Task.class);
-
-        when(taskRepository.lock(any(), eq(Collections.singletonList(alreadyLocked)))).thenReturn(Collections.emptyList());
-        List<Task> lockable = Collections.singletonList(toLock);
-        when(taskRepository.lock(any(), eq(lockable))).thenReturn(lockable);
-
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), lockable);
-
-        List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3);
-
-        verify(taskRepository).lock(any(), eq(lockable));
-        assertEquals(toLock, lockable.get(0));
-    }
-
-    @Test
     void return_empty_list_if_first_result_list_cannot_be_locked_and_no_more_results_can_be_found() {
         Task alreadyLocked = Mockito.mock(Task.class);
 
         when(taskRepository.lock(any(), any())).thenReturn(Collections.emptyList());
 
-        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked), Collections.emptyList());
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked));
 
         assertEquals(0, persistentQueue.peekAndLock(processableTasks, 3).size());
+    }
+
+    @Test
+    void call_the_observer_and_pass_actual_query_result_zero() {
+        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        persistentQueue.setObserver(observer);
+
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
+
+        persistentQueue.peekAndLock(processableTasks, 3);
+        verify(observer).onPeek(3, 0, 0);
+    }
+
+    @Test
+    void call_the_observer_and_pass_actual_query_result_found_and_locked() {
+        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        persistentQueue.setObserver(observer);
+
+        Task alreadyLocked = Mockito.mock(Task.class);
+        Task toLock = Mockito.mock(Task.class);
+        List<Task> taskList = Arrays.asList(alreadyLocked, toLock);
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
+        when(taskRepository.lock(any(), eq(taskList))).thenReturn(Collections.singletonList(toLock));
+
+        persistentQueue.peekAndLock(processableTasks, 3);
+        verify(observer).onPeek(3, 2, 1);
+    }
+
+    @Test
+    void remove_the_observer_on_demand() {
+        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        persistentQueue.setObserver(observer);
+
+        when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        persistentQueue.peekAndLock(processableTasks, 3);
+        verify(observer).onPeek(3, 0, 0);
+
+        persistentQueue.setObserver(null);
+        Mockito.reset(observer);
+        persistentQueue.peekAndLock(processableTasks, 3);
+        verify(observer, never()).onPeek(anyInt(), anyInt(), anyInt());
     }
 
     private Task createTask(LocalDateTime plannedExecutionTime) {
