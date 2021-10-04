@@ -25,6 +25,7 @@ commands:
           path: target/surefire-reports
       - codecov/upload
 
+
 jobs:
   jdk-8-build:
     docker:
