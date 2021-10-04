@@ -10,13 +10,13 @@ import os.failsafe.executor.utils.TestSystemClock;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,16 +84,32 @@ class TaskRepositoryShould {
     @Test
     void find_and_return_all_tasks() {
         Task task1 = addTask();
+        systemClock.timeTravelBy(Duration.ofSeconds(1));
         Task task2 = addTask();
+        systemClock.timeTravelBy(Duration.ofSeconds(1));
+        Task task3 = addTask();
 
         List<Task> tasks = taskRepository.findAll();
+        assertEquals(3, tasks.size());
+        assertTrue(tasks.containsAll(Arrays.asList(task1, task2, task3)));
+
+        tasks = taskRepository.findAll(0, 2);
         assertEquals(2, tasks.size());
-        assertTrue(tasks.containsAll(Arrays.asList(task1, task2)));
+        assertTrue(tasks.containsAll(Arrays.asList(task3, task2)));
+
+        tasks = taskRepository.findAll(2, 100);
+        assertEquals(1, tasks.size());
+        assertTrue(tasks.contains(task1));
+
+        tasks = taskRepository.findAll(3, 100);
+        assertEquals(0, tasks.size());
     }
 
     @Test
     void find_and_return_empty_list_if_no_task_exists() {
         assertTrue(taskRepository.findAll().isEmpty());
+        assertTrue(taskRepository.findAll(0, 100).isEmpty());
+        assertTrue(taskRepository.findAll(10, 100).isEmpty());
     }
 
     @Test
@@ -239,6 +255,29 @@ class TaskRepositoryShould {
     }
 
     @Test
+    void find_and_return_failed_tasks() {
+        Task task1 = addTask();
+        Task task2 = addTask();
+
+        String exceptionMessage = "Exception message";
+        Exception exception = new Exception(exceptionMessage);
+
+        ExecutionFailure executionFailure1 = new ExecutionFailure(systemClock.now(), exception);
+        taskRepository.saveFailure(task1, executionFailure1);
+        ExecutionFailure executionFailure2 = new ExecutionFailure(systemClock.now().plusSeconds(1), exception);
+        taskRepository.saveFailure(task2, executionFailure2);
+
+        List<Task> failedTasks = taskRepository.findAllFailedTasks();
+        assertIdsOnly(Arrays.asList(task2, task1), failedTasks);
+
+        failedTasks = taskRepository.findAllFailedTasks(0, 100);
+        assertIdsOnly(Arrays.asList(task2, task1), failedTasks);
+
+        failedTasks = taskRepository.findAllFailedTasks(1, 100);
+        assertIdsOnly(Collections.singletonList(task1), failedTasks);
+    }
+
+    @Test
     void never_return_a_failed_task() {
         Task task = addTask();
 
@@ -254,6 +293,12 @@ class TaskRepositoryShould {
         addTask();
 
         List<Task> failedTasks = taskRepository.findAllFailedTasks();
+        assertTrue(failedTasks.isEmpty());
+
+        failedTasks = taskRepository.findAllFailedTasks(0, 100);
+        assertTrue(failedTasks.isEmpty());
+
+        failedTasks = taskRepository.findAllFailedTasks(10, 100);
         assertTrue(failedTasks.isEmpty());
     }
 
@@ -328,5 +373,13 @@ class TaskRepositoryShould {
 
     private Task addTask(String id, String taskName, LocalDateTime plannedExecutionTime) {
         return taskRepository.add(new Task(id, taskName, taskParameter, plannedExecutionTime));
+    }
+
+    public static void assertIdsOnly(List<Task> expected, List<Task> actual) {
+        assertEquals(expected.size(), actual.size());
+
+        List<String> expectedIds = expected.stream().map(Task::getId).collect(Collectors.toList());
+        List<String> actualIds = actual.stream().map(Task::getId).collect(Collectors.toList());
+        assertTrue(expectedIds.containsAll(actualIds));
     }
 }

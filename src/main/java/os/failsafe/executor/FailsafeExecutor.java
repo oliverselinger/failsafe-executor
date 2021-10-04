@@ -387,12 +387,23 @@ public class FailsafeExecutor {
 
 
     /**
-     * Returns all persisted tasks.
+     * Returns the newest persisted tasks with a limit of 100 rows.
      *
      * @return list of all persisted tasks
      */
     public List<Task> allTasks() {
         return taskRepository.findAll();
+    }
+
+    /**
+     * Returns the newest persisted tasks with the given offset and limit.
+     *
+     * @param offset
+     * @param limit
+     * @return list of all persisted tasks
+     */
+    public List<Task> allTasks(int offset, int limit) {
+        return taskRepository.findAll(offset, limit);
     }
 
     /**
@@ -406,7 +417,7 @@ public class FailsafeExecutor {
     }
 
     /**
-     * Returns all tasks that failed during execution.
+     * Returns tasks that failed lately during execution with a limit of 100 rows.
      *
      * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
      *
@@ -414,6 +425,19 @@ public class FailsafeExecutor {
      */
     public List<Task> failedTasks() {
         return taskRepository.findAllFailedTasks();
+    }
+
+    /**
+     * Returns tasks that failed lately during execution with the given offset and limit.
+     *
+     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
+     *
+     * @param offset
+     * @param limit
+     * @return list of all failed tasks
+     */
+    public List<Task> failedTasks(int offset, int limit) {
+        return taskRepository.findAllFailedTasks(offset, limit);
     }
 
     public boolean retry(Task failedTask) {

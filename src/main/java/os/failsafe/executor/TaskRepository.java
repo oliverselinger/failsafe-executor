@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 class TaskRepository {
 
+    public static final int DEFAULT_FIND_FETCH_LIMIT = 100;
     private final Database database;
     private final String tableName;
     private final SystemClock systemClock;
@@ -24,11 +25,13 @@ class TaskRepository {
     private final String insertStmtPostgres;
     private final String selectStmtFindOne;
     private final String selectStmtFindAll;
+    private final String selectStmtFindAllPaging;
     private final String lockStmt;
     private final String unlockStmt;
     private final String saveFailureStmt;
     private final String deleteFailureStmt;
     private final String selectStmtAllFailedTasks;
+    private final String selectStmtAllFailedTasksPaging;
     private final String deleteTaskStmt;
     private final String selectNotLockedTasksStmt;
 
@@ -54,7 +57,8 @@ class TaskRepository {
                 " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
                 " ON CONFLICT DO NOTHING", this.tableName);
         selectStmtFindOne = String.format("SELECT * FROM %s WHERE ID = ?", this.tableName);
-        selectStmtFindAll = String.format("SELECT * FROM %s", this.tableName);
+        selectStmtFindAll = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST (?) ROWS ONLY");
+        selectStmtFindAllPaging = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
         lockStmt = String.format("" +
                 "UPDATE %s" +
                 " SET" +
@@ -75,7 +79,8 @@ class TaskRepository {
                 " SET" +
                 " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
                 " WHERE ID=? AND VERSION=?", this.tableName);
-        selectStmtAllFailedTasks = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY CREATED_DATE DESC", this.tableName);
+        selectStmtAllFailedTasks = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST (?) ROWS ONLY");
+        selectStmtAllFailedTasksPaging = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
         deleteTaskStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", this.tableName);
         selectNotLockedTasksStmt = String.format("" +
                 "SELECT * FROM %s" +
@@ -156,7 +161,11 @@ class TaskRepository {
     }
 
     List<Task> findAll() {
-        return database.selectAll(selectStmtFindAll, this::mapToPersistentTask, null);
+        return database.selectAll(selectStmtFindAll, this::mapToPersistentTask, new Object[] {DEFAULT_FIND_FETCH_LIMIT});
+    }
+
+    List<Task> findAll(int offset, int limit) {
+        return database.selectAll(selectStmtFindAllPaging, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     List<Task> lock(Connection trx, List<Task> toLock) {
@@ -234,7 +243,11 @@ class TaskRepository {
     }
 
     List<Task> findAllFailedTasks() {
-        return database.selectAll(selectStmtAllFailedTasks, this::mapToPersistentTask, null);
+        return database.selectAll(selectStmtAllFailedTasks, this::mapToPersistentTask, new Object[] {DEFAULT_FIND_FETCH_LIMIT});
+    }
+
+    List<Task> findAllFailedTasks(int offset, int limit) {
+        return database.selectAll(selectStmtAllFailedTasksPaging, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     void delete(Task toDelete) {
