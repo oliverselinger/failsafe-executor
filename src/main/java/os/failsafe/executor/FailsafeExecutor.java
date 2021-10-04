@@ -398,8 +398,8 @@ public class FailsafeExecutor {
     /**
      * Returns the newest persisted tasks with the given offset and limit.
      *
-     * @param offset
-     * @param limit
+     * @param offset offset to start from
+     * @param limit limit of the result set
      * @return list of all persisted tasks
      */
     public List<Task> allTasks(int offset, int limit) {
@@ -432,8 +432,8 @@ public class FailsafeExecutor {
      *
      * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
      *
-     * @param offset
-     * @param limit
+     * @param offset offset to start from
+     * @param limit limit of the result set
      * @return list of all failed tasks
      */
     public List<Task> failedTasks(int offset, int limit) {
