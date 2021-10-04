@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support to record other failures in FailsafeExecutor's context. 
   It can be useful to record exceptions that are thrown not within a failsafe task but in regular synchronous program execution.
   So you can make other exceptions visible and utilize the FailsafeExecutor's retry mechanism.
-- Method to register an persistent queue observer to make behavior and select query results visible. 
+- Method to register a persistent queue observer to make behavior and select query results visible. 
 - Rerun threshold can be configured via parameter in constructor. Determines if FailsafeExecutor should immediately try to lock more tasks after current select and lock run. In the default setting threshold value is 5. That means if there are more than 5 entries free in the queue after a select and lock run, FailsafeExecutor does not wait for the next polling interval. Instead, it immediately reruns trying to lock more tasks.
   
 ### Changed
