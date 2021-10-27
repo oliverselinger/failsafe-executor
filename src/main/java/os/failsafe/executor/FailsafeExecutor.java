@@ -500,7 +500,7 @@ public class FailsafeExecutor {
      *
      * @param observer the callback method that receives the latest queue selection results.
      */
-    public void observeQueue(PersistentQueue.Observer observer) {
+    public void observeQueue(PersistentQueueObserver observer) {
         persistentQueue.setObserver(observer);
     }
 

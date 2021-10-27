@@ -16,7 +16,7 @@ class PersistentQueue {
     private final SystemClock systemClock;
     private final Duration lockTimeout;
     private final TaskRepository taskRepository;
-    private volatile Observer observer;
+    private volatile PersistentQueueObserver observer;
 
     public PersistentQueue(Database database, TaskRepository taskRepository, SystemClock systemClock, Duration lockTimeout) {
         this.database = database;
@@ -34,7 +34,7 @@ class PersistentQueue {
     }
 
     List<Task> peekAndLock(Set<String> processableTasks, int limit) {
-        return database.connect(connection -> {
+        return database.transaction(connection -> {
             List<Task> nextTasksToLock = findNextForExecution(connection, processableTasks, limit);
 
             if (nextTasksToLock.isEmpty()) {
@@ -78,12 +78,8 @@ class PersistentQueue {
         return systemClock.now().minus(lockTimeout);
     }
 
-    void setObserver(Observer observer) {
+    void setObserver(PersistentQueueObserver observer) {
         this.observer = observer;
     }
 
-    public interface Observer {
-
-        void onPeek(int limit, int selected, int locked);
-    }
 }

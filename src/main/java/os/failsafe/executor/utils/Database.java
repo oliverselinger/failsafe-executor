@@ -118,8 +118,8 @@ public class Database {
     }
 
     public int executeUpdate(Connection connection,
-                              String sql,
-                              Object... params) {
+                             String sql,
+                             Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             int cnt = 0;
@@ -138,7 +138,7 @@ public class Database {
 
             for (Object[] batch : batchParams) {
                 int cnt = 0;
-                for(Object param : batch) {
+                for (Object param : batch) {
                     ps.setObject(++cnt, param);
                 }
                 ps.addBatch();
@@ -178,8 +178,20 @@ public class Database {
     public void transactionNoResult(ConnectionConsumer connectionConsumer) throws SQLException {
         connectNoResult(connection -> {
             try (DbTransaction dbTransaction = new DbTransaction(connection)) {
-                    connectionConsumer.accept(connection);
-                    dbTransaction.commit();
+                connectionConsumer.accept(connection);
+                dbTransaction.commit();
+            } catch (Exception exception) {
+                throw new RuntimeException(exception);
+            }
+        });
+    }
+
+    public <T> T transaction(Function<Connection, T> connectionConsumer) {
+        return connect(connection -> {
+            try (DbTransaction dbTransaction = new DbTransaction(connection)) {
+                T result = connectionConsumer.apply(connection);
+                dbTransaction.commit();
+                return result;
             } catch (Exception exception) {
                 throw new RuntimeException(exception);
             }

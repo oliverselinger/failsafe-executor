@@ -86,7 +86,7 @@ class TaskRepository {
                 "SELECT * FROM %s" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
                 " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
-                " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? " LIMIT ?" : " FETCH FIRST (?) ROWS ONLY");
+                " ORDER BY CREATED_DATE,ID %s FOR UPDATE", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST (?) ROWS ONLY");
     }
 
     Task add(Task task) {
@@ -168,7 +168,7 @@ class TaskRepository {
         return database.selectAll(selectStmtFindAllPaging, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
-    List<Task> lock(Connection trx, List<Task> toLock) {
+    List<Task> lock(Connection connection, List<Task> toLock) {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
@@ -180,7 +180,7 @@ class TaskRepository {
             entries[i] = entry;
         }
 
-        int[] updateCount = database.executeBatchUpdate(trx, lockStmt, entries);
+        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, entries);
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
@@ -210,14 +210,20 @@ class TaskRepository {
             return Collections.emptyList();
         }
 
-        String selectStmt = String.format(selectNotLockedTasksStmt, processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")));
-
         List<Object> params = new ArrayList<>();
         params.add(Timestamp.valueOf(lockTimeLessOrEqual));
         params.add(Timestamp.valueOf(plannedExecutionDateLessOrEquals));
-        params.addAll(processableTasks);
+
+        StringBuilder builder = new StringBuilder();
+        for (String processableTask : processableTasks) {
+            builder.append("?,");
+            params.add(processableTask);
+        }
+        builder.deleteCharAt(builder.length()-1);
+
         params.add(limit);
 
+        String selectStmt = String.format(selectNotLockedTasksStmt, builder);
         return database.selectAll(connection, selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
