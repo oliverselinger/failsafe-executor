@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2021-10-28
+### Fixed
+- Make `Observer` interface of `PersistentQueue` visible to the outside world
+- This version should work with H2 database again. Versions 1.3.0 and 1.3.1 do not. But I don't know why. Moved sql statement creation back into methods. Removed reRun threshold and simplified execution logic.
+
 ## [1.3.1] - 2021-10-04
 ### Added
 - Support for pageable query methods (offset + limit)
