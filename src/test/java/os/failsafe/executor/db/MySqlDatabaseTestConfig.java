@@ -6,10 +6,13 @@ import os.failsafe.executor.utils.FileUtil;
 class MySqlDatabaseTestConfig implements DatabaseTestConfig {
 
     public void createTable(Database database) {
-        String createTableSql = FileUtil.readResourceFile("mysql.sql");
+        database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK");
 
-        database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK",
-                createTableSql);
+        String createTableSql = FileUtil.readResourceFile("mysql.sql");
+        String[] split = createTableSql.split("\\n\\n");
+        for (String stmt : split) {
+            database.execute(stmt);
+        }
     }
 
     public void truncateTable(Database database) {

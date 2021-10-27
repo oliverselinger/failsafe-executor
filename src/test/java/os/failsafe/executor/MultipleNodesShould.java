@@ -50,8 +50,8 @@ class MultipleNodesShould {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
-        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(5), DEFAULT_LOCK_TIMEOUT);
-        executorB = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(5), DEFAULT_LOCK_TIMEOUT);
+        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, 5, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
+        executorB = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, 5, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         listenerA = Mockito.mock(TaskExecutionListener.class);
         listenerB = Mockito.mock(TaskExecutionListener.class);
 
@@ -128,8 +128,15 @@ class MultipleNodesShould {
     }
 
     private void awaitEmptyTaskTable() {
-        await().atMost(Duration.ofSeconds(1))
-                .pollInterval(Duration.ofMillis(100))
-                .until(() -> taskRepository.findAll().isEmpty());
+        try {
+            await().atMost(Duration.ofSeconds(1))
+                    .pollInterval(Duration.ofMillis(100))
+                    .until(() -> taskRepository.findAll().isEmpty());
+        } catch (Exception e) {
+            System.err.println("######################");
+            System.err.println("Tasks still present:");
+            taskRepository.findAll().stream().forEach(task -> System.err.println(task.toString()));
+            System.err.println("######################");
+        }
     }
 }

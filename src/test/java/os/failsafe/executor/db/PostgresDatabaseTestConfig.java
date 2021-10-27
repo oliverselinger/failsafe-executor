@@ -6,10 +6,13 @@ import os.failsafe.executor.utils.FileUtil;
 class PostgresDatabaseTestConfig implements DatabaseTestConfig {
 
     public void createTable(Database database) {
-        String createTableSql = FileUtil.readResourceFile("postgres.sql");
+        database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK");
 
-        database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK",
-                createTableSql);
+        String createTableSql = FileUtil.readResourceFile("postgres.sql");
+        String[] split = createTableSql.split("\\n\\n");
+        for (String stmt : split) {
+            database.execute(stmt);
+        }
     }
 
     public void truncateTable(Database database) {

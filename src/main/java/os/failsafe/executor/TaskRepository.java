@@ -119,8 +119,14 @@ class TaskRepository {
     }
 
     List<Task> findAll() {
-        String selectStmt = String.format("SELECT * FROM %s", tableName);
+        String selectStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC", tableName);
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
+    }
+
+    List<Task> findAll(int offset, int limit) {
+        String selectStmtFindAllPaging = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+
+        return database.selectAll(selectStmtFindAllPaging, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     List<Task> lock(Connection connection, List<Task> toLock) {
@@ -232,8 +238,13 @@ class TaskRepository {
     }
 
     List<Task> findAllFailedTasks() {
-        String selectStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY CREATED_DATE DESC", tableName);
+        String selectStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC", tableName);
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
+    }
+
+    List<Task> findAllFailedTasks(int offset, int limit) {
+        String selectStmtAllFailedTasksPaging = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+        return database.selectAll(selectStmtAllFailedTasksPaging, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     void delete(Task toDelete) {

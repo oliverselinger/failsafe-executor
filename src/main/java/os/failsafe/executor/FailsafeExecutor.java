@@ -386,12 +386,23 @@ public class FailsafeExecutor {
 
 
     /**
-     * Returns all persisted tasks.
+     * Returns the newest persisted tasks with a limit of 100 rows.
      *
      * @return list of all persisted tasks
      */
     public List<Task> allTasks() {
         return taskRepository.findAll();
+    }
+
+    /**
+     * Returns the newest persisted tasks with the given offset and limit.
+     *
+     * @param offset offset to start from
+     * @param limit limit of the result set
+     * @return list of all persisted tasks
+     */
+    public List<Task> allTasks(int offset, int limit) {
+        return taskRepository.findAll(offset, limit);
     }
 
     /**
@@ -405,7 +416,7 @@ public class FailsafeExecutor {
     }
 
     /**
-     * Returns all tasks that failed during execution.
+     * Returns tasks that failed lately during execution with a limit of 100 rows.
      *
      * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
      *
@@ -413,6 +424,19 @@ public class FailsafeExecutor {
      */
     public List<Task> failedTasks() {
         return taskRepository.findAllFailedTasks();
+    }
+
+    /**
+     * Returns tasks that failed lately during execution with the given offset and limit.
+     *
+     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
+     *
+     * @param offset offset to start from
+     * @param limit limit of the result set
+     * @return list of all failed tasks
+     */
+    public List<Task> failedTasks(int offset, int limit) {
+        return taskRepository.findAllFailedTasks(offset, limit);
     }
 
     public boolean retry(Task failedTask) {
@@ -470,6 +494,22 @@ public class FailsafeExecutor {
         return lastRunException;
     }
 
+    /**
+     * Register an observer to make selection/query behavior of the persistent queue visible.
+     *
+     * @param observer the callback method that receives the latest queue selection results.
+     */
+    public void observeQueue(PersistentQueueObserver observer) {
+        persistentQueue.setObserver(observer);
+    }
+
+    /**
+     * Removes the queue observer. Callbacks are stopped.
+     */
+    public void stopQueueObservation() {
+        persistentQueue.setObserver(null);
+    }
+
     private String enqueue(Connection connection, Task task) {
         if (!taskRegistrationsByName.containsKey(task.getName())) {
             throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", task.getName()));
@@ -494,7 +534,7 @@ public class FailsafeExecutor {
             for (Task task : toExecute) {
                 TaskRegistration registration = taskRegistrationsByName.get(task.getName());
                 Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
-                Future<String> future = workerPool.execute(task.getId(), execution::perform);
+                workerPool.execute(task.getId(), execution::perform);
             }
 
             clearException();

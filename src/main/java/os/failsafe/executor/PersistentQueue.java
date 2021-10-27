@@ -6,11 +6,8 @@ import os.failsafe.executor.utils.SystemClock;
 import java.sql.Connection;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 class PersistentQueue {
@@ -19,6 +16,7 @@ class PersistentQueue {
     private final SystemClock systemClock;
     private final Duration lockTimeout;
     private final TaskRepository taskRepository;
+    private volatile PersistentQueueObserver observer;
 
     public PersistentQueue(Database database, TaskRepository taskRepository, SystemClock systemClock, Duration lockTimeout) {
         this.database = database;
@@ -40,6 +38,7 @@ class PersistentQueue {
             List<Task> nextTasksToLock = findNextForExecution(connection, processableTasks, limit);
 
             if (nextTasksToLock.isEmpty()) {
+                onPeek(limit, 0, 0);
                 return Collections.emptyList();
             }
 
@@ -47,12 +46,23 @@ class PersistentQueue {
                 return Collections.emptyList();
             }
 
-            return taskRepository.lock(connection, nextTasksToLock);
+            List<Task> locked = taskRepository.lock(connection, nextTasksToLock);
+            onPeek(limit, nextTasksToLock.size(), locked.size());
+
+            return locked;
         });
     }
 
     private List<Task> findNextForExecution(Connection connection, Set<String> processableTasks, int limit) {
         return taskRepository.findAllNotLockedOrderedByCreatedDate(connection, processableTasks, plannedExecutionTime(), currentLockTimeout(), limit);
+    }
+
+    private void onPeek(int limit, int selected, int locked) {
+        if (observer == null) {
+            return;
+        }
+
+        observer.onPeek(limit, selected, locked);
     }
 
     private LocalDateTime plannedExecutionTime() {
@@ -63,4 +73,7 @@ class PersistentQueue {
         return systemClock.now().minus(lockTimeout);
     }
 
+    void setObserver(PersistentQueueObserver observer) {
+        this.observer = observer;
+    }
 }
