@@ -72,7 +72,7 @@ public class FailsafeExecutor {
         this.database = new Database(dataSource);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
-        this.persistentQueue = new PersistentQueue(taskRepository, systemClock, lockTimeout);
+        this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
@@ -92,18 +92,6 @@ public class FailsafeExecutor {
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    private void executeNextTasks() {
-        for (; ; ) {
-            if (executeNextTask() == null) {
-                break;
-            }
-
-            if (Thread.currentThread().isInterrupted()) {
-                break;
-            }
-        }
     }
 
     /**
@@ -363,10 +351,10 @@ public class FailsafeExecutor {
      * <p>The provided connection is used for persisting the task in the database. Neither commit
      * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
      *
-     * @param taskId     the id of the task used as unique constraint in database
-     * @param taskName   the name of the task that should be executed
-     * @param parameter  the parameter that should be passed to the function
-     * @param exception  the exception to store
+     * @param taskId    the id of the task used as unique constraint in database
+     * @param taskName  the name of the task that should be executed
+     * @param parameter the parameter that should be passed to the function
+     * @param exception the exception to store
      * @return taskId
      */
     public String recordFailure(String taskId, String taskName, String parameter, Exception exception) {
@@ -491,30 +479,29 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
-    private Future<String> executeNextTask() {
+    private void executeNextTasks() {
         try {
             int idleWorkerCount = workerPool.spareQueueCount();
             if (idleWorkerCount == 0) {
-                return null;
+                return;
             }
 
-            Task toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
-            if (toExecute == null) {
-                return null;
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+            if (toExecute.isEmpty()) {
+                return;
             }
 
-            TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
-            Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
-            Future<String> future = workerPool.execute(toExecute.getId(), execution::perform);
+            for (Task task : toExecute) {
+                TaskRegistration registration = taskRegistrationsByName.get(task.getName());
+                Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
+                Future<String> future = workerPool.execute(task.getId(), execution::perform);
+            }
 
             clearException();
 
-            return future;
         } catch (Exception e) {
             storeException(e);
         }
-
-        return null;
     }
 
     private void storeException(Exception e) {

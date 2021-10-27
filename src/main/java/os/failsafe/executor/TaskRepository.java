@@ -1,14 +1,11 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.utils.Database;
-import os.failsafe.executor.utils.ExceptionUtils;
-import os.failsafe.executor.utils.StringUtils;
 import os.failsafe.executor.utils.SystemClock;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -126,25 +123,35 @@ class TaskRepository {
         return database.selectAll(selectStmt, this::mapToPersistentTask, null);
     }
 
-    Task lock(Task toLock) {
-        String updateStmt = String.format("" +
+    List<Task> lock(Connection connection, List<Task> toLock) {
+        LocalDateTime lockTime = systemClock.now();
+        Timestamp timestamp = Timestamp.valueOf(lockTime);
+
+        String lockStmt = String.format("" +
                 "UPDATE %s" +
                 " SET" +
                 " LOCK_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", tableName);
+                " WHERE ID=? AND VERSION=?", this.tableName);
 
-        LocalDateTime lockTime = systemClock.now();
-        int updateCount = database.update(updateStmt,
-                Timestamp.valueOf(lockTime),
-                toLock.getVersion() + 1,
-                toLock.getId(),
-                toLock.getVersion());
+        Object[][] entries = new Object[toLock.size()][];
 
-        if (updateCount == 1) {
-            return new Task(toLock.getId(), toLock.getName(), toLock.getParameter(), toLock.getCreationTime(), toLock.getPlannedExecutionTime(), lockTime, null, toLock.getRetryCount(), toLock.getVersion() + 1);
+        for (int i = 0, toLockSize = toLock.size(); i < toLockSize; i++) {
+            Task task = toLock.get(i);
+            Object[] entry = {timestamp, task.getVersion() + 1, task.getId(), task.getVersion()};
+            entries[i] = entry;
         }
 
-        return null;
+        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, entries);
+
+        List<Task> result = new ArrayList<>();
+        for (int i = 0; i < updateCount.length; i++) {
+            int value = updateCount[i];
+            if (value == 1) {
+                Task task = toLock.get(i);
+                result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
+            }
+        }
+        return result;
     }
 
     void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
@@ -165,7 +172,7 @@ class TaskRepository {
         }
     }
 
-    List<Task> findAllNotLockedOrderedByCreatedDate(Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
+    List<Task> findAllNotLockedOrderedByCreatedDate(Connection connection, Set<String> processableTasks, LocalDateTime plannedExecutionDateLessOrEquals, LocalDateTime lockTimeLessOrEqual, int limit) {
         if (processableTasks.isEmpty()) {
             return Collections.emptyList();
         }
@@ -188,7 +195,7 @@ class TaskRepository {
         params.addAll(processableTasks);
         params.add(limit);
 
-        return database.selectAll(selectStmt, this::mapToPersistentTask, params.toArray());
+        return database.selectAll(connection, selectStmt, this::mapToPersistentTask, params.toArray());
     }
 
     void saveFailure(Task failed, ExecutionFailure executionFailure) {
