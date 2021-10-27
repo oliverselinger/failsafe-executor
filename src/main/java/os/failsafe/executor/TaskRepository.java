@@ -86,7 +86,7 @@ class TaskRepository {
                 "SELECT * FROM %s" +
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
                 " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
-                " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? " LIMIT ?" : " FETCH FIRST (?) ROWS ONLY");
+                " ORDER BY CREATED_DATE,ID %s FOR UPDATE", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST (?) ROWS ONLY");
     }
 
     Task add(Task task) {
