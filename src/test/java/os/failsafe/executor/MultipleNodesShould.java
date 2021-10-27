@@ -128,8 +128,15 @@ class MultipleNodesShould {
     }
 
     private void awaitEmptyTaskTable() {
-        await().atMost(Duration.ofSeconds(1))
-                .pollInterval(Duration.ofMillis(100))
-                .until(() -> taskRepository.findAll().isEmpty());
+        try {
+            await().atMost(Duration.ofSeconds(1))
+                    .pollInterval(Duration.ofMillis(100))
+                    .until(() -> taskRepository.findAll().isEmpty());
+        } catch (Exception e) {
+            System.err.println("######################");
+            System.err.println("Tasks still present:");
+            taskRepository.findAll().stream().forEach(task -> System.err.println(task.toString()));
+            System.err.println("######################");
+        }
     }
 }
