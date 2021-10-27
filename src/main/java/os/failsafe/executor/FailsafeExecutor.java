@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,7 +48,6 @@ public class FailsafeExecutor {
     private final Duration pollingInterval;
     private final Database database;
     private final SystemClock systemClock;
-    private final long immediateReRunThreshold;
 
     private volatile Exception lastRunException;
     private AtomicBoolean running = new AtomicBoolean();
@@ -57,10 +57,10 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout) throws SQLException {
-        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME, (long) (queueSize * 0.25));
+        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME);
     }
 
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName, long immediateReRunThreshold) throws SQLException {
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName) throws SQLException {
         if (queueSize < workerThreadCount) {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
@@ -76,7 +76,6 @@ public class FailsafeExecutor {
         this.workerPool = new WorkerPool(workerThreadCount, queueSize);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
-        this.immediateReRunThreshold = immediateReRunThreshold;
 
         validateDatabaseTableStructure(dataSource);
     }
@@ -520,36 +519,26 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
-    /**
-     * @return true if there are still spare entries inside the queue
-     */
     private void executeNextTasks() {
-        int idleWorkerCount = workerPool.spareQueueCount();
-        if (idleWorkerCount == 0) {
-            return;
-        }
-
         try {
-            while (true) {
-                List<Task> tasksToExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
-
-                for (Task toExecute : tasksToExecute) {
-                    TaskRegistration registration = taskRegistrationsByName.get(toExecute.getName());
-                    Execution execution = new Execution(database, toExecute, registration, listeners, systemClock, taskRepository);
-                    workerPool.execute(toExecute.getId(), execution::perform);
-                }
-
-                clearException();
-
-                if (Thread.currentThread().isInterrupted()) {
-                    break;
-                }
-
-                idleWorkerCount = workerPool.spareQueueCount();
-                if (idleWorkerCount < immediateReRunThreshold) {
-                    break;
-                }
+            int idleWorkerCount = workerPool.spareQueueCount();
+            if (idleWorkerCount == 0) {
+                return;
             }
+
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+            if (toExecute.isEmpty()) {
+                return;
+            }
+
+            for (Task task : toExecute) {
+                TaskRegistration registration = taskRegistrationsByName.get(task.getName());
+                Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
+                workerPool.execute(task.getId(), execution::perform);
+            }
+
+            clearException();
+
         } catch (Exception e) {
             storeException(e);
         }
