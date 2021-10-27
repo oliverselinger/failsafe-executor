@@ -186,6 +186,18 @@ public class Database {
         });
     }
 
+    public <T> T transaction(Function<Connection, T> connectionConsumer) {
+        return connect(connection -> {
+            try (DbTransaction dbTransaction = new DbTransaction(connection)) {
+                    T result = connectionConsumer.apply(connection);
+                    dbTransaction.commit();
+                    return result;
+            } catch (Exception exception) {
+                throw new RuntimeException(exception);
+            }
+        });
+    }
+
     private String determineDatabase() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             return connection.getMetaData().getDatabaseProductName();

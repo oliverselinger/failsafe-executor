@@ -52,6 +52,10 @@ class PersistentQueueShould {
         doAnswer(ans -> {
             Function connectionConsumer = (Function) ans.getArguments()[0];
             return connectionConsumer.apply(connection);
+        }).when(database).transaction(any());
+        doAnswer(ans -> {
+            Function connectionConsumer = (Function) ans.getArguments()[0];
+            return connectionConsumer.apply(connection);
         }).when(database).connect(any());
 
         persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
@@ -106,7 +110,7 @@ class PersistentQueueShould {
 
     @Test
     void call_the_observer_and_pass_actual_query_result_zero() {
-        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        PersistentQueueObserver observer = Mockito.mock(PersistentQueueObserver.class);
         persistentQueue.setObserver(observer);
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
@@ -117,7 +121,7 @@ class PersistentQueueShould {
 
     @Test
     void call_the_observer_and_pass_actual_query_result_found_and_locked() {
-        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        PersistentQueueObserver observer = Mockito.mock(PersistentQueueObserver.class);
         persistentQueue.setObserver(observer);
 
         Task alreadyLocked = Mockito.mock(Task.class);
@@ -132,7 +136,7 @@ class PersistentQueueShould {
 
     @Test
     void remove_the_observer_on_demand() {
-        PersistentQueue.Observer observer = Mockito.mock(PersistentQueue.Observer.class);
+        PersistentQueueObserver observer = Mockito.mock(PersistentQueueObserver.class);
         persistentQueue.setObserver(observer);
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
