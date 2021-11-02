@@ -25,7 +25,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>1.3.2</version>
+    <version>1.3.3</version>
 </dependency>
 ```
 
@@ -97,6 +97,24 @@ String taskId = failsafeExecutor.schedule("TaskName", schedule, () -> {
 For a **recurring execution** let your `Schedule` always return the next planned time for execution. For example see [DailySchedule](src/main/java/os/failsafe/executor/schedule/DailySchedule.java).
 
 As before, make sure your business logic is **idempotent**, since it gets executed at least once per scheduled execution.
+
+Furthermore you have the ability to schedule a task that can receive a parameter. Register the task and provide a schedule:
+
+```java
+failsafeExecutor.registerTask("TaskName", schedule, param -> {
+    ... // your business logic
+});
+```
+
+Then you can execute the task with given parameter:
+
+```java
+String taskId = failsafeExecutor.execute("UniqueTaskId", "TaskName", parameter);
+```
+
+This task will have a recurring execution based on the schedule given during registration, unless the schedule does not return the next execution time.
+
+You can execute multiple tasks with this schedule. Just provide different task ids.
 
 ## Task failures
 
