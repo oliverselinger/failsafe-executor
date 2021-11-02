@@ -19,11 +19,85 @@ class TaskRepository {
     private final Database database;
     private final String tableName;
     private final SystemClock systemClock;
+    private final String insertStmtMysqlOrMariaDb;
+    private final String insertStmtPostgres;
+    private final String insertStmtOracle;
+    private final String lockStmt;
+    private final String unlockStmt;
+    private final String saveFailureStmt;
+    private final String deleteFailureStmt;
+    private final String deleteStmt;
+    private final String findAllStmt;
+    private final String findOneStmt;
+    private final String findAllFailedStmt;
+    private final String findAllNotLockedOrderedByCreatedDateStmt;
+    private final String findAllPagingStmt;
+    private final String findAllFailedPagingStmt;
 
     public TaskRepository(Database database, String tableName, SystemClock systemClock) {
         this.database = database;
         this.tableName = tableName;
         this.systemClock = systemClock;
+
+        this.insertStmtMysqlOrMariaDb = String.format("" +
+                "INSERT IGNORE INTO %s" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                " VALUES" +
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName);
+
+        this.insertStmtPostgres = String.format("" +
+                "INSERT INTO %s" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                " VALUES" +
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+                " ON CONFLICT DO NOTHING", tableName);
+
+        this.insertStmtOracle = String.format("" +
+                "INSERT INTO %s" +
+                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
+                " WHERE NOT EXISTS" +
+                " (SELECT ID FROM %s WHERE ID = ?)", tableName, tableName);
+
+        this.lockStmt = String.format("" +
+                "UPDATE %s" +
+                " SET" +
+                " LOCK_TIME=?, VERSION=?" +
+                " WHERE ID=? AND VERSION=?", this.tableName);
+
+        this.unlockStmt = String.format("" +
+                "UPDATE %s" +
+                " SET" +
+                " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
+                " WHERE ID=? AND VERSION=?", tableName);
+
+        this.saveFailureStmt = String.format("" +
+                "UPDATE %s" +
+                " SET" +
+                " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
+                " WHERE ID=?", tableName);
+
+        this.deleteFailureStmt = String.format("" +
+                "UPDATE %s" +
+                " SET" +
+                " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
+                " WHERE ID=? AND VERSION=?", tableName);
+
+        this.deleteStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
+
+        this.findAllStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC", tableName);
+        this.findAllPagingStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+
+        this.findOneStmt = String.format("SELECT * FROM %s WHERE ID = ?", tableName);
+
+        this.findAllFailedStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC", tableName);
+        this.findAllFailedPagingStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+
+        this.findAllNotLockedOrderedByCreatedDateStmt = String.format("" +
+                "SELECT * FROM %s" +
+                " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
+                " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
+                " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST ? ROWS ONLY");
     }
 
     Task add(Task task) {
@@ -45,14 +119,8 @@ class TaskRepository {
     }
 
     private void addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = String.format("" +
-                "INSERT IGNORE INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " VALUES" +
-                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName);
-
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmt,
+        database.insert(connection, insertStmtMysqlOrMariaDb,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -67,15 +135,8 @@ class TaskRepository {
     }
 
     private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = String.format("" +
-                "INSERT INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " VALUES" +
-                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
-                " ON CONFLICT DO NOTHING", tableName);
-
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmt,
+        database.insert(connection, insertStmtPostgres,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -90,15 +151,8 @@ class TaskRepository {
     }
 
     private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
-        String insertStmt = String.format("" +
-                "INSERT INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
-                " WHERE NOT EXISTS" +
-                " (SELECT ID FROM %s WHERE ID = ?)", tableName, tableName);
-
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmt,
+        database.insert(connection, insertStmtOracle,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -114,30 +168,20 @@ class TaskRepository {
     }
 
     Task findOne(String id) {
-        String selectStmt = String.format("SELECT * FROM %s WHERE ID = ?", tableName);
-        return database.selectOne(selectStmt, this::mapToPersistentTask, id);
+        return database.selectOne(findOneStmt, this::mapToPersistentTask, id);
     }
 
     List<Task> findAll() {
-        String selectStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC", tableName);
-        return database.selectAll(selectStmt, this::mapToPersistentTask, null);
+        return database.selectAll(findAllStmt, this::mapToPersistentTask, null);
     }
 
     List<Task> findAll(int offset, int limit) {
-        String selectStmtFindAllPaging = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
-
-        return database.selectAll(selectStmtFindAllPaging, this::mapToPersistentTask, new Object[] {offset, limit});
+        return database.selectAll(findAllPagingStmt, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     List<Task> lock(Connection connection, List<Task> toLock) {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
-
-        String lockStmt = String.format("" +
-                "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", this.tableName);
 
         Object[][] entries = new Object[toLock.size()][];
 
@@ -161,13 +205,7 @@ class TaskRepository {
     }
 
     void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
-        String updateStmt = String.format("" +
-                "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", tableName);
-
-        int effectedRows = database.update(updateStmt,
+        int effectedRows = database.update(unlockStmt,
                 Timestamp.valueOf(nextPlannedExecutionTime),
                 toUnLock.getVersion() + 1,
                 toUnLock.getId(),
@@ -183,17 +221,7 @@ class TaskRepository {
             return Collections.emptyList();
         }
 
-        String selectStmt = String.format("" +
-                "SELECT * FROM %s" +
-                " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
-                " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
-                " ORDER BY CREATED_DATE", tableName, processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")));
-
-        if (database.isMysqlOrMariaDb()) {
-            selectStmt += " LIMIT ?";
-        } else {
-            selectStmt += " FETCH FIRST (?) ROWS ONLY";
-        }
+        String selectStmt = String.format(findAllNotLockedOrderedByCreatedDateStmt, processableTasks.stream().map(s -> "?").collect(Collectors.joining(",")));
 
         List<Object> params = new ArrayList<>();
         params.add(Timestamp.valueOf(lockTimeLessOrEqual));
@@ -205,13 +233,7 @@ class TaskRepository {
     }
 
     void saveFailure(Task failed, ExecutionFailure executionFailure) {
-        String updateStmt = String.format("" +
-                "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
-                " WHERE ID=?", tableName);
-
-        int updateCount = database.update(updateStmt,
+        int updateCount = database.update(saveFailureStmt,
                 Timestamp.valueOf(executionFailure.getFailTime()),
                 executionFailure.getExceptionMessage(),
                 executionFailure.getStackTrace(),
@@ -224,13 +246,7 @@ class TaskRepository {
     }
 
     void deleteFailure(Task failed) {
-        String updateStmt = String.format("" +
-                "UPDATE %s" +
-                " SET" +
-                " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", tableName);
-
-        int updateCount = database.update(updateStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
+        int updateCount = database.update(deleteFailureStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete failure of task %s", failed.getId()));
@@ -238,13 +254,11 @@ class TaskRepository {
     }
 
     List<Task> findAllFailedTasks() {
-        String selectStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC", tableName);
-        return database.selectAll(selectStmt, this::mapToPersistentTask, null);
+        return database.selectAll(findAllFailedStmt, this::mapToPersistentTask, null);
     }
 
     List<Task> findAllFailedTasks(int offset, int limit) {
-        String selectStmtAllFailedTasksPaging = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", this.tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
-        return database.selectAll(selectStmtAllFailedTasksPaging, this::mapToPersistentTask, new Object[] {offset, limit});
+        return database.selectAll(findAllFailedPagingStmt, this::mapToPersistentTask, new Object[] {offset, limit});
     }
 
     void delete(Task toDelete) {
@@ -256,7 +270,6 @@ class TaskRepository {
     }
 
     void delete(Connection connection, Task toDelete) {
-        String deleteStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
         int deleteCount = database.executeUpdate(connection, deleteStmt, toDelete.getId(), toDelete.getVersion());
 
         if (deleteCount != 1) {
