@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -149,6 +148,28 @@ public class FailsafeExecutor {
     }
 
     /**
+     * Registers the given function under the provided name with a given schedule. If {@link #execute(String, String, String)} method is invoked for such a task, it is then executed at the planned execution times defined by the schedule.
+     *
+     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
+     *
+     * With this method you can create scheduled tasks that can receive a parameter.
+     *
+     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
+     *
+     * @param name     unique name of the task
+     * @param function the function that should be assigned to the unique name, accepting a parameter.
+     * @throws IllegalArgumentException if a task with the given name is already registered
+     */
+    public void registerTask(String name, Schedule schedule, TaskFunction<String> function) {
+        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, schedule, function)) != null) {
+            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
+        }
+
+        taskNamesWithFunctions.add(name);
+    }
+
+
+    /**
      * Registers the given function under the provided name.
      *
      * <p>Before task execution a transaction is created. This transaction is committed after the given function executes without execptions. Furthermore the transaction is used to remove the task execution entry from database.</p>
@@ -238,7 +259,19 @@ public class FailsafeExecutor {
      * @return taskId
      */
     public String execute(Connection connection, String taskId, String taskName, String parameter) {
-        Task taskInstance = new Task(taskId, taskName, parameter, systemClock.now());
+        TaskRegistration taskRegistration = taskRegistrationsByName.get(taskName);
+        if (taskRegistration == null) {
+            throwTaskNotRegisteredException(taskName);
+        }
+
+        LocalDateTime plannedExecutionTime = systemClock.now();
+        LocalDateTime now = plannedExecutionTime;
+        if(taskRegistration.schedule != null) {
+            plannedExecutionTime = taskRegistration.schedule.nextExecutionTime(plannedExecutionTime)
+                    .orElseThrow(() -> new IllegalArgumentException(String.format("Schedule of task '%s' did not return an execution time for input '%s", taskName, now)));
+        }
+
+        Task taskInstance = new Task(taskId, taskName, parameter, plannedExecutionTime);
         return enqueue(connection, taskInstance);
     }
 
@@ -512,7 +545,7 @@ public class FailsafeExecutor {
 
     private String enqueue(Connection connection, Task task) {
         if (!taskRegistrationsByName.containsKey(task.getName())) {
-            throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", task.getName()));
+            throwTaskNotRegisteredException(task.getName());
         }
 
         notifyPersisting(task, task.getId());
@@ -566,7 +599,12 @@ public class FailsafeExecutor {
         }
     }
 
+    private String throwTaskNotRegisteredException(String taskName) {
+        throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", taskName));
+    }
+
     static class TaskRegistration {
+
         final String name;
         final Schedule schedule;
         final TaskFunction<String> function;

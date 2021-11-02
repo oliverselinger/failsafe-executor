@@ -34,6 +34,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -274,6 +276,94 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void execute_scheduled_parameterized_task_every_day() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+        final String scheduleTaskName = "ScheduledTestTask";
+        final String parameter = "param";
+        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
+
+        String taskId = failsafeExecutor.execute(scheduleTaskName, parameter);
+        assertListenerOnPersisting(scheduleTaskName, taskId, parameter);
+
+        failsafeExecutor.start();
+
+        assertNeverListenerOnSucceededAndOnFailed();
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        assertListenerOnSucceeded(scheduleTaskName, taskId, parameter);
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        assertListenerOnSucceeded(scheduleTaskName, taskId, parameter);
+
+        verifyNoMoreInteractions(taskExecutionListener);
+    }
+
+    @Test
+    void execute_scheduled_parameterized_task_multiple_times() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+        final String scheduleTaskName = "ScheduledTestTask";
+        final String parameter = "param";
+        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
+
+        String taskId1 = failsafeExecutor.execute(scheduleTaskName, parameter);
+        assertListenerOnPersisting(scheduleTaskName, taskId1, parameter);
+        String taskId2 = failsafeExecutor.execute(scheduleTaskName, parameter);
+        assertListenerOnPersisting(scheduleTaskName, taskId2, parameter);
+        String taskId3 = failsafeExecutor.execute("taskId3", scheduleTaskName, parameter);
+        assertListenerOnPersisting(scheduleTaskName, taskId3, parameter);
+
+        assertNotEquals(taskId1, taskId2);
+        assertNotEquals(taskId1, taskId3);
+        assertNotEquals(taskId2, taskId3);
+
+        assertEquals(taskId3, "taskId3");
+
+        verifyNoMoreInteractions(taskExecutionListener);
+    }
+
+    @Test
+    void not_throw_an_exception_if_scheduled_parameterized_task_already_executed() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+        final String scheduleTaskName = "ScheduledTestTask";
+        final String parameter = "param";
+        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
+
+        String taskId = failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter);
+        String actualTaskId = assertDoesNotThrow(() -> failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter));
+
+        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(taskId, actualTaskId);
+    }
+
+    @Test
+    void throw_an_exception_if_scheduled_parameterized_task_is_already_registered() {
+        DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
+
+        final String scheduleTaskName = "ScheduledTestTask";
+
+        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param)));
+    }
+
+    @Test
     void retry_a_failed_task_on_demand() {
         executionShouldFail = true;
 
@@ -429,5 +519,10 @@ class FailsafeExecutorShould {
 
     private void assertListenerOnFailed(String name, String taskId, String parameter) {
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(eq(name), eq(taskId), eq(parameter), any());
+    }
+
+    private void assertNeverListenerOnSucceededAndOnFailed() {
+        verify(taskExecutionListener, never()).succeeded(any(), any(), any());
+        verify(taskExecutionListener, never()).failed(any(), any(), any(), any());
     }
 }
