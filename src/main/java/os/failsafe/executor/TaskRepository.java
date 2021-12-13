@@ -100,27 +100,28 @@ class TaskRepository {
                 " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST ? ROWS ONLY");
     }
 
-    Task add(Task task) {
+    String add(Task task) {
         return database.connect(connection -> this.add(connection, task));
     }
 
-    Task add(Connection connection, Task task) {
+    String add(Connection connection, Task task) {
         LocalDateTime creationTime = systemClock.now();
 
+        int count = 0;
         if (database.isOracle() || database.isH2()) {
-            addTaskInOracle(connection, task, creationTime);
+            count = addTaskInOracle(connection, task, creationTime);
         } else if (database.isMysqlOrMariaDb()) {
-            addTaskInMysqlOrMariaDb(connection, task, creationTime);
+            count = addTaskInMysqlOrMariaDb(connection, task, creationTime);
         } else if (database.isPostgres()) {
-            addTaskInPostgres(connection, task, creationTime);
+            count = addTaskInPostgres(connection, task, creationTime);
         }
 
-        return new Task(task.getId(), task.getName(), task.getParameter(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
+        return count == 1 ? task.getId() : null;
     }
 
-    private void addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtMysqlOrMariaDb,
+        return database.insert(connection, insertStmtMysqlOrMariaDb,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -134,9 +135,9 @@ class TaskRepository {
                 task.getVersion());
     }
 
-    private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtPostgres,
+        return database.insert(connection, insertStmtPostgres,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -150,9 +151,9 @@ class TaskRepository {
                 task.getVersion());
     }
 
-    private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtOracle,
+        return database.insert(connection, insertStmtOracle,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -245,8 +246,8 @@ class TaskRepository {
         }
     }
 
-    void deleteFailure(Task failed) {
-        int updateCount = database.update(deleteFailureStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
+    void deleteFailure(Connection con, Task failed) {
+        int updateCount = database.executeUpdate(con, deleteFailureStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete failure of task %s", failed.getId()));

@@ -8,6 +8,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -312,14 +314,14 @@ class TaskRepositoryShould {
     }
 
     @Test
-    void delete_failure_of_a_task_and_increase_retry_count() {
+    void delete_failure_of_a_task_and_increase_retry_count() throws SQLException {
         Task task = addTask();
 
         RuntimeException exception = new RuntimeException("Sorry");
         taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
         Task failedTask = taskRepository.findAllFailedTasks().get(0);
-        taskRepository.deleteFailure(failedTask);
+        database.connectNoResult(con -> taskRepository.deleteFailure(con, failedTask));
 
         List<Task> allFailedTasks = taskRepository.findAllFailedTasks();
         assertTrue(allFailedTasks.isEmpty());
@@ -372,7 +374,9 @@ class TaskRepositoryShould {
     }
 
     private Task addTask(String id, String taskName, LocalDateTime plannedExecutionTime) {
-        return taskRepository.add(new Task(id, taskName, taskParameter, plannedExecutionTime));
+        Task task = new Task(id, taskName, taskParameter, plannedExecutionTime);
+        taskRepository.add(task);
+        return taskRepository.findOne(id);
     }
 
     public static void assertIdsOnly(List<Task> expected, List<Task> actual) {

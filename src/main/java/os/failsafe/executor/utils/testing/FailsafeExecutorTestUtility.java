@@ -2,6 +2,7 @@ package os.failsafe.executor.utils.testing;
 
 import os.failsafe.executor.FailsafeExecutor;
 import os.failsafe.executor.Task;
+import os.failsafe.executor.utils.Throwing;
 
 import java.time.Duration;
 import java.util.List;
@@ -14,36 +15,36 @@ public class FailsafeExecutorTestUtility {
 
     public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
 
-    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Runnable runnable, Consumer<List<Task>> failedTasksConsumer) {
+    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Throwing.Runnable runnable, Throwing.Consumer<List<Task>> failedTasksConsumer) throws Exception {
         awaitAllTasks(failsafeExecutor, DEFAULT_TIMEOUT, () -> {
             runnable.run();
             return Boolean.TRUE;
         }, failedTasksConsumer);
     }
 
-    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Runnable runnable, Consumer<List<Task>> failedTasksConsumer) {
+    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Throwing.Runnable runnable, Throwing.Consumer<List<Task>> failedTasksConsumer) throws Exception {
         awaitAllTasks(failsafeExecutor, timeout, () -> {
             runnable.run();
             return Boolean.TRUE;
         }, failedTasksConsumer);
     }
 
-    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Runnable runnable, Consumer<List<Task>> failedTasksConsumer, NoWaitPredicate taskFilter) {
+    public static void awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Throwing.Runnable runnable, Throwing.Consumer<List<Task>> failedTasksConsumer, NoWaitPredicate taskFilter) throws Exception {
         awaitAllTasks(failsafeExecutor, timeout, () -> {
             runnable.run();
             return Boolean.TRUE;
         }, failedTasksConsumer, taskFilter);
     }
 
-    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Supplier<T> supplier, Consumer<List<Task>> failedTasksConsumer) {
+    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Throwing.Supplier<T> supplier, Throwing.Consumer<List<Task>> failedTasksConsumer) throws Exception {
         return awaitAllTasks(failsafeExecutor, DEFAULT_TIMEOUT, supplier, failedTasksConsumer);
     }
 
-    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Supplier<T> supplier, Consumer<List<Task>> failedTasksConsumer) {
+    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Throwing.Supplier<T> supplier, Throwing.Consumer<List<Task>> failedTasksConsumer) throws Exception {
         return awaitAllTasks(failsafeExecutor, timeout, supplier, failedTasksConsumer, AwaitableTaskExecutionListener.WAIT_FOR_ALL_TASKS);
     }
 
-    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Supplier<T> supplier, Consumer<List<Task>> failedTasksConsumer, NoWaitPredicate taskFilter) {
+    public static <T> T awaitAllTasks(FailsafeExecutor failsafeExecutor, Duration timeout, Throwing.Supplier<T> supplier, Throwing.Consumer<List<Task>> failedTasksConsumer, NoWaitPredicate taskFilter) throws Exception {
         AwaitableTaskExecutionListener taskExecutionListener = new AwaitableTaskExecutionListener(timeout, taskFilter);
         failsafeExecutor.subscribe(taskExecutionListener);
 

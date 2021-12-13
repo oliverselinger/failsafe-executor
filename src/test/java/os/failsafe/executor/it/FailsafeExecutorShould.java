@@ -28,7 +28,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -36,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -248,6 +251,42 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void not_schedule_failed_task() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+        final String scheduleTaskName = "ScheduledTestTask";
+        AtomicBoolean shouldThrow = new AtomicBoolean(true);
+        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> {
+            if(shouldThrow.get())
+                throw new Exception("Not working");
+        });
+        assertListenerOnPersisting(scheduleTaskName, taskId, null);
+
+        failsafeExecutor.start();
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        assertListenerOnFailed(scheduleTaskName, taskId, null);
+
+        Task task = failsafeExecutor.task(taskId).get();
+        assertEquals(beforePlannedExecutionTime.plusSeconds(1), task.getPlannedExecutionTime());
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        verifyNoMoreInteractions(taskExecutionListener);
+
+        shouldThrow.set(false);
+        failsafeExecutor.retry(task);
+        assertListenerOnSucceeded(scheduleTaskName, taskId, null);
+
+        task = failsafeExecutor.task(taskId).get();
+        assertEquals(beforePlannedExecutionTime.plusSeconds(1).plusDays(2), task.getPlannedExecutionTime());
+    }
+
+    @Test
     void not_throw_an_exception_if_scheduled_task_already_exists_in_db() throws SQLException {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
@@ -350,7 +389,8 @@ class FailsafeExecutorShould {
         String actualTaskId = assertDoesNotThrow(() -> failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter));
 
         assertEquals(1, failsafeExecutor.allTasks().size());
-        assertEquals(taskId, actualTaskId);
+        assertNotNull(taskId);
+        assertNull(actualTaskId);
     }
 
     @Test
@@ -453,7 +493,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void execute_all_tasks() {
+    void execute_all_tasks() throws Exception {
         failsafeExecutor.start();
 
         int taskCount = 5;
@@ -479,7 +519,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void retry_a_failed_task_on_demand_and_wait_for_its_execution() {
+    void retry_a_failed_task_on_demand_and_wait_for_its_execution() throws Exception {
         executionShouldFail = true;
         failsafeExecutor.start();
 
