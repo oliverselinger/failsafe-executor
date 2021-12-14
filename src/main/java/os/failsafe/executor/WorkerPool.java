@@ -13,12 +13,12 @@ class WorkerPool {
     private final int threadCount;
     private final AtomicInteger spareQueueCount;
     private ExecutorService workers;
-    private final HeartbeatScheduler heartbeatScheduler;
+    private final HeartbeatService heartbeatService;
 
-    WorkerPool(int threadCount, int queueSize, HeartbeatScheduler heartbeatScheduler) {
+    WorkerPool(int threadCount, int queueSize, HeartbeatService heartbeatService) {
         this.threadCount = threadCount;
         spareQueueCount = new AtomicInteger(queueSize);
-        this.heartbeatScheduler = heartbeatScheduler;
+        this.heartbeatService = heartbeatService;
     }
 
     void start() {
@@ -27,13 +27,13 @@ class WorkerPool {
 
     public Future<String> execute(Task task, Runnable runnable) {
         spareQueueCount.decrementAndGet();
-        heartbeatScheduler.register(task);
+        heartbeatService.register(task);
 
         return workers.submit(() -> {
             try {
                 runnable.run();
             } finally {
-                heartbeatScheduler.unregister(task);
+                heartbeatService.unregister(task);
                 spareQueueCount.incrementAndGet();
             }
             return task.getId();

@@ -48,7 +48,8 @@ public class FailsafeExecutor {
     private final Duration pollingInterval;
     private final Database database;
     private final SystemClock systemClock;
-    private final HeartbeatScheduler heartbeatScheduler;
+    private final HeartbeatService heartbeatService;
+    private final Duration heartbeatInterval;
 
     private volatile Exception lastRunException;
     private AtomicBoolean running = new AtomicBoolean();
@@ -74,10 +75,11 @@ public class FailsafeExecutor {
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-        this.heartbeatScheduler = new HeartbeatScheduler(initialDelay, Duration.ofMillis(lockTimeout.toMillis() / 4), executor, systemClock, taskRepository, this);
-        this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatScheduler);
+        this.heartbeatService = new HeartbeatService(Duration.ofMillis(lockTimeout.toMillis() / 4), systemClock, taskRepository, this);
+        this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatService);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
+        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
 
         validateDatabaseTableStructure(dataSource);
     }
@@ -96,7 +98,8 @@ public class FailsafeExecutor {
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
 
         workerPool.start();
-        heartbeatScheduler.start();
+
+        executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -123,7 +126,7 @@ public class FailsafeExecutor {
      * @param timeUnit the unit of the given timeout
      */
     public void stop(long timeout, TimeUnit timeUnit) {
-        executor.shutdownNow();
+        executor.shutdown();
         try {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {

@@ -352,7 +352,34 @@ class TaskRepositoryShould {
         assertEquals(tasks.size(), 0);
 
         assertEquals(taskRepository.findAll().size(), 3);
+    }
 
+    @Test
+    void update_lock_time() {
+        systemClock.fixedTime(LocalDateTime.of(2020, 11, 12, 10, 0));
+
+        Task task = addTask();
+        List<Task> lockedTasks = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        Task locked = lockedTasks.get(0);
+
+        systemClock.timeTravelBy(Duration.ofSeconds(5));
+
+        List<Task> tasks = taskRepository.updateLockTime(Collections.singletonList(locked));
+        assertEquals(1, tasks.size());
+
+        Task actual = tasks.get(0);
+        assertEquals(locked.getLockTime().plusSeconds(5), actual.getLockTime());
+    }
+
+    @Test
+    void not_update_lock_time_if_task_is_not_locked() {
+        Task task = addTask();
+        List<Task> tasks = taskRepository.updateLockTime(Collections.singletonList(task));
+        assertTrue(tasks.isEmpty());
+
+        Task actual = taskRepository.findOne(task.getId());
+        assertNull(actual.getLockTime());
+        assertEquals(task.getVersion(), actual.getVersion());
     }
 
     private Task addTask() {

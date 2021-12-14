@@ -7,31 +7,21 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
-public class HeartbeatScheduler {
+public class HeartbeatService {
 
-    private final ScheduledExecutorService executor;
     private final SystemClock systemClock;
     private final TaskRepository taskRepository;
     private final FailsafeExecutor failsafeExecutor;
-    private final Duration initialDelay;
     private final Duration heartbeatInterval;
 
     private final ConcurrentHashMap<String, Task> lockedTasks = new ConcurrentHashMap<>();
 
-    public HeartbeatScheduler(Duration initialDelay, Duration heartbeatInterval, ScheduledExecutorService executor, SystemClock systemClock, TaskRepository taskRepository, FailsafeExecutor failsafeExecutor) {
-        this.initialDelay = initialDelay;
+    public HeartbeatService(Duration heartbeatInterval, SystemClock systemClock, TaskRepository taskRepository, FailsafeExecutor failsafeExecutor) {
         this.heartbeatInterval = heartbeatInterval;
-        this.executor = executor;
         this.systemClock = systemClock;
         this.taskRepository = taskRepository;
         this.failsafeExecutor = failsafeExecutor;
-    }
-
-    public void start() {
-        executor.scheduleWithFixedDelay(this::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void register(Task task) {
@@ -42,7 +32,7 @@ public class HeartbeatScheduler {
         lockedTasks.remove(task.getId());
     }
 
-    private void heartbeat() {
+    void heartbeat() {
         try {
             List<Task> toUpdate = findAllOutdatedLocks();
             if (toUpdate.isEmpty()) {

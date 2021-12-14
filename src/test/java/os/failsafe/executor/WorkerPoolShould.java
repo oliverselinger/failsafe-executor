@@ -29,8 +29,8 @@ class WorkerPoolShould {
 
     @BeforeEach
     void init() {
-        HeartbeatScheduler heartbeatScheduler = Mockito.mock(HeartbeatScheduler.class);
-        workerPool = new WorkerPool(threadCount, queueSize, heartbeatScheduler);
+        HeartbeatService heartbeatService = Mockito.mock(HeartbeatService.class);
+        workerPool = new WorkerPool(threadCount, queueSize, heartbeatService);
         workerPool.start();
     }
 
