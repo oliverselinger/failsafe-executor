@@ -48,6 +48,7 @@ public class FailsafeExecutor {
     private final Duration pollingInterval;
     private final Database database;
     private final SystemClock systemClock;
+    private final HeartbeatScheduler heartbeatScheduler;
 
     private volatile Exception lastRunException;
     private AtomicBoolean running = new AtomicBoolean();
@@ -73,7 +74,8 @@ public class FailsafeExecutor {
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-        this.workerPool = new WorkerPool(workerThreadCount, queueSize);
+        this.heartbeatScheduler = new HeartbeatScheduler(initialDelay, Duration.ofMillis(lockTimeout.toMillis() / 4), executor, systemClock, taskRepository, this);
+        this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatScheduler);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
 
@@ -92,6 +94,9 @@ public class FailsafeExecutor {
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+
+        workerPool.start();
+        heartbeatScheduler.start();
     }
 
     /**
@@ -580,7 +585,7 @@ public class FailsafeExecutor {
             for (Task task : toExecute) {
                 TaskRegistration registration = taskRegistrationsByName.get(task.getName());
                 Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
-                workerPool.execute(task.getId(), execution::perform);
+                workerPool.execute(task, execution::perform);
             }
 
             clearException();
@@ -590,11 +595,11 @@ public class FailsafeExecutor {
         }
     }
 
-    private void storeException(Exception e) {
+    void storeException(Exception e) {
         lastRunException = e;
     }
 
-    private void clearException() {
+    void clearException() {
         lastRunException = null;
     }
 

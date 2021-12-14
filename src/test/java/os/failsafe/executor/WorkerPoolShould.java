@@ -3,6 +3,7 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.List;
@@ -28,7 +29,9 @@ class WorkerPoolShould {
 
     @BeforeEach
     void init() {
-        workerPool = new WorkerPool(threadCount, queueSize);
+        HeartbeatScheduler heartbeatScheduler = Mockito.mock(HeartbeatScheduler.class);
+        workerPool = new WorkerPool(threadCount, queueSize, heartbeatScheduler);
+        workerPool.start();
     }
 
     @AfterEach
@@ -44,11 +47,11 @@ class WorkerPoolShould {
     @Test
     void not_accept_more_tasks_if_all_workers_are_busy() throws InterruptedException, ExecutionException {
         BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
-        Future<String> execution = workerPool.execute(UUID.randomUUID().toString(), firstBlockingRunnable);
+        Future<String> execution = workerPool.execute(createTask(), firstBlockingRunnable);
 
         List<BlockingRunnable> blockingRunnables = IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingRunnable())
-                .peek(blockingRunnable -> workerPool.execute(UUID.randomUUID().toString(), blockingRunnable))
+                .peek(blockingRunnable -> workerPool.execute(createTask(), blockingRunnable))
                 .collect(Collectors.toList());
 
         assertEquals(0, workerPool.spareQueueCount());
@@ -59,7 +62,7 @@ class WorkerPoolShould {
         assertEquals(1, workerPool.spareQueueCount());
 
         BlockingRunnable nextBlockingRunnable = new BlockingRunnable();
-        workerPool.execute(UUID.randomUUID().toString(), nextBlockingRunnable);
+        workerPool.execute(createTask(), nextBlockingRunnable);
 
         assertEquals(0, workerPool.spareQueueCount());
 
@@ -82,5 +85,9 @@ class WorkerPoolShould {
         public void release() {
             phaser.arrive();
         }
+    }
+
+    private Task createTask() {
+        return new Task(UUID.randomUUID().toString(), "Test", "param", systemClock.now());
     }
 }
