@@ -1,4 +1,4 @@
-package os.failsafe.executor.it;
+package os.failsafe.executor;
 
 import org.awaitility.Awaitility;
 import org.awaitility.Durations;
@@ -12,11 +12,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import os.failsafe.executor.FailsafeExecutor;
-import os.failsafe.executor.Task;
-import os.failsafe.executor.TaskExecutionListener;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
+import os.failsafe.executor.utils.BlockingRunnable;
 import os.failsafe.executor.utils.TestSystemClock;
 import os.failsafe.executor.utils.Transaction;
 
@@ -28,7 +26,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -111,11 +108,6 @@ class FailsafeExecutorShould {
     @Test
     void throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
-    }
-
-    @Test
-    void throw_an_exception_if_lock_timeout_too_short() {
-        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 4, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
     }
 
     @Test
@@ -543,6 +535,37 @@ class FailsafeExecutorShould {
         List<Task> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
         assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
+    }
+
+    @Test
+    void update_lock_until_task_has_finished() throws SQLException {
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), Duration.ofMillis(40));
+        failsafeExecutor.start();
+
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
+        failsafeExecutor.registerTask("LONG_RUNNING_TASK", parameter -> {
+            firstBlockingRunnable.run();
+        });
+        String taskId = failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(3))
+                .until(() -> firstBlockingRunnable.blocking);
+
+        LocalDateTime lockTime = failsafeExecutor.task(taskId).get().getLockTime();
+
+        assertNotNull(lockTime);
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(3))
+                .until(() -> failsafeExecutor.task(taskId).get().getLockTime().isAfter(lockTime));
+
+        firstBlockingRunnable.release();
+        failsafeExecutor.stop(3, TimeUnit.SECONDS);
     }
 
     private void assertListenerOnPersisting(String name, String taskId, String parameter) {

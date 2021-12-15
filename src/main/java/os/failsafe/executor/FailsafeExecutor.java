@@ -33,7 +33,7 @@ public class FailsafeExecutor {
     public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
-    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
+    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
     public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
@@ -67,19 +67,19 @@ public class FailsafeExecutor {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
 
-        if (lockTimeout.compareTo(Duration.ofMinutes(5)) < 0) {
-            throw new IllegalArgumentException("LockTimeout must be >= 5 minutes");
+        if (lockTimeout.compareTo(Duration.ofMinutes(1)) < 0) {
+            System.err.println("LockTimeout very short! Recommendation is >= 1 minute");
         }
 
         this.database = new Database(dataSource);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-        this.heartbeatService = new HeartbeatService(Duration.ofMillis(lockTimeout.toMillis() / 4), systemClock, taskRepository, this);
+        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
+        this.heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository, this);
         this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatService);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
-        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
 
         validateDatabaseTableStructure(dataSource);
     }

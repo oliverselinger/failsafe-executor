@@ -4,20 +4,21 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import os.failsafe.executor.utils.BlockingRunnable;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 class WorkerPoolShould {
 
@@ -26,10 +27,11 @@ class WorkerPoolShould {
     private int threadCount = 2;
     private int queueSize = threadCount * 2;
     private WorkerPool workerPool;
+    private HeartbeatService heartbeatService;
 
     @BeforeEach
     void init() {
-        HeartbeatService heartbeatService = Mockito.mock(HeartbeatService.class);
+        heartbeatService = Mockito.mock(HeartbeatService.class);
         workerPool = new WorkerPool(threadCount, queueSize, heartbeatService);
         workerPool.start();
     }
@@ -70,21 +72,27 @@ class WorkerPoolShould {
         blockingRunnables.forEach(BlockingRunnable::release);
     }
 
-    static class BlockingRunnable implements Runnable {
-        Phaser phaser;
+    @Test
+    void register_task_for_heartbeating() throws InterruptedException, ExecutionException {
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
+        Future<String> execution = workerPool.execute(createTask(), firstBlockingRunnable);
 
-        BlockingRunnable() {
-            phaser = new Phaser(2);
-        }
+        verifyRegister(1);
+        verifyUnregister(0);
 
-        @Override
-        public void run() {
-            phaser.arriveAndAwaitAdvance();
-        }
+        firstBlockingRunnable.release();
+        execution.get();
 
-        public void release() {
-            phaser.arrive();
-        }
+        verifyRegister(1);
+        verifyUnregister(1);
+    }
+
+    private void verifyRegister(int times) {
+        verify(heartbeatService, times(times)).register(any());
+    }
+
+    private void verifyUnregister(int times) {
+        verify(heartbeatService, times(times)).unregister(any());
     }
 
     private Task createTask() {
