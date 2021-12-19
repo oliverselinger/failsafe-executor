@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class FailsafeExecutor {
 
     public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
-    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
+    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 6;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);

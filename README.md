@@ -222,7 +222,7 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | ------------- | ---- | ---- | ------------- |
 | `systemClock` | `SystemClock` | LocalDateTime.now() | Clock to retrieve the current time. |
 | `workerThreadCount` | `int` | 5 | Number of threads executing tasks. |
-| `queueSize` | `int`  |  4 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
+| `queueSize` | `int`  |  6 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
 | `lockTimeout` | `Duration` |  5 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum recommended lockTimeout is 1 min. |
