@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2021-12-19
+### Added
+- Heartbeat scheduler that updates the lock time on tasks. This should avoid takeover of long-running tasks by another instance.
+- Metrics collector `FailsafeExecutorMetricsCollector` to gain insights about persistence, failure and finishing rates and counts.
+
 ## [1.3.3] - 2021-11-02
 ### Added
 - Ability to create tasks which get recurringly executed based on a schedule (given during registration) which then receives a parameter for execution
