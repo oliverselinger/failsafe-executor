@@ -8,7 +8,7 @@ class MariaDatabaseTestConfig implements DatabaseTestConfig {
     public void createTable(Database database) {
         database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK");
 
-        String createTableSql = FileUtil.readResourceFile("mysql.sql");
+        String createTableSql = FileUtil.readResourceFile("mariadb.sql");
         String[] split = createTableSql.split("\\n\\n");
         for (String stmt : split) {
             database.execute(stmt);

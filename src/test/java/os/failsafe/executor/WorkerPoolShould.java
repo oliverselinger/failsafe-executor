@@ -51,6 +51,8 @@ class WorkerPoolShould {
         BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
         Future<String> execution = workerPool.execute(createTask(), firstBlockingRunnable);
 
+        firstBlockingRunnable.waitForSetup();
+
         List<BlockingRunnable> blockingRunnables = IntStream.range(1, queueSize)
                 .mapToObj(i -> new BlockingRunnable())
                 .peek(blockingRunnable -> workerPool.execute(createTask(), blockingRunnable))
@@ -68,8 +70,8 @@ class WorkerPoolShould {
 
         assertEquals(0, workerPool.spareQueueCount());
 
-        nextBlockingRunnable.release();
-        blockingRunnables.forEach(BlockingRunnable::release);
+        blockingRunnables.forEach(BlockingRunnable::waitForSetupAndRelease);
+        nextBlockingRunnable.waitForSetupAndRelease();
     }
 
     @Test
@@ -80,7 +82,7 @@ class WorkerPoolShould {
         verifyRegister(1);
         verifyUnregister(0);
 
-        firstBlockingRunnable.release();
+        firstBlockingRunnable.waitForSetupAndRelease();
         execution.get();
 
         verifyRegister(1);

@@ -29,7 +29,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 </dependency>
 ```
 
-3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql/mariadb](src/main/resources/mysql.sql).
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql](src/main/resources/mysql.sql) or [mariadb](src/main/resources/mariadb.sql).
     We recommend creating an index on created_date to make ordering fast.
 
 5. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
@@ -173,6 +173,19 @@ failsafeExecutor.observeQueue(observer);
 ```
 
 On each select/lock run of the persistent queue the observer is called back. Three parameters are passed, indicating the limit used for the select query (spare space in queue), the result count of the select query for the next tasks and the lock count. The lock count states how many tasks of the select result got locked for execution.
+
+## Metrics
+
+The `FailsafeExecutor` provides a utility class to collect metrics which get you the sum and the rate of persisted, failed and finished (failed and succeeded) tasks.
+
+Create an instance of class `FailsafeExecutorMetricsCollector` and register it as subscriber:
+
+```java
+FailsafeExecutorMetricsCollector metricsCollector = new FailsafeExecutorMetricsCollector();
+failsafeExecutor.subscribe(metricsCollector);
+```
+
+The default time unit for the rate calculation is seconds. You can override it by passing your `TimeUnit` as parameter to the constructor.
 
 ## Health check
 

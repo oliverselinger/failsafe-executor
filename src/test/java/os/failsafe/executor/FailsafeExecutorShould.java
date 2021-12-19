@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
 import os.failsafe.executor.utils.BlockingRunnable;
+import os.failsafe.executor.utils.FailsafeExecutorMetricsCollector;
 import os.failsafe.executor.utils.TestSystemClock;
 import os.failsafe.executor.utils.Transaction;
 
@@ -254,7 +255,7 @@ class FailsafeExecutorShould {
         final String scheduleTaskName = "ScheduledTestTask";
         AtomicBoolean shouldThrow = new AtomicBoolean(true);
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> {
-            if(shouldThrow.get())
+            if (shouldThrow.get())
                 throw new Exception("Not working");
         });
         assertListenerOnPersisting(scheduleTaskName, taskId, null);
@@ -548,11 +549,7 @@ class FailsafeExecutorShould {
         });
         String taskId = failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
 
-        Awaitility
-                .await()
-                .pollDelay(Durations.ONE_MILLISECOND)
-                .timeout(Duration.ofSeconds(3))
-                .until(() -> firstBlockingRunnable.blocking);
+        firstBlockingRunnable.waitForSetup();
 
         LocalDateTime lockTime = failsafeExecutor.task(taskId).get().getLockTime();
 
@@ -566,6 +563,37 @@ class FailsafeExecutorShould {
 
         firstBlockingRunnable.release();
         failsafeExecutor.stop(3, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void collect_metrics() throws SQLException {
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, 10, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), Duration.ofSeconds(10));
+        failsafeExecutor.start();
+        FailsafeExecutorMetricsCollector metricsCollector = new FailsafeExecutorMetricsCollector();
+        failsafeExecutor.subscribe(metricsCollector);
+
+        int parties = 11;
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable(parties);
+        failsafeExecutor.registerTask("LONG_RUNNING_TASK", parameter -> {
+            firstBlockingRunnable.run();
+        });
+
+        for (int i = 0; i < parties-1; i++) {
+            failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
+        }
+
+        firstBlockingRunnable.waitForSetup();
+
+        firstBlockingRunnable.release();
+        failsafeExecutor.stop(3, TimeUnit.SECONDS);
+
+        FailsafeExecutorMetricsCollector.Result collect = metricsCollector.collect();
+        assertEquals(10, collect.persistedSum);
+        assertEquals(10, collect.finishedSum);
+        assertEquals(0, collect.failedSum);
+        assertTrue(collect.persistingRateInTargetTimeUnit > 0);
+        assertTrue(collect.finishingRateInTargetTimeUnit > 0);
+        assertEquals(0, collect.failureRateInTargetTimeUnit);
     }
 
     private void assertListenerOnPersisting(String name, String taskId, String parameter) {

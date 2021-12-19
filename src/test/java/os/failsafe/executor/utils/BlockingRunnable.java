@@ -3,21 +3,35 @@ package os.failsafe.executor.utils;
 import java.util.concurrent.Phaser;
 
 public class BlockingRunnable implements Runnable {
-    public volatile boolean blocking = false;
-    Phaser phaser;
+
+    Phaser setupPhaser;
+    Phaser finishPhaser;
 
     public BlockingRunnable() {
-        phaser = new Phaser(2);
+        this(2);
+    }
+
+    public BlockingRunnable(int parties) {
+        setupPhaser = new Phaser(parties);
+        finishPhaser = new Phaser(parties);
     }
 
     @Override
     public void run() {
-        blocking = true;
-        phaser.arriveAndAwaitAdvance();
+        setupPhaser.arriveAndAwaitAdvance();
+        finishPhaser.arriveAndAwaitAdvance();
+    }
+
+    public void waitForSetup() {
+        setupPhaser.arriveAndAwaitAdvance();
     }
 
     public void release() {
-        phaser.arrive();
-        blocking = false;
+        finishPhaser.arriveAndAwaitAdvance();
+    }
+
+    public void waitForSetupAndRelease() {
+        waitForSetup();
+        release();
     }
 }
