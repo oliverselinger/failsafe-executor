@@ -49,7 +49,7 @@ class MultipleNodesShould {
         dataSource = DB_EXTENSION.dataSource();
         systemClock.resetTime();
 
-        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, 5, Duration.ofMillis(0), Duration.ofMillis(15), DEFAULT_LOCK_TIMEOUT);
+        executorA = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, 5, Duration.ofMillis(0), Duration.ofMillis(10), DEFAULT_LOCK_TIMEOUT);
         executorB = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, 5, Duration.ofMillis(0), Duration.ofMillis(5), DEFAULT_LOCK_TIMEOUT);
         listenerA = Mockito.mock(TaskExecutionListener.class);
         listenerB = Mockito.mock(TaskExecutionListener.class);
@@ -78,7 +78,7 @@ class MultipleNodesShould {
         executorA.registerTask("Task1", task1);
         executorB.registerTask("Task1", task2);
 
-        final int total = 30;
+        final int total = 40;
 
         for (int i = 0; i < total; i++) {
             executorA.execute("Task1", "Test" + i);
