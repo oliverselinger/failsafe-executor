@@ -5,6 +5,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.DefaultSystemClock;
 import os.failsafe.executor.utils.NamedThreadFactory;
 import os.failsafe.executor.utils.SystemClock;
+import os.failsafe.executor.utils.Throwing;
 import os.failsafe.executor.utils.Transaction;
 
 import javax.sql.DataSource;
@@ -29,10 +30,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class FailsafeExecutor {
 
     public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
-    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 4;
+    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 6;
     public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
-    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(12);
+    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
     public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
@@ -47,6 +48,8 @@ public class FailsafeExecutor {
     private final Duration pollingInterval;
     private final Database database;
     private final SystemClock systemClock;
+    private final HeartbeatService heartbeatService;
+    private final Duration heartbeatInterval;
 
     private volatile Exception lastRunException;
     private AtomicBoolean running = new AtomicBoolean();
@@ -64,15 +67,17 @@ public class FailsafeExecutor {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
 
-        if (lockTimeout.compareTo(Duration.ofMinutes(5)) < 0) {
-            throw new IllegalArgumentException("LockTimeout must be >= 5 minutes");
+        if (lockTimeout.compareTo(Duration.ofMinutes(1)) < 0) {
+            System.err.println("LockTimeout very short! Recommendation is >= 1 minute");
         }
 
         this.database = new Database(dataSource);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-        this.workerPool = new WorkerPool(workerThreadCount, queueSize);
+        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
+        this.heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository, this);
+        this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatService);
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
 
@@ -91,6 +96,10 @@ public class FailsafeExecutor {
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+
+        workerPool.start();
+
+        executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -117,7 +126,7 @@ public class FailsafeExecutor {
      * @param timeUnit the unit of the given timeout
      */
     public void stop(long timeout, TimeUnit timeUnit) {
-        executor.shutdownNow();
+        executor.shutdown();
         try {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
@@ -151,7 +160,7 @@ public class FailsafeExecutor {
      * Registers the given function under the provided name with a given schedule. If {@link #execute(String, String, String)} method is invoked for such a task, it is then executed at the planned execution times defined by the schedule.
      *
      * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
-     *
+     * <p>
      * With this method you can create scheduled tasks that can receive a parameter.
      *
      * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
@@ -237,7 +246,7 @@ public class FailsafeExecutor {
      * @param taskId    the id of the task used as unique constraint in database
      * @param taskName  the name of the task that should be executed
      * @param parameter the parameter that should be passed to the function
-     * @return taskId
+     * @return taskId or null if a task with the given taskId already exists
      */
     public String execute(String taskId, String taskName, String parameter) {
         return database.connect(connection -> execute(connection, taskId, taskName, parameter));
@@ -256,7 +265,7 @@ public class FailsafeExecutor {
      * @param taskId     the id of the task used as unique constraint in database
      * @param taskName   the name of the task that should be executed
      * @param parameter  the parameter that should be passed to the function
-     * @return taskId
+     * @return taskId or null if a task with the given taskId already exists
      */
     public String execute(Connection connection, String taskId, String taskName, String parameter) {
         TaskRegistration taskRegistration = taskRegistrationsByName.get(taskName);
@@ -266,7 +275,7 @@ public class FailsafeExecutor {
 
         LocalDateTime plannedExecutionTime = systemClock.now();
         LocalDateTime now = plannedExecutionTime;
-        if(taskRegistration.schedule != null) {
+        if (taskRegistration.schedule != null) {
             plannedExecutionTime = taskRegistration.schedule.nextExecutionTime(plannedExecutionTime)
                     .orElseThrow(() -> new IllegalArgumentException(String.format("Schedule of task '%s' did not return an execution time for input '%s", taskName, now)));
         }
@@ -299,7 +308,7 @@ public class FailsafeExecutor {
      * @param taskName             the name of the task that should be executed
      * @param parameter            the parameter that should be passed to the function
      * @param plannedExecutionTime the time when the task should be executed
-     * @return taskId
+     * @return taskId or null if a task with the given taskId already exists
      */
     public String defer(String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
         return database.connect(connection -> defer(connection, taskId, taskName, parameter, plannedExecutionTime));
@@ -319,7 +328,7 @@ public class FailsafeExecutor {
      * @param taskName             the name of the task that should be executed
      * @param parameter            the parameter that should be passed to the function
      * @param plannedExecutionTime the time when the task should be executed
-     * @return taskId
+     * @return taskId or null if a task with the given taskId already exists
      */
     public String defer(Connection connection, String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
         Task taskInstance = new Task(taskId, taskName, parameter, plannedExecutionTime);
@@ -332,6 +341,8 @@ public class FailsafeExecutor {
      *
      * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
      *
+     * <p>If the runnable throws an exception the task is marked as failed and scheduling stops. Once the task successfully finishes by retrying it with {@link FailsafeExecutor#retry(Task)}, it gets scheduled for next execution.</p>
+     *
      * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
      *
      * @param taskName the name of the task that should be executed
@@ -339,7 +350,7 @@ public class FailsafeExecutor {
      * @param runnable the runnable
      * @return taskId
      */
-    public String schedule(String taskName, Schedule schedule, Runnable runnable) {
+    public String schedule(String taskName, Schedule schedule, Throwing.Runnable runnable) {
         return database.connect(connection -> schedule(connection, taskName, schedule, runnable));
     }
 
@@ -348,6 +359,8 @@ public class FailsafeExecutor {
      * defined by the schedule.
      *
      * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
+     *
+     * <p>If the runnable throws an exception the task is marked as failed and scheduling stops. Once the task successfully finishes by retrying it with {@link FailsafeExecutor#retry(Task)}, it gets scheduled for next execution.</p>
      *
      * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
      *
@@ -360,7 +373,7 @@ public class FailsafeExecutor {
      * @param runnable   the runnable to execute
      * @return taskId
      */
-    public String schedule(Connection connection, String taskName, Schedule schedule, Runnable runnable) {
+    public String schedule(Connection connection, String taskName, Schedule schedule, Throwing.Runnable runnable) {
         if (taskRegistrationsByName.putIfAbsent(taskName, new TaskRegistration(taskName, schedule, ignore -> runnable.run())) != null) {
             throw new IllegalArgumentException(String.format("Task '%s' is already registered", taskName));
         }
@@ -414,7 +427,7 @@ public class FailsafeExecutor {
     public String recordFailure(Connection connection, String taskId, String taskName, String parameter, Exception exception) {
         LocalDateTime now = systemClock.now();
         Task toSave = new Task(taskId, taskName, parameter, now, now, null, new ExecutionFailure(now, exception), 0, 0L);
-        return taskRepository.add(connection, toSave).getId();
+        return taskRepository.add(connection, toSave);
     }
 
 
@@ -431,7 +444,7 @@ public class FailsafeExecutor {
      * Returns the newest persisted tasks with the given offset and limit.
      *
      * @param offset offset to start from
-     * @param limit limit of the result set
+     * @param limit  limit of the result set
      * @return list of all persisted tasks
      */
     public List<Task> allTasks(int offset, int limit) {
@@ -465,7 +478,7 @@ public class FailsafeExecutor {
      * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
      *
      * @param offset offset to start from
-     * @param limit limit of the result set
+     * @param limit  limit of the result set
      * @return list of all failed tasks
      */
     public List<Task> failedTasks(int offset, int limit) {
@@ -473,9 +486,13 @@ public class FailsafeExecutor {
     }
 
     public boolean retry(Task failedTask) {
+        return database.connect(con -> retry(con, failedTask));
+    }
+
+    public boolean retry(Connection con, Task failedTask) {
         if (failedTask.isRetryable()) {
             listeners.forEach(listener -> listener.retrying(failedTask.getName(), failedTask.getId(), failedTask.getParameter()));
-            taskRepository.deleteFailure(failedTask);
+            taskRepository.deleteFailure(con, failedTask);
             return true;
         }
 
@@ -483,8 +500,12 @@ public class FailsafeExecutor {
     }
 
     public boolean cancel(Task failedTask) {
+        return database.connect(con -> cancel(con, failedTask));
+    }
+
+    public boolean cancel(Connection con, Task failedTask) {
         if (failedTask.isCancelable()) {
-            taskRepository.delete(failedTask);
+            taskRepository.delete(con, failedTask);
             return true;
         }
 
@@ -567,7 +588,7 @@ public class FailsafeExecutor {
             for (Task task : toExecute) {
                 TaskRegistration registration = taskRegistrationsByName.get(task.getName());
                 Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
-                workerPool.execute(task.getId(), execution::perform);
+                workerPool.execute(task, execution::perform);
             }
 
             clearException();
@@ -577,11 +598,11 @@ public class FailsafeExecutor {
         }
     }
 
-    private void storeException(Exception e) {
+    void storeException(Exception e) {
         lastRunException = e;
     }
 
-    private void clearException() {
+    void clearException() {
         lastRunException = null;
     }
 

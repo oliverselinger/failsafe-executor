@@ -1,4 +1,4 @@
-package os.failsafe.executor.it;
+package os.failsafe.executor;
 
 import org.awaitility.Awaitility;
 import org.awaitility.Durations;
@@ -12,11 +12,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import os.failsafe.executor.FailsafeExecutor;
-import os.failsafe.executor.Task;
-import os.failsafe.executor.TaskExecutionListener;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
+import os.failsafe.executor.utils.BlockingRunnable;
+import os.failsafe.executor.utils.FailsafeExecutorMetricsCollector;
 import os.failsafe.executor.utils.TestSystemClock;
 import os.failsafe.executor.utils.Transaction;
 
@@ -29,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -108,11 +109,6 @@ class FailsafeExecutorShould {
     @Test
     void throw_an_exception_if_queue_size_is_less_than_worker_thread_count() {
         assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 5, 4, Duration.ofMillis(1), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT));
-    }
-
-    @Test
-    void throw_an_exception_if_lock_timeout_too_short() {
-        assertThrows(IllegalArgumentException.class, () -> new FailsafeExecutor(systemClock, dataSource, 4, 4, Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMinutes(4)));
     }
 
     @Test
@@ -248,6 +244,42 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void not_schedule_failed_task() {
+        LocalTime dailyTime = LocalTime.of(1, 0);
+
+        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
+        systemClock.fixedTime(beforePlannedExecutionTime);
+
+        DailySchedule dailySchedule = new DailySchedule(dailyTime);
+
+        final String scheduleTaskName = "ScheduledTestTask";
+        AtomicBoolean shouldThrow = new AtomicBoolean(true);
+        String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> {
+            if (shouldThrow.get())
+                throw new Exception("Not working");
+        });
+        assertListenerOnPersisting(scheduleTaskName, taskId, null);
+
+        failsafeExecutor.start();
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        assertListenerOnFailed(scheduleTaskName, taskId, null);
+
+        Task task = failsafeExecutor.task(taskId).get();
+        assertEquals(beforePlannedExecutionTime.plusSeconds(1), task.getPlannedExecutionTime());
+
+        systemClock.timeTravelBy(Duration.ofDays(1));
+        verifyNoMoreInteractions(taskExecutionListener);
+
+        shouldThrow.set(false);
+        failsafeExecutor.retry(task);
+        assertListenerOnSucceeded(scheduleTaskName, taskId, null);
+
+        task = failsafeExecutor.task(taskId).get();
+        assertEquals(beforePlannedExecutionTime.plusSeconds(1).plusDays(2), task.getPlannedExecutionTime());
+    }
+
+    @Test
     void not_throw_an_exception_if_scheduled_task_already_exists_in_db() throws SQLException {
         DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
 
@@ -350,7 +382,8 @@ class FailsafeExecutorShould {
         String actualTaskId = assertDoesNotThrow(() -> failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter));
 
         assertEquals(1, failsafeExecutor.allTasks().size());
-        assertEquals(taskId, actualTaskId);
+        assertNotNull(taskId);
+        assertNull(actualTaskId);
     }
 
     @Test
@@ -453,7 +486,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void execute_all_tasks() {
+    void execute_all_tasks() throws Exception {
         failsafeExecutor.start();
 
         int taskCount = 5;
@@ -479,7 +512,7 @@ class FailsafeExecutorShould {
     }
 
     @Test
-    void retry_a_failed_task_on_demand_and_wait_for_its_execution() {
+    void retry_a_failed_task_on_demand_and_wait_for_its_execution() throws Exception {
         executionShouldFail = true;
         failsafeExecutor.start();
 
@@ -503,6 +536,64 @@ class FailsafeExecutorShould {
         List<Task> failedTasks = failsafeExecutor.failedTasks();
         assertEquals(1, failedTasks.size());
         assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
+    }
+
+    @Test
+    void update_lock_until_task_has_finished() throws SQLException {
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), Duration.ofMillis(40));
+        failsafeExecutor.start();
+
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable();
+        failsafeExecutor.registerTask("LONG_RUNNING_TASK", parameter -> {
+            firstBlockingRunnable.run();
+        });
+        String taskId = failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
+
+        firstBlockingRunnable.waitForSetup();
+
+        LocalDateTime lockTime = failsafeExecutor.task(taskId).get().getLockTime();
+
+        assertNotNull(lockTime);
+
+        Awaitility
+                .await()
+                .pollDelay(Durations.ONE_MILLISECOND)
+                .timeout(Duration.ofSeconds(3))
+                .until(() -> failsafeExecutor.task(taskId).get().getLockTime().isAfter(lockTime));
+
+        firstBlockingRunnable.release();
+        failsafeExecutor.stop(3, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void collect_metrics() throws SQLException {
+        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, 10, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), Duration.ofSeconds(10));
+        failsafeExecutor.start();
+        FailsafeExecutorMetricsCollector metricsCollector = new FailsafeExecutorMetricsCollector();
+        failsafeExecutor.subscribe(metricsCollector);
+
+        int parties = 11;
+        BlockingRunnable firstBlockingRunnable = new BlockingRunnable(parties);
+        failsafeExecutor.registerTask("LONG_RUNNING_TASK", parameter -> {
+            firstBlockingRunnable.run();
+        });
+
+        for (int i = 0; i < parties-1; i++) {
+            failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
+        }
+
+        firstBlockingRunnable.waitForSetup();
+
+        firstBlockingRunnable.release();
+        failsafeExecutor.stop(3, TimeUnit.SECONDS);
+
+        FailsafeExecutorMetricsCollector.Result collect = metricsCollector.collect();
+        assertEquals(10, collect.persistedSum);
+        assertEquals(10, collect.finishedSum);
+        assertEquals(0, collect.failedSum);
+        assertTrue(collect.persistingRateInTargetTimeUnit > 0);
+        assertTrue(collect.finishingRateInTargetTimeUnit > 0);
+        assertEquals(0, collect.failureRateInTargetTimeUnit);
     }
 
     private void assertListenerOnPersisting(String name, String taskId, String parameter) {

@@ -19,7 +19,6 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -60,10 +59,10 @@ class PersistentQueueShould {
 
     @Test
     void add_a_task_to_repository() {
-        when(taskRepository.add(any())).thenReturn(Mockito.mock(Task.class));
-
         LocalDateTime plannedExecutionTime = systemClock.now();
         Task task = createTask(plannedExecutionTime);
+
+        when(taskRepository.add(any())).thenReturn(task.getId());
 
         persistentQueue.add(task);
 

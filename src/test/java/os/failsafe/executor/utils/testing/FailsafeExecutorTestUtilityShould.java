@@ -20,7 +20,7 @@ import static os.failsafe.executor.utils.testing.FailsafeExecutorTestUtility.awa
 class FailsafeExecutorTestUtilityShould {
 
     @Test
-    void callback_when_any_task_failed() {
+    void callback_when_any_task_failed() throws Exception {
         FailsafeExecutor failsafeExecutor = Mockito.mock(FailsafeExecutor.class);
 
         doAnswer(invocation -> {

@@ -33,6 +33,7 @@ class TaskRepository {
     private final String findAllNotLockedOrderedByCreatedDateStmt;
     private final String findAllPagingStmt;
     private final String findAllFailedPagingStmt;
+    private final String updatelockTimeStmt;
 
     public TaskRepository(Database database, String tableName, SystemClock systemClock) {
         this.database = database;
@@ -98,29 +99,36 @@ class TaskRepository {
                 " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
                 " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
                 " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST ? ROWS ONLY");
+
+        this.updatelockTimeStmt = String.format("" +
+                "UPDATE %s" +
+                " SET" +
+                " LOCK_TIME=?" +
+                " WHERE ID=? AND LOCK_TIME IS NOT NULL AND VERSION=?", this.tableName);
     }
 
-    Task add(Task task) {
+    String add(Task task) {
         return database.connect(connection -> this.add(connection, task));
     }
 
-    Task add(Connection connection, Task task) {
+    String add(Connection connection, Task task) {
         LocalDateTime creationTime = systemClock.now();
 
+        int count = 0;
         if (database.isOracle() || database.isH2()) {
-            addTaskInOracle(connection, task, creationTime);
+            count = addTaskInOracle(connection, task, creationTime);
         } else if (database.isMysqlOrMariaDb()) {
-            addTaskInMysqlOrMariaDb(connection, task, creationTime);
+            count = addTaskInMysqlOrMariaDb(connection, task, creationTime);
         } else if (database.isPostgres()) {
-            addTaskInPostgres(connection, task, creationTime);
+            count = addTaskInPostgres(connection, task, creationTime);
         }
 
-        return new Task(task.getId(), task.getName(), task.getParameter(), creationTime, task.getPlannedExecutionTime(), null, null, 0, 0L);
+        return count == 1 ? task.getId() : null;
     }
 
-    private void addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInMysqlOrMariaDb(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtMysqlOrMariaDb,
+        return database.insert(connection, insertStmtMysqlOrMariaDb,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -134,9 +142,9 @@ class TaskRepository {
                 task.getVersion());
     }
 
-    private void addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInPostgres(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtPostgres,
+        return database.insert(connection, insertStmtPostgres,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -150,9 +158,9 @@ class TaskRepository {
                 task.getVersion());
     }
 
-    private void addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
+    private int addTaskInOracle(Connection connection, Task task, LocalDateTime creationTime) {
         ExecutionFailure executionFailure = task.getExecutionFailure();
-        database.insert(connection, insertStmtOracle,
+        return database.insert(connection, insertStmtOracle,
                 task.getId(),
                 task.getName(),
                 task.getParameter(),
@@ -183,20 +191,16 @@ class TaskRepository {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        Object[][] entries = new Object[toLock.size()][];
-
-        for (int i = 0, toLockSize = toLock.size(); i < toLockSize; i++) {
-            Task task = toLock.get(i);
-            Object[] entry = {timestamp, task.getVersion() + 1, task.getId(), task.getVersion()};
-            entries[i] = entry;
+        List<Object[]> params = new ArrayList<>();
+        for (Task task : toLock) {
+            params.add(new Object[] {timestamp, task.getVersion() + 1, task.getId(), task.getVersion()});
         }
 
-        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, entries);
+        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params.toArray(new Object[params.size()][]));
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
-            int value = updateCount[i];
-            if (value == 1) {
+            if (updateCount[i] == 1) {
                 Task task = toLock.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
             }
@@ -245,8 +249,8 @@ class TaskRepository {
         }
     }
 
-    void deleteFailure(Task failed) {
-        int updateCount = database.update(deleteFailureStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
+    void deleteFailure(Connection con, Task failed) {
+        int updateCount = database.executeUpdate(con, deleteFailureStmt, failed.getRetryCount() + 1, failed.getVersion() + 1, failed.getId(), failed.getVersion());
 
         if (updateCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete failure of task %s", failed.getId()));
@@ -275,6 +279,27 @@ class TaskRepository {
         if (deleteCount != 1) {
             throw new RuntimeException(String.format("Couldn't delete task %s", toDelete.getId()));
         }
+    }
+
+    public List<Task> updateLockTime(List<Task> toUpdate) {
+        LocalDateTime lockTime = systemClock.now();
+        Timestamp timestamp = Timestamp.valueOf(lockTime);
+
+        List<Object[]> params = new ArrayList<>();
+        for (Task task : toUpdate) {
+            params.add(new Object[] {timestamp, task.getId(), task.getVersion()});
+        }
+
+        int[] updateCount = database.connect(con -> database.executeBatchUpdate(con, updatelockTimeStmt, params.toArray(new Object[params.size()][])));
+
+        List<Task> result = new ArrayList<>();
+        for (int i = 0; i < updateCount.length; i++) {
+            if (updateCount[i] == 1) {
+                Task task = toUpdate.get(i);
+                result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
+            }
+        }
+        return result;
     }
 
     Task mapToPersistentTask(ResultSet rs) throws SQLException {

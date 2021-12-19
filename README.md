@@ -29,7 +29,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 </dependency>
 ```
 
-3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql/mariadb](src/main/resources/mysql.sql).
+3. Create the table in your database. See [oracle](src/main/resources/oracle.sql) or [postgres](src/main/resources/postgres.sql) or [mysql](src/main/resources/mysql.sql) or [mariadb](src/main/resources/mariadb.sql).
     We recommend creating an index on created_date to make ordering fast.
 
 5. Instantiate and start the `FailsafeExecutor`, which then will start executing any submitted tasks.
@@ -174,6 +174,19 @@ failsafeExecutor.observeQueue(observer);
 
 On each select/lock run of the persistent queue the observer is called back. Three parameters are passed, indicating the limit used for the select query (spare space in queue), the result count of the select query for the next tasks and the lock count. The lock count states how many tasks of the select result got locked for execution.
 
+## Metrics
+
+The `FailsafeExecutor` provides a utility class to collect metrics which get you the sum and the rate of persisted, failed and finished (failed and succeeded) tasks.
+
+Create an instance of class `FailsafeExecutorMetricsCollector` and register it as subscriber:
+
+```java
+FailsafeExecutorMetricsCollector metricsCollector = new FailsafeExecutorMetricsCollector();
+failsafeExecutor.subscribe(metricsCollector);
+```
+
+The default time unit for the rate calculation is seconds. You can override it by passing your `TimeUnit` as parameter to the constructor.
+
 ## Health check
 
 The `FailsafeExecutor` provides a health check through two methods. One that returns if last run of `FailsafeExecutor` was successful.
@@ -209,15 +222,13 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | ------------- | ---- | ---- | ------------- |
 | `systemClock` | `SystemClock` | LocalDateTime.now() | Clock to retrieve the current time. |
 | `workerThreadCount` | `int` | 5 | Number of threads executing tasks. |
-| `queueSize` | `int`  |  4 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
+| `queueSize` | `int`  |  6 * `<worker-thread-count>` | Maximum number of tasks to lock by the `FailsafeExecutor` at the same time. |
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
-| `lockTimeout` | `Duration` |  13 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum lockTimeout is 5 min. |
+| `lockTimeout` | `Duration` |  5 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum recommended lockTimeout is 1 min. |
 | `tableName` | `String` |  `FAILSAFE_TASK` | Name of the database table. |
-| `immediateReRunThreshold` | `int` |  `queuesize * 0.25` | Determines if FailsafeExecutor should immediately try to lock more tasks after current select and lock run. In this default setting threshold value is 5. That means if there are more than 5 entries free in the queue after a select and lock run, FailsafeExecutor does not wait for the next polling interval. Instead it immediately reruns trying to lock more tasks. |
 
-**Note:** Consider the lockTimeout must be longer than `(queueSize / workerThreadCount) * task-max-execution-time`. We expect the maximum execution time of a task as 3 min.
-With the default configuration you get `(4*5 / 5) * 3 min = 12 min`. Therefore default lockTimeout is 13 min.
+**Note:** The lockTime is periodically updated by a scheduled heartbeat. It runs every `lockTimeout / 4` duration.   
 
 ## Testability
 

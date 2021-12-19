@@ -96,18 +96,13 @@ public class Database {
         }
     }
 
-    public void insert(Connection connection,
+    public int insert(Connection connection,
                        String sql,
                        Object... params) {
-        executeUpdate(connection, sql, params);
+        return executeUpdate(connection, sql, params);
     }
 
     public int update(String sql,
-                      Object... params) {
-        return executeUpdate(sql, params);
-    }
-
-    public int delete(String sql,
                       Object... params) {
         return executeUpdate(sql, params);
     }

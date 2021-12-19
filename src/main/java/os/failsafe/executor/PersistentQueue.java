@@ -26,11 +26,11 @@ class PersistentQueue {
     }
 
     String add(Task task) {
-        return taskRepository.add(task).getId();
+        return taskRepository.add(task);
     }
 
     String add(Connection connection, Task task) {
-        return taskRepository.add(connection, task).getId();
+        return taskRepository.add(connection, task);
     }
 
     List<Task> peekAndLock(Set<String> processableTasks, int limit) {

@@ -8,6 +8,7 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -312,14 +313,14 @@ class TaskRepositoryShould {
     }
 
     @Test
-    void delete_failure_of_a_task_and_increase_retry_count() {
+    void delete_failure_of_a_task_and_increase_retry_count() throws SQLException {
         Task task = addTask();
 
         RuntimeException exception = new RuntimeException("Sorry");
         taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
         Task failedTask = taskRepository.findAllFailedTasks().get(0);
-        taskRepository.deleteFailure(failedTask);
+        database.connectNoResult(con -> taskRepository.deleteFailure(con, failedTask));
 
         List<Task> allFailedTasks = taskRepository.findAllFailedTasks();
         assertTrue(allFailedTasks.isEmpty());
@@ -350,7 +351,34 @@ class TaskRepositoryShould {
         assertEquals(tasks.size(), 0);
 
         assertEquals(taskRepository.findAll().size(), 3);
+    }
 
+    @Test
+    void update_lock_time() {
+        systemClock.fixedTime(LocalDateTime.of(2020, 11, 12, 10, 0));
+
+        Task task = addTask();
+        List<Task> lockedTasks = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        Task locked = lockedTasks.get(0);
+
+        systemClock.timeTravelBy(Duration.ofSeconds(5));
+
+        List<Task> tasks = taskRepository.updateLockTime(Collections.singletonList(locked));
+        assertEquals(1, tasks.size());
+
+        Task actual = tasks.get(0);
+        assertEquals(locked.getLockTime().plusSeconds(5), actual.getLockTime());
+    }
+
+    @Test
+    void not_update_lock_time_if_task_is_not_locked() {
+        Task task = addTask();
+        List<Task> tasks = taskRepository.updateLockTime(Collections.singletonList(task));
+        assertTrue(tasks.isEmpty());
+
+        Task actual = taskRepository.findOne(task.getId());
+        assertNull(actual.getLockTime());
+        assertEquals(task.getVersion(), actual.getVersion());
     }
 
     private Task addTask() {
@@ -372,7 +400,9 @@ class TaskRepositoryShould {
     }
 
     private Task addTask(String id, String taskName, LocalDateTime plannedExecutionTime) {
-        return taskRepository.add(new Task(id, taskName, taskParameter, plannedExecutionTime));
+        Task task = new Task(id, taskName, taskParameter, plannedExecutionTime);
+        taskRepository.add(task);
+        return taskRepository.findOne(id);
     }
 
     public static void assertIdsOnly(List<Task> expected, List<Task> actual) {
