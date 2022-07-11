@@ -3,6 +3,10 @@ package os.failsafe.executor.db;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.FileUtil;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
 class MariaDatabaseTestConfig implements DatabaseTestConfig {
 
     public void createTable(Database database) {
@@ -37,5 +41,11 @@ class MariaDatabaseTestConfig implements DatabaseTestConfig {
 
     public int maxPoolSize() {
         return 5;
+    }
+
+    public Map<String, String> getAdditionalConfigs() {
+        Map<String, String>  configs = new HashMap<>();
+        configs.put("useBulkStmts", "false");
+        return configs;
     }
 }

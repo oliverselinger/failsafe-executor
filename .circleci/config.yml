@@ -77,7 +77,7 @@ jobs:
   test-maria:
     docker:
       - image: circleci/openjdk:8-jdk-stretch
-      - image: circleci/mariadb:10.2
+      - image: circleci/mariadb:10.4
         environment:
           MYSQL_ROOT_PASSWORD: failsafe
           MYSQL_DATABASE: failsafe

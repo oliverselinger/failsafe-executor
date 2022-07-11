@@ -298,3 +298,17 @@ Yes, in the JitPack repository. For usage add the JitPack repository to your bui
     </repository>
 </repositories>
 ```
+
+#### How to test against a specific database?
+
+All db configurations for the tests can be found in XxxDatabaseTestConfig classes. As an example testing against MariaDB:
+
+1) Start a docker container with MariaDB:
+
+```
+docker run -p 127.0.0.1:3306:3306 --name mariadb-failsafe -e MARIADB_ROOT_PASSWORD=failsafe -e MYSQL_DATABASE=failsafe -e MYSQL_USER=failsafe -e MYSQL_PASSWORD=failsafe -d mariadb:10.4
+```
+
+2) Add the environment variable `TEST_DB=MARIA` to your test run configuration. 
+3) Run your tests.
+

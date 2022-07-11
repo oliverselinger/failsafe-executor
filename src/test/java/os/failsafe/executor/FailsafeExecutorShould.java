@@ -159,6 +159,9 @@ class FailsafeExecutorShould {
 
     @Test
     void find_a_task() {
+        assertEquals(0, failsafeExecutor.findAll().size());
+        assertEquals(0, failsafeExecutor.count());
+
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
 
         assertTrue(failsafeExecutor.findOne(taskId).isPresent());

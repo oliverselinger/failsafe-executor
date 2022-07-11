@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -81,7 +82,7 @@ public class FailsafeExecutor {
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
 
-        validateDatabaseTableStructure(dataSource);
+        validateDatabase(dataSource);
     }
 
     /**
@@ -432,7 +433,7 @@ public class FailsafeExecutor {
 
     /**
      * Returns the newest persisted tasks with a limit of 1000 rows.
-     *
+     * <p>
      * The result set is ordered by CREATED_DATE DESC, ID DESC.
      *
      * @return list of all persisted tasks
@@ -443,7 +444,7 @@ public class FailsafeExecutor {
 
     /**
      * Returns all failed tasks with a limit of 1000 rows.
-     *
+     * <p>
      * The result set is ordered by CREATED_DATE DESC, ID DESC.
      *
      * @return list of all failed tasks
@@ -454,7 +455,7 @@ public class FailsafeExecutor {
 
     /**
      * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
-     *
+     * <p>
      * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
      *
      * @param taskName  finds the tasks by constraining the taskName
@@ -636,11 +637,41 @@ public class FailsafeExecutor {
         listeners.forEach(listener -> listener.persisting(name, taskId, parameter));
     }
 
-    private void validateDatabaseTableStructure(DataSource dataSource) throws SQLException {
+    private void validateDatabase(DataSource dataSource) throws SQLException {
+        List<Task> tasks = new ArrayList<>();
+
+        // validate table structure (with persist)
         try (Connection connection = dataSource.getConnection();
              Transaction transaction = new Transaction(connection)) { // no commit of trx
-            Task testTask = new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now());
-            taskRepository.add(connection, testTask);
+            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
+            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
+            for (Task task : tasks) {
+                if (taskRepository.add(connection, task) == null) {
+                    throw new IllegalStateException("Validation of database failed! Unable to persist tasks!");
+                }
+            }
+            transaction.commit();
+        }
+
+        // validate execute batch return result (with lock)
+        // check SUCCESS_NO_INFO is not returned by jdbc driver
+        // see https://jira.mariadb.org/browse/CONJ-920
+        try (Connection connection = dataSource.getConnection();
+             Transaction transaction = new Transaction(connection)) { // no commit of trx
+            tasks = taskRepository.lock(connection, tasks);
+            if (tasks.size() != 2) {
+                throw new IllegalStateException("Validation of database failed! Unable to lock tasks!");
+            }
+            transaction.commit();
+        }
+
+        // cleanup
+        try (Connection connection = dataSource.getConnection();
+             Transaction transaction = new Transaction(connection)) { // no commit of trx
+            for (Task task : tasks) {
+                taskRepository.delete(connection, task);
+            }
+            transaction.commit();
         }
     }
 

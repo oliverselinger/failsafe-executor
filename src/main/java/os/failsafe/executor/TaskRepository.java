@@ -6,6 +6,7 @@ import os.failsafe.executor.utils.SystemClock;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -232,16 +233,25 @@ class TaskRepository {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        List<Object[]> params = new ArrayList<>();
-        for (Task task : toLock) {
-            params.add(new Object[]{timestamp, task.getVersion() + 1, task.getId(), task.getVersion()});
+        Object[][] params = new Object[toLock.size()][4];
+        for (int i = 0; i < params.length; i++) {
+            Task task = toLock.get(i);
+            params[i] = new Object[]{timestamp, task.getVersion() + 1, task.getId(), task.getVersion()};
+            params[i][0] = timestamp;
+            params[i][1] = task.getVersion() + 1;
+            params[i][2] = task.getId();
+            params[i][3] = task.getVersion();
         }
 
-        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params.toArray(new Object[params.size()][]));
+        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params);
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
-            if (updateCount[i] == 1) {
+            int executionResult = updateCount[i];
+            if (executionResult == Statement.SUCCESS_NO_INFO) {
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. Not supported by FailsafeExecutor, since optimistic locking is used. Change your JDBC driver's configuration to not return this value for batch executions.");
+            }
+            if (executionResult == 1) {
                 Task task = toLock.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
             }
@@ -318,16 +328,23 @@ class TaskRepository {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        List<Object[]> params = new ArrayList<>();
-        for (Task task : toUpdate) {
-            params.add(new Object[]{timestamp, task.getId(), task.getVersion()});
+        Object[][] params = new Object[toUpdate.size()][3];
+        for (int i = 0; i < params.length; i++) {
+            Task task = toUpdate.get(i);
+            params[i][0] = timestamp;
+            params[i][1] = task.getId();
+            params[i][2] = task.getVersion();
         }
 
-        int[] updateCount = database.connect(con -> database.executeBatchUpdate(con, updatelockTimeStmt, params.toArray(new Object[params.size()][])));
+        int[] updateCount = database.connect(con -> database.executeBatchUpdate(con, updatelockTimeStmt, params));
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
-            if (updateCount[i] == 1) {
+            int executionResult = updateCount[i];
+            if (executionResult == Statement.SUCCESS_NO_INFO) {
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. Not supported by FailsafeExecutor, since optimistic locking is used. Change your JDBC driver's configuration to not return this value for batch executions.");
+            }
+            if (executionResult == 1) {
                 Task task = toUpdate.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
             }
