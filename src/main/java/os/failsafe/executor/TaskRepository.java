@@ -2,6 +2,7 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
+import os.failsafe.executor.utils.WhereBuilder;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -10,7 +11,6 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -95,18 +95,10 @@ class TaskRepository {
                 "DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
 
         this.findAllPagingStmt = String.format(//language=SQL
-                "SELECT * FROM %s WHERE" +
-                        " (NAME = ? OR ? IS NULL)" +
-                        " AND (PARAMETER = ? OR ? IS NULL)" +
-                        " AND ( (FAIL_TIME IS NOT NULL AND ? = 1) OR (FAIL_TIME IS NULL AND ? = 0) OR ? IS NULL )" +
-                        " ORDER BY %s", tableName, database.isMysqlOrMariaDb() ? "%s LIMIT ?, ?" : "%s OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+                "SELECT * FROM %s %s", tableName, "%s");
 
         this.countAllStmt = String.format(//language=SQL
-                "SELECT COUNT(*) FROM %s WHERE" +
-                        " (NAME = ? OR ? IS NULL)" +
-                        " AND (PARAMETER = ? OR ? IS NULL)" +
-                        " AND ( (FAIL_TIME IS NOT NULL AND ? = 1) OR (FAIL_TIME IS NULL AND ? = 0) OR ? IS NULL )",
-                tableName);
+                "SELECT COUNT(*) FROM %s %s", tableName, "%s");
 
         this.findOneStmt = String.format(//language=SQL
                 "SELECT * FROM %s WHERE ID = ?", tableName);
@@ -211,26 +203,30 @@ class TaskRepository {
             sorts = new Sort[]{new Sort(Sort.Field.CREATED_DATE, Sort.Direction.DESC), new Sort(Sort.Field.ID, Sort.Direction.DESC)};
         }
 
-        String orderBys = Arrays.stream(sorts).map(Sort::toString).collect(Collectors.joining(","));
-        String sql = String.format(findAllPagingStmt, orderBys);
+        WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
+                .where(taskName, "NAME")
+                .where(parameter, "PARAMETER")
+                .isNullOrNotNull(failed, "FAIL_TIME")
+                .orderBy(sorts)
+                .limit(offset, limit)
+                .build();
 
-        int failedAsInt = Boolean.TRUE.equals(failed) ? 1 : 0;
+        String sql = String.format(findAllPagingStmt, whereClause.where);
 
-        return database.selectAll(sql, this::mapToPersistentTask,
-                taskName, taskName,
-                parameter, parameter,
-                failedAsInt, failedAsInt, failedAsInt,
-                offset,
-                limit);
+        return database.selectAll(sql, this::mapToPersistentTask, whereClause.params);
     }
 
     int count(String taskName, String parameter, Boolean failed) {
-        int failedAsInt = Boolean.TRUE.equals(failed) ? 1 : 0;
+        WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
+                .where(taskName, "NAME")
+                .where(parameter, "PARAMETER")
+                .isNullOrNotNull(failed, "FAIL_TIME")
+                .build();
 
-        return database.selectOne(countAllStmt, rs -> rs.getInt(1),
-                taskName, taskName,
-                parameter, parameter,
-                failedAsInt, failedAsInt, failedAsInt);
+        String sql = String.format(countAllStmt, whereClause.where);
+
+        return database.selectOne(sql, rs -> rs.getInt(1),
+                whereClause.params);
     }
 
     List<Task> lock(Connection connection, List<Task> toLock) {

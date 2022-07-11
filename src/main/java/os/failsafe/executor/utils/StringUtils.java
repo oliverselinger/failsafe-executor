@@ -5,6 +5,10 @@ public class StringUtils {
     private StringUtils() {
     }
 
+    public static boolean isBlank(String str) {
+        return str == null || str.isEmpty();
+    }
+
     public static String abbreviate(String input, int maxLength) {
         if (input == null) {
             return null;

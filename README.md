@@ -303,12 +303,20 @@ Yes, in the JitPack repository. For usage add the JitPack repository to your bui
 
 All db configurations for the tests can be found in XxxDatabaseTestConfig classes. As an example testing against MariaDB:
 
-1) Start a docker container with MariaDB:
+1) Start a docker container.
+
+MariaDB:
 
 ```
 docker run -p 127.0.0.1:3306:3306 --name mariadb-failsafe -e MARIADB_ROOT_PASSWORD=failsafe -e MYSQL_DATABASE=failsafe -e MYSQL_USER=failsafe -e MYSQL_PASSWORD=failsafe -d mariadb:10.4
 ```
 
-2) Add the environment variable `TEST_DB=MARIA` to your test run configuration. 
+Postgres:
+
+```
+docker run -p 127.0.0.1:5432:5432 --name postgres-failsafe -e POSTGRES_USER=failsafe -e POSTGRES_PASSWORD=failsafe -e POSTGRES_DB=failsafe -d postgres
+```
+
+2) Add the environment variable `TEST_DB=MARIA` or `TEST_DB=POSTGRES` to your test run configuration. 
 3) Run your tests.
 
