@@ -158,28 +158,6 @@ public class FailsafeExecutor {
     }
 
     /**
-     * Registers the given function under the provided name with a given schedule. If {@link #execute(String, String, String)} method is invoked for such a task, it is then executed at the planned execution times defined by the schedule.
-     *
-     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
-     * <p>
-     * With this method you can create scheduled tasks that can receive a parameter.
-     *
-     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
-     *
-     * @param name     unique name of the task
-     * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @throws IllegalArgumentException if a task with the given name is already registered
-     */
-    public void registerTask(String name, Schedule schedule, TaskFunction<String> function) {
-        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, schedule, function)) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
-        }
-
-        taskNamesWithFunctions.add(name);
-    }
-
-
-    /**
      * Registers the given function under the provided name.
      *
      * <p>Before task execution a transaction is created. This transaction is committed after the given function executes without execptions. Furthermore the transaction is used to remove the task execution entry from database.</p>
