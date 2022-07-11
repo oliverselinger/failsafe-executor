@@ -249,7 +249,7 @@ class TaskRepository {
         for (int i = 0; i < updateCount.length; i++) {
             int executionResult = updateCount[i];
             if (executionResult == Statement.SUCCESS_NO_INFO) {
-                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. Not supported by FailsafeExecutor, since optimistic locking is used. Change your JDBC driver's configuration to not return this value for batch executions.");
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. FailsafeExecutor depends on JDBC drivers ability to return the effected row count. For more details go to the FAQs!");
             }
             if (executionResult == 1) {
                 Task task = toLock.get(i);
@@ -342,7 +342,7 @@ class TaskRepository {
         for (int i = 0; i < updateCount.length; i++) {
             int executionResult = updateCount[i];
             if (executionResult == Statement.SUCCESS_NO_INFO) {
-                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. Not supported by FailsafeExecutor, since optimistic locking is used. Change your JDBC driver's configuration to not return this value for batch executions.");
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. FailsafeExecutor depends on JDBC drivers ability to return the effected row count. For more details go to the FAQs!");
             }
             if (executionResult == 1) {
                 Task task = toUpdate.get(i);
