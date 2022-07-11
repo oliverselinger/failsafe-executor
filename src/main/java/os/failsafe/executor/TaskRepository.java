@@ -214,19 +214,23 @@ class TaskRepository {
         String orderBys = Arrays.stream(sorts).map(Sort::toString).collect(Collectors.joining(","));
         String sql = String.format(findAllPagingStmt, orderBys);
 
+        int failedAsInt = Boolean.TRUE.equals(failed) ? 1 : 0;
+
         return database.selectAll(sql, this::mapToPersistentTask,
                 taskName, taskName,
                 parameter, parameter,
-                failed, failed, failed,
+                failedAsInt, failedAsInt, failedAsInt,
                 offset,
                 limit);
     }
 
     int count(String taskName, String parameter, Boolean failed) {
+        int failedAsInt = Boolean.TRUE.equals(failed) ? 1 : 0;
+
         return database.selectOne(countAllStmt, rs -> rs.getInt(1),
                 taskName, taskName,
                 parameter, parameter,
-                failed, failed, failed);
+                failedAsInt, failedAsInt, failedAsInt);
     }
 
     List<Task> lock(Connection connection, List<Task> toLock) {
