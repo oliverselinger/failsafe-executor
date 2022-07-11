@@ -2,10 +2,12 @@ package os.failsafe.executor;
 
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
+import os.failsafe.executor.utils.WhereBuilder;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,12 +29,10 @@ class TaskRepository {
     private final String saveFailureStmt;
     private final String deleteFailureStmt;
     private final String deleteStmt;
-    private final String findAllStmt;
     private final String findOneStmt;
-    private final String findAllFailedStmt;
+    private final String countAllStmt;
     private final String findAllNotLockedOrderedByCreatedDateStmt;
     private final String findAllPagingStmt;
-    private final String findAllFailedPagingStmt;
     private final String updatelockTimeStmt;
 
     public TaskRepository(Database database, String tableName, SystemClock systemClock) {
@@ -40,71 +40,82 @@ class TaskRepository {
         this.tableName = tableName;
         this.systemClock = systemClock;
 
-        this.insertStmtMysqlOrMariaDb = String.format("" +
+        this.insertStmtMysqlOrMariaDb = String.format(//language=SQL
                 "INSERT IGNORE INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " VALUES" +
-                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName);
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " VALUES" +
+                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                tableName);
 
-        this.insertStmtPostgres = String.format("" +
+        this.insertStmtPostgres = String.format(//language=SQL
                 "INSERT INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " VALUES" +
-                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
-                " ON CONFLICT DO NOTHING", tableName);
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " VALUES" +
+                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+                        " ON CONFLICT DO NOTHING",
+                tableName);
 
-        this.insertStmtOracle = String.format("" +
+        this.insertStmtOracle = String.format(//language=SQL
                 "INSERT INTO %s" +
-                " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
-                " WHERE NOT EXISTS" +
-                " (SELECT ID FROM %s WHERE ID = ?)", tableName, tableName);
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
+                        " WHERE NOT EXISTS" +
+                        " (SELECT ID FROM %s WHERE ID = ?)",
+                tableName, tableName);
 
-        this.lockStmt = String.format("" +
+        this.lockStmt = String.format(//language=SQL
                 "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", this.tableName);
+                        " SET" +
+                        " LOCK_TIME=?, VERSION=?" +
+                        " WHERE ID=? AND VERSION=?",
+                this.tableName);
 
-        this.unlockStmt = String.format("" +
+        this.unlockStmt = String.format(//language=SQL
                 "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", tableName);
+                        " SET" +
+                        " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
+                        " WHERE ID=? AND VERSION=?",
+                tableName);
 
-        this.saveFailureStmt = String.format("" +
+        this.saveFailureStmt = String.format(//language=SQL
                 "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
-                " WHERE ID=?", tableName);
+                        " SET" +
+                        " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
+                        " WHERE ID=?",
+                tableName);
 
-        this.deleteFailureStmt = String.format("" +
+        this.deleteFailureStmt = String.format(//language=SQL
                 "UPDATE %s" +
-                " SET" +
-                " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
-                " WHERE ID=? AND VERSION=?", tableName);
+                        " SET" +
+                        " FAIL_TIME=null, EXCEPTION_MESSAGE=null, STACK_TRACE=null, RETRY_COUNT=?, VERSION=?" +
+                        " WHERE ID=? AND VERSION=?",
+                tableName);
 
-        this.deleteStmt = String.format("DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
+        this.deleteStmt = String.format(//language=SQL
+                "DELETE FROM %s WHERE ID = ? AND VERSION = ?", tableName);
 
-        this.findAllStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC", tableName);
-        this.findAllPagingStmt = String.format("SELECT * FROM %s ORDER BY CREATED_DATE DESC, ID DESC %s", tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+        this.findAllPagingStmt = String.format(//language=SQL
+                "SELECT * FROM %s %s", tableName, "%s");
 
-        this.findOneStmt = String.format("SELECT * FROM %s WHERE ID = ?", tableName);
+        this.countAllStmt = String.format(//language=SQL
+                "SELECT COUNT(*) FROM %s %s", tableName, "%s");
 
-        this.findAllFailedStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC", tableName);
-        this.findAllFailedPagingStmt = String.format("SELECT * FROM %s WHERE FAIL_TIME IS NOT NULL ORDER BY FAIL_TIME DESC, ID DESC %s", tableName, database.isMysqlOrMariaDb() ? "LIMIT ?, ?" : "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+        this.findOneStmt = String.format(//language=SQL
+                "SELECT * FROM %s WHERE ID = ?", tableName);
 
-        this.findAllNotLockedOrderedByCreatedDateStmt = String.format("" +
-                "SELECT * FROM %s" +
-                " WHERE FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
-                " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
-                " ORDER BY CREATED_DATE %s", tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST ? ROWS ONLY");
+        this.findAllNotLockedOrderedByCreatedDateStmt = String.format(//language=SQL
+                "SELECT * FROM %s WHERE" +
+                        " FAIL_TIME IS NULL AND (LOCK_TIME IS NULL OR LOCK_TIME <= ?)" +
+                        " AND PLANNED_EXECUTION_TIME <= ? AND NAME IN (%s)" +
+                        " ORDER BY CREATED_DATE %s",
+                tableName, "%s", database.isMysqlOrMariaDb() ? "LIMIT ?" : "FETCH FIRST ? ROWS ONLY");
 
-        this.updatelockTimeStmt = String.format("" +
+        this.updatelockTimeStmt = String.format(//language=SQL
                 "UPDATE %s" +
-                " SET" +
-                " LOCK_TIME=?" +
-                " WHERE ID=? AND LOCK_TIME IS NOT NULL AND VERSION=?", this.tableName);
+                        " SET" +
+                        " LOCK_TIME=?" +
+                        " WHERE ID=? AND LOCK_TIME IS NOT NULL AND VERSION=?",
+                this.tableName);
     }
 
     String add(Task task) {
@@ -179,28 +190,68 @@ class TaskRepository {
         return database.selectOne(findOneStmt, this::mapToPersistentTask, id);
     }
 
-    List<Task> findAll() {
-        return database.selectAll(findAllStmt, this::mapToPersistentTask, null);
+    List<Task> findAll(String taskName, String parameter, Boolean failed, int offset, int limit, Sort... sorts) {
+        if (offset < 0) {
+            throw new IllegalArgumentException("Offset must be greater or equal 0");
+        }
+
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be greater than 0");
+        }
+
+        if (sorts.length == 0) {
+            sorts = new Sort[]{new Sort(Sort.Field.CREATED_DATE, Sort.Direction.DESC), new Sort(Sort.Field.ID, Sort.Direction.DESC)};
+        }
+
+        WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
+                .where(taskName, "NAME")
+                .where(parameter, "PARAMETER")
+                .isNullOrNotNull(failed, "FAIL_TIME")
+                .orderBy(sorts)
+                .limit(offset, limit)
+                .build();
+
+        String sql = String.format(findAllPagingStmt, whereClause.where);
+
+        return database.selectAll(sql, this::mapToPersistentTask, whereClause.params);
     }
 
-    List<Task> findAll(int offset, int limit) {
-        return database.selectAll(findAllPagingStmt, this::mapToPersistentTask, new Object[] {offset, limit});
+    int count(String taskName, String parameter, Boolean failed) {
+        WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
+                .where(taskName, "NAME")
+                .where(parameter, "PARAMETER")
+                .isNullOrNotNull(failed, "FAIL_TIME")
+                .build();
+
+        String sql = String.format(countAllStmt, whereClause.where);
+
+        return database.selectOne(sql, rs -> rs.getInt(1),
+                whereClause.params);
     }
 
     List<Task> lock(Connection connection, List<Task> toLock) {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        List<Object[]> params = new ArrayList<>();
-        for (Task task : toLock) {
-            params.add(new Object[] {timestamp, task.getVersion() + 1, task.getId(), task.getVersion()});
+        Object[][] params = new Object[toLock.size()][4];
+        for (int i = 0; i < params.length; i++) {
+            Task task = toLock.get(i);
+            params[i] = new Object[]{timestamp, task.getVersion() + 1, task.getId(), task.getVersion()};
+            params[i][0] = timestamp;
+            params[i][1] = task.getVersion() + 1;
+            params[i][2] = task.getId();
+            params[i][3] = task.getVersion();
         }
 
-        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params.toArray(new Object[params.size()][]));
+        int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params);
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
-            if (updateCount[i] == 1) {
+            int executionResult = updateCount[i];
+            if (executionResult == Statement.SUCCESS_NO_INFO) {
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. FailsafeExecutor depends on JDBC drivers ability to return the effected row count. For more details go to the FAQs!");
+            }
+            if (executionResult == 1) {
                 Task task = toLock.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
             }
@@ -257,14 +308,6 @@ class TaskRepository {
         }
     }
 
-    List<Task> findAllFailedTasks() {
-        return database.selectAll(findAllFailedStmt, this::mapToPersistentTask, null);
-    }
-
-    List<Task> findAllFailedTasks(int offset, int limit) {
-        return database.selectAll(findAllFailedPagingStmt, this::mapToPersistentTask, new Object[] {offset, limit});
-    }
-
     void delete(Task toDelete) {
         try {
             database.connectNoResult(con -> delete(con, toDelete));
@@ -285,16 +328,23 @@ class TaskRepository {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        List<Object[]> params = new ArrayList<>();
-        for (Task task : toUpdate) {
-            params.add(new Object[] {timestamp, task.getId(), task.getVersion()});
+        Object[][] params = new Object[toUpdate.size()][3];
+        for (int i = 0; i < params.length; i++) {
+            Task task = toUpdate.get(i);
+            params[i][0] = timestamp;
+            params[i][1] = task.getId();
+            params[i][2] = task.getVersion();
         }
 
-        int[] updateCount = database.connect(con -> database.executeBatchUpdate(con, updatelockTimeStmt, params.toArray(new Object[params.size()][])));
+        int[] updateCount = database.connect(con -> database.executeBatchUpdate(con, updatelockTimeStmt, params));
 
         List<Task> result = new ArrayList<>();
         for (int i = 0; i < updateCount.length; i++) {
-            if (updateCount[i] == 1) {
+            int executionResult = updateCount[i];
+            if (executionResult == Statement.SUCCESS_NO_INFO) {
+                throw new IllegalStateException("CAUTION! JDBC driver returns SUCCESS_NO_INFO. FailsafeExecutor depends on JDBC drivers ability to return the effected row count. For more details go to the FAQs!");
+            }
+            if (executionResult == 1) {
                 Task task = toUpdate.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
             }

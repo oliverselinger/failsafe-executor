@@ -6,8 +6,6 @@ import os.failsafe.executor.utils.Throwing;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -56,7 +54,7 @@ public class FailsafeExecutorTestUtility {
 
         if (taskExecutionListener.isAnyExecutionFailed()) {
             List<Task> failedTasks = taskExecutionListener.failedTasksByIds().stream()
-                    .map(failsafeExecutor::task)
+                    .map(failsafeExecutor::findOne)
                     .flatMap(o -> o.map(Stream::of).orElseGet(Stream::empty))
                     .collect(Collectors.toList());
 

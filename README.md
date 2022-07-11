@@ -98,24 +98,6 @@ For a **recurring execution** let your `Schedule` always return the next planned
 
 As before, make sure your business logic is **idempotent**, since it gets executed at least once per scheduled execution.
 
-Furthermore you have the ability to schedule a task that can receive a parameter. Register the task and provide a schedule:
-
-```java
-failsafeExecutor.registerTask("TaskName", schedule, param -> {
-    ... // your business logic
-});
-```
-
-Then you can execute the task with given parameter:
-
-```java
-String taskId = failsafeExecutor.execute("UniqueTaskId", "TaskName", parameter);
-```
-
-This task will have a recurring execution based on the schedule given during registration, unless the schedule does not return the next execution time.
-
-You can execute multiple tasks with this schedule. Just provide different task ids.
-
 ## Task failures
 
 Any exceptions occurring during the execution of a task are captured. The exception's message and stacktrace are saved to the task. The task itself is marked as failed.
@@ -298,3 +280,32 @@ Yes, in the JitPack repository. For usage add the JitPack repository to your bui
     </repository>
 </repositories>
 ```
+
+#### How to test against a specific database?
+
+All db configurations for the tests can be found in XxxDatabaseTestConfig classes. As an example testing against MariaDB:
+
+1) Start a docker container.
+
+MariaDB:
+
+```
+docker run -p 127.0.0.1:3306:3306 --name mariadb-failsafe -e MARIADB_ROOT_PASSWORD=failsafe -e MYSQL_DATABASE=failsafe -e MYSQL_USER=failsafe -e MYSQL_PASSWORD=failsafe -d mariadb:10.4
+```
+
+Postgres:
+
+```
+docker run -p 127.0.0.1:5432:5432 --name postgres-failsafe -e POSTGRES_USER=failsafe -e POSTGRES_PASSWORD=failsafe -e POSTGRES_DB=failsafe -d postgres
+```
+
+2) Add the environment variable `TEST_DB=MARIA` or `TEST_DB=POSTGRES` to your test run configuration. 
+3) Run your tests.
+
+#### What should you do in case you experience an exception with "CAUTION! JDBC driver returns SUCCESS_NO_INFO..." ?
+
+This states that your JDBC driver cannot return the effected row count of batch executed statements. Locking of tasks is performed via batch updates
+plus it utilizes optimistic locking. So it depends on the effected row count to work properly. 
+
+We experienced this issue with MariaDB JDBC driver verions > 3. See https://jira.mariadb.org/browse/CONJ-920. In this case, a simple change of the JDBC driver configuration changes the behavior to return the effected row count.
+

@@ -34,6 +34,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -153,15 +154,48 @@ class FailsafeExecutorShould {
 
     @Test
     void not_commit_test_task_of_table_structure_validation() {
-        assertTrue(failsafeExecutor.allTasks().isEmpty());
+        assertTrue(failsafeExecutor.findAll().isEmpty());
+    }
+
+    @Test
+    void find_a_task() {
+        assertEquals(0, failsafeExecutor.findAll().size());
+        assertEquals(0, failsafeExecutor.count());
+
+        String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
+
+        assertTrue(failsafeExecutor.findOne(taskId).isPresent());
+        assertFalse(failsafeExecutor.findOne("abc").isPresent());
+
+        assertEquals(1, failsafeExecutor.findAll().size());
+        assertEquals(1, failsafeExecutor.findAll(TASK_NAME, parameter, null, 0, 100).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, 0, 100).size());
+        assertEquals(0, failsafeExecutor.findAll("abc", null, null, 0, 100).size());
+        assertEquals(0, failsafeExecutor.findAll(null, "abc", null, 0, 100).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, true, 0, 100).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, false, 0, 100).size());
+
+        assertEquals(1, failsafeExecutor.count());
+        assertEquals(1, failsafeExecutor.count(TASK_NAME, parameter, null));
+        assertEquals(1, failsafeExecutor.count(null, null, null));
+        assertEquals(0, failsafeExecutor.count("abc", null, null));
+        assertEquals(0, failsafeExecutor.count(null, null, true));
+        assertEquals(1, failsafeExecutor.count(null, null, false));
+
+        assertEquals(0, failsafeExecutor.findAllFailed().size());
+        assertEquals(0, failsafeExecutor.countFailedTasks());
     }
 
     @Test
     void execute_a_task() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
+
+        assertEquals(1, failsafeExecutor.count());
+
         failsafeExecutor.start();
 
         assertListenerOnSucceeded(TASK_NAME, taskId, parameter);
+        assertEquals(0, failsafeExecutor.count());
     }
 
     @Test
@@ -170,10 +204,13 @@ class FailsafeExecutorShould {
         failsafeExecutor.registerTask(taskName, (con, param) -> {
         });
         String taskId = failsafeExecutor.execute(taskName, parameter);
+
+        assertEquals(1, failsafeExecutor.count());
+
         failsafeExecutor.start();
 
         assertListenerOnSucceeded(taskName, taskId, parameter);
-        assertEquals(0, failsafeExecutor.allTasks().size());
+        assertEquals(0, failsafeExecutor.count());
     }
 
     @Test
@@ -186,7 +223,8 @@ class FailsafeExecutorShould {
         failsafeExecutor.start();
 
         assertListenerOnFailed(taskName, taskId, parameter);
-        assertEquals(1, failsafeExecutor.failedTasks().size());
+        assertEquals(1, failsafeExecutor.findAllFailed().size());
+        assertEquals(1, failsafeExecutor.countFailedTasks());
     }
 
     @Test
@@ -204,7 +242,7 @@ class FailsafeExecutorShould {
         systemClock.timeTravelBy(Duration.ofDays(1));
         assertListenerOnSucceeded(TASK_NAME, taskId, parameter);
 
-        assertEquals(0, failsafeExecutor.allTasks().size());
+        assertEquals(0, failsafeExecutor.findAll().size());
     }
 
     @Test
@@ -214,7 +252,7 @@ class FailsafeExecutorShould {
 
         assertDoesNotThrow(() -> failsafeExecutor.defer(taskId, TASK_NAME, parameter, systemClock.now()));
 
-        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(1, failsafeExecutor.findAll().size());
         assertEquals(taskId, actualTaskId);
     }
 
@@ -265,7 +303,7 @@ class FailsafeExecutorShould {
         systemClock.timeTravelBy(Duration.ofDays(1));
         assertListenerOnFailed(scheduleTaskName, taskId, null);
 
-        Task task = failsafeExecutor.task(taskId).get();
+        Task task = failsafeExecutor.findOne(taskId).get();
         assertEquals(beforePlannedExecutionTime.plusSeconds(1), task.getPlannedExecutionTime());
 
         systemClock.timeTravelBy(Duration.ofDays(1));
@@ -275,7 +313,7 @@ class FailsafeExecutorShould {
         failsafeExecutor.retry(task);
         assertListenerOnSucceeded(scheduleTaskName, taskId, null);
 
-        task = failsafeExecutor.task(taskId).get();
+        task = failsafeExecutor.findOne(taskId).get();
         assertEquals(beforePlannedExecutionTime.plusSeconds(1).plusDays(2), task.getPlannedExecutionTime());
     }
 
@@ -290,7 +328,7 @@ class FailsafeExecutorShould {
         FailsafeExecutor otherFailsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
         assertDoesNotThrow(() -> otherFailsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
 
-        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(1, failsafeExecutor.findAll().size());
         assertEquals(scheduleTaskName, taskId);
     }
 
@@ -303,97 +341,8 @@ class FailsafeExecutorShould {
         String taskId = failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World"));
         assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.schedule(scheduleTaskName, dailySchedule, () -> log.info("Hello World")));
 
-        assertEquals(1, failsafeExecutor.allTasks().size());
+        assertEquals(1, failsafeExecutor.findAll().size());
         assertEquals(scheduleTaskName, taskId);
-    }
-
-    @Test
-    void execute_scheduled_parameterized_task_every_day() {
-        LocalTime dailyTime = LocalTime.of(1, 0);
-
-        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
-        systemClock.fixedTime(beforePlannedExecutionTime);
-
-        DailySchedule dailySchedule = new DailySchedule(dailyTime);
-
-        final String scheduleTaskName = "ScheduledTestTask";
-        final String parameter = "param";
-        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
-
-        String taskId = failsafeExecutor.execute(scheduleTaskName, parameter);
-        assertListenerOnPersisting(scheduleTaskName, taskId, parameter);
-
-        failsafeExecutor.start();
-
-        assertNeverListenerOnSucceededAndOnFailed();
-
-        systemClock.timeTravelBy(Duration.ofDays(1));
-        assertListenerOnSucceeded(scheduleTaskName, taskId, parameter);
-
-        systemClock.timeTravelBy(Duration.ofDays(1));
-        assertListenerOnSucceeded(scheduleTaskName, taskId, parameter);
-
-        verifyNoMoreInteractions(taskExecutionListener);
-    }
-
-    @Test
-    void execute_scheduled_parameterized_task_multiple_times() {
-        LocalTime dailyTime = LocalTime.of(1, 0);
-
-        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
-        systemClock.fixedTime(beforePlannedExecutionTime);
-
-        DailySchedule dailySchedule = new DailySchedule(dailyTime);
-
-        final String scheduleTaskName = "ScheduledTestTask";
-        final String parameter = "param";
-        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
-
-        String taskId1 = failsafeExecutor.execute(scheduleTaskName, parameter);
-        assertListenerOnPersisting(scheduleTaskName, taskId1, parameter);
-        String taskId2 = failsafeExecutor.execute(scheduleTaskName, parameter);
-        assertListenerOnPersisting(scheduleTaskName, taskId2, parameter);
-        String taskId3 = failsafeExecutor.execute("taskId3", scheduleTaskName, parameter);
-        assertListenerOnPersisting(scheduleTaskName, taskId3, parameter);
-
-        assertNotEquals(taskId1, taskId2);
-        assertNotEquals(taskId1, taskId3);
-        assertNotEquals(taskId2, taskId3);
-
-        assertEquals(taskId3, "taskId3");
-
-        verifyNoMoreInteractions(taskExecutionListener);
-    }
-
-    @Test
-    void not_throw_an_exception_if_scheduled_parameterized_task_already_executed() {
-        LocalTime dailyTime = LocalTime.of(1, 0);
-
-        LocalDateTime beforePlannedExecutionTime = LocalDateTime.of(LocalDate.of(2020, 5, 1), dailyTime.minusSeconds(1));
-        systemClock.fixedTime(beforePlannedExecutionTime);
-
-        DailySchedule dailySchedule = new DailySchedule(dailyTime);
-
-        final String scheduleTaskName = "ScheduledTestTask";
-        final String parameter = "param";
-        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
-
-        String taskId = failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter);
-        String actualTaskId = assertDoesNotThrow(() -> failsafeExecutor.execute("scheduledTaskId1", scheduleTaskName, parameter));
-
-        assertEquals(1, failsafeExecutor.allTasks().size());
-        assertNotNull(taskId);
-        assertNull(actualTaskId);
-    }
-
-    @Test
-    void throw_an_exception_if_scheduled_parameterized_task_is_already_registered() {
-        DailySchedule dailySchedule = new DailySchedule(LocalTime.now());
-
-        final String scheduleTaskName = "ScheduledTestTask";
-
-        failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param));
-        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.registerTask(scheduleTaskName, dailySchedule, param -> assertEquals(parameter, param)));
     }
 
     @Test
@@ -407,12 +356,12 @@ class FailsafeExecutorShould {
 
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter, runtimeException);
 
-        List<Task> failedTasks = failsafeExecutor.failedTasks();
+        List<Task> failedTasks = failsafeExecutor.findAllFailed();
         assertEquals(1, failedTasks.size());
 
         Task failedTask = failedTasks.get(0);
 
-        failsafeExecutor.task(failedTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
+        failsafeExecutor.findOne(failedTask.getId()).orElseThrow(() -> new RuntimeException("Should be present"));
 
         executionShouldFail = false;
 
@@ -435,7 +384,7 @@ class FailsafeExecutorShould {
 
         verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter, runtimeException);
 
-        List<Task> failedTasks = failsafeExecutor.failedTasks();
+        List<Task> failedTasks = failsafeExecutor.findAllFailed();
         assertEquals(1, failedTasks.size());
 
         Task failedTask = failedTasks.get(0);
@@ -443,7 +392,7 @@ class FailsafeExecutorShould {
         failsafeExecutor.cancel(failedTask);
 
         verifyNoMoreInteractions(taskExecutionListener);
-        assertTrue(failsafeExecutor.allTasks().isEmpty());
+        assertTrue(failsafeExecutor.findAll().isEmpty());
     }
 
     @Test
@@ -523,17 +472,17 @@ class FailsafeExecutorShould {
         });
 
         executionShouldFail = false;
-        Task failedTask = failsafeExecutor.failedTasks().get(0);
+        Task failedTask = failsafeExecutor.findAllFailed().get(0);
 
         awaitAllTasks(failsafeExecutor, () -> failsafeExecutor.retry(failedTask), failures -> fail());
 
-        assertTrue(failsafeExecutor.allTasks().isEmpty());
+        assertTrue(failsafeExecutor.findAll().isEmpty());
     }
 
     @Test
     void persist_a_task_as_failed_so_no_execution_is_triggered() {
         failsafeExecutor.recordFailure(TASK_NAME, TASK_NAME, parameter, new RuntimeException("Error"));
-        List<Task> failedTasks = failsafeExecutor.failedTasks();
+        List<Task> failedTasks = failsafeExecutor.findAllFailed();
         assertEquals(1, failedTasks.size());
         assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
     }
@@ -551,7 +500,7 @@ class FailsafeExecutorShould {
 
         firstBlockingRunnable.waitForSetup();
 
-        LocalDateTime lockTime = failsafeExecutor.task(taskId).get().getLockTime();
+        LocalDateTime lockTime = failsafeExecutor.findOne(taskId).get().getLockTime();
 
         assertNotNull(lockTime);
 
@@ -559,7 +508,7 @@ class FailsafeExecutorShould {
                 .await()
                 .pollDelay(Durations.ONE_MILLISECOND)
                 .timeout(Duration.ofSeconds(3))
-                .until(() -> failsafeExecutor.task(taskId).get().getLockTime().isAfter(lockTime));
+                .until(() -> failsafeExecutor.findOne(taskId).get().getLockTime().isAfter(lockTime));
 
         firstBlockingRunnable.release();
         failsafeExecutor.stop(3, TimeUnit.SECONDS);

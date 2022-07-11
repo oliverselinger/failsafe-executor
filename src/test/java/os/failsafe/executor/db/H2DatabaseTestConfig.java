@@ -35,6 +35,6 @@ class H2DatabaseTestConfig implements DatabaseTestConfig {
     }
 
     public int maxPoolSize() {
-        return 1;
+        return 2;
     }
 }

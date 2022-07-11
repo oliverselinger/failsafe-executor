@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -81,7 +82,7 @@ public class FailsafeExecutor {
         this.initialDelay = initialDelay;
         this.pollingInterval = pollingInterval;
 
-        validateDatabaseTableStructure(dataSource);
+        validateDatabase(dataSource);
     }
 
     /**
@@ -155,28 +156,6 @@ public class FailsafeExecutor {
 
         taskNamesWithFunctions.add(name);
     }
-
-    /**
-     * Registers the given function under the provided name with a given schedule. If {@link #execute(String, String, String)} method is invoked for such a task, it is then executed at the planned execution times defined by the schedule.
-     *
-     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
-     * <p>
-     * With this method you can create scheduled tasks that can receive a parameter.
-     *
-     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
-     *
-     * @param name     unique name of the task
-     * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @throws IllegalArgumentException if a task with the given name is already registered
-     */
-    public void registerTask(String name, Schedule schedule, TaskFunction<String> function) {
-        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, schedule, function)) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
-        }
-
-        taskNamesWithFunctions.add(name);
-    }
-
 
     /**
      * Registers the given function under the provided name.
@@ -430,25 +409,43 @@ public class FailsafeExecutor {
         return taskRepository.add(connection, toSave);
     }
 
-
     /**
-     * Returns the newest persisted tasks with a limit of 100 rows.
+     * Returns the newest persisted tasks with a limit of 1000 rows.
+     * <p>
+     * The result set is ordered by CREATED_DATE DESC, ID DESC.
      *
      * @return list of all persisted tasks
      */
-    public List<Task> allTasks() {
-        return taskRepository.findAll();
+    public List<Task> findAll() {
+        return taskRepository.findAll(null, null, null, 0, 1000);
     }
 
     /**
-     * Returns the newest persisted tasks with the given offset and limit.
+     * Returns all failed tasks with a limit of 1000 rows.
+     * <p>
+     * The result set is ordered by CREATED_DATE DESC, ID DESC.
      *
-     * @param offset offset to start from
-     * @param limit  limit of the result set
+     * @return list of all failed tasks
+     */
+    public List<Task> findAllFailed() {
+        return taskRepository.findAll(null, null, true, 0, 1000);
+    }
+
+    /**
+     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
+     * <p>
+     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
+     *
+     * @param taskName  finds the tasks by constraining the taskName
+     * @param parameter finds the tasks by constraining the parameter
+     * @param failed    finds the tasks by constraining if they are failed or not failed.
+     * @param offset    offset to start from
+     * @param limit     limit of the result set
+     * @param sorts     sort order of the result set. See {@link Sort} for available sort criteria.
      * @return list of all persisted tasks
      */
-    public List<Task> allTasks(int offset, int limit) {
-        return taskRepository.findAll(offset, limit);
+    public List<Task> findAll(String taskName, String parameter, Boolean failed, int offset, int limit, Sort... sorts) {
+        return taskRepository.findAll(taskName, parameter, failed, offset, limit, sorts);
     }
 
     /**
@@ -457,32 +454,38 @@ public class FailsafeExecutor {
      * @param taskId the id of the task
      * @return the task
      */
-    public Optional<Task> task(String taskId) {
+    public Optional<Task> findOne(String taskId) {
         return Optional.ofNullable(taskRepository.findOne(taskId));
     }
 
     /**
-     * Returns tasks that failed lately during execution with a limit of 100 rows.
+     * Returns the count of all tasks.
      *
-     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
-     *
-     * @return list of all failed tasks
+     * @return count of all tasks
      */
-    public List<Task> failedTasks() {
-        return taskRepository.findAllFailedTasks();
+    public int count() {
+        return taskRepository.count(null, null, null);
     }
 
     /**
-     * Returns tasks that failed lately during execution with the given offset and limit.
+     * Returns the count of all failed tasks.
      *
-     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
-     *
-     * @param offset offset to start from
-     * @param limit  limit of the result set
-     * @return list of all failed tasks
+     * @return count of all failed tasks
      */
-    public List<Task> failedTasks(int offset, int limit) {
-        return taskRepository.findAllFailedTasks(offset, limit);
+    public int countFailedTasks() {
+        return taskRepository.count(null, null, true);
+    }
+
+    /**
+     * Returns the count of all tasks matching the criteria. A null value as parameter means not constraining the result.
+     *
+     * @param taskName  counts the tasks by constraining the taskName
+     * @param parameter counts the tasks by constraining the parameter
+     * @param failed    counts the tasks by constraining if they are failed or not failed.
+     * @return count of all tasks
+     */
+    public int count(String taskName, String parameter, Boolean failed) {
+        return taskRepository.count(taskName, parameter, failed);
     }
 
     public boolean retry(Task failedTask) {
@@ -612,11 +615,41 @@ public class FailsafeExecutor {
         listeners.forEach(listener -> listener.persisting(name, taskId, parameter));
     }
 
-    private void validateDatabaseTableStructure(DataSource dataSource) throws SQLException {
+    private void validateDatabase(DataSource dataSource) throws SQLException {
+        List<Task> tasks = new ArrayList<>();
+
+        // validate table structure (with persist)
         try (Connection connection = dataSource.getConnection();
              Transaction transaction = new Transaction(connection)) { // no commit of trx
-            Task testTask = new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now());
-            taskRepository.add(connection, testTask);
+            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
+            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
+            for (Task task : tasks) {
+                if (taskRepository.add(connection, task) == null) {
+                    throw new IllegalStateException("Validation of database failed! Unable to persist tasks!");
+                }
+            }
+            transaction.commit();
+        }
+
+        // validate execute batch return result (with lock)
+        // check SUCCESS_NO_INFO is not returned by jdbc driver
+        // see https://jira.mariadb.org/browse/CONJ-920
+        try (Connection connection = dataSource.getConnection();
+             Transaction transaction = new Transaction(connection)) { // no commit of trx
+            tasks = taskRepository.lock(connection, tasks);
+            if (tasks.size() != 2) {
+                throw new IllegalStateException("Validation of database failed! Unable to lock tasks!");
+            }
+            transaction.commit();
+        }
+
+        // cleanup
+        try (Connection connection = dataSource.getConnection();
+             Transaction transaction = new Transaction(connection)) { // no commit of trx
+            for (Task task : tasks) {
+                taskRepository.delete(connection, task);
+            }
+            transaction.commit();
         }
     }
 

@@ -69,11 +69,11 @@ public class Database {
         });
     }
 
-    public <T> List<T> selectAll(String sql, RowMapper<T> rowMapper, Object[] params) {
+    public <T> List<T> selectAll(String sql, RowMapper<T> rowMapper, Object... params) {
         return connect(connection -> selectAll(connection, sql, rowMapper, params));
     }
 
-    public <T> List<T> selectAll(Connection connection, String sql, RowMapper<T> rowMapper, Object[] params) {
+    public <T> List<T> selectAll(Connection connection, String sql, RowMapper<T> rowMapper, Object... params) {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int cnt = 0;

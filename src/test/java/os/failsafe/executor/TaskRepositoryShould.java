@@ -11,13 +11,13 @@ import os.failsafe.executor.utils.TestSystemClock;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,33 +84,49 @@ class TaskRepositoryShould {
 
     @Test
     void find_and_return_all_tasks() {
-        Task task1 = addTask();
+        Task task1 = addTask("1");
         systemClock.timeTravelBy(Duration.ofSeconds(1));
-        Task task2 = addTask();
+        Task task2 = addTask("2");
         systemClock.timeTravelBy(Duration.ofSeconds(1));
-        Task task3 = addTask();
+        Task task3 = addTask("3");
 
-        List<Task> tasks = taskRepository.findAll();
-        assertEquals(3, tasks.size());
-        assertTrue(tasks.containsAll(Arrays.asList(task1, task2, task3)));
+        // test query params
+        assertFindOne("2", task2);
+        // single
+        assertFindAll(taskName, null, null, task1, task2, task3);
+        assertFindAll("notExisting", null, null);
+        assertFindAll(null, taskParameter, null, task1, task2, task3);
+        assertFindAll(null, "notExisting", null);
+        assertFindAll(null, null, false, task1, task2, task3);
+        assertFindAll(null, null, true);
+        // combinations
+        assertFindAll(taskName, taskParameter, null, task1, task2, task3);
+        assertFindAll("notExisting", taskParameter, null);
+        assertFindAll(taskName, "notExisting", null);
+        assertFindAll(taskName, taskParameter, false, task1, task2, task3);
+        assertFindAll(taskName, taskParameter, true);
 
-        tasks = taskRepository.findAll(0, 2);
-        assertEquals(2, tasks.size());
-        assertTrue(tasks.containsAll(Arrays.asList(task3, task2)));
+        // test paging
+        assertFindAll(0, 2, task3, task2);
+        assertFindAll(2, 100, task1);
+        assertFindAll(3, 100);
 
-        tasks = taskRepository.findAll(2, 100);
-        assertEquals(1, tasks.size());
-        assertTrue(tasks.contains(task1));
+        // test sorting
+        assertFindAll(new Sort(Sort.Field.CREATED_DATE, Sort.Direction.ASC), task1, task2, task3);
+        assertFindAll(new Sort(Sort.Field.CREATED_DATE, Sort.Direction.DESC), task3, task2, task1);
+        assertFindAll(new Sort(Sort.Field.ID, Sort.Direction.ASC), task1, task2, task3);
+        assertFindAll(new Sort(Sort.Field.ID, Sort.Direction.DESC), task3, task2, task1);
 
-        tasks = taskRepository.findAll(3, 100);
-        assertEquals(0, tasks.size());
+        ArrayList<Sort> sorts = new ArrayList<>();
+        sorts.add(new Sort(Sort.Field.CREATED_DATE, Sort.Direction.ASC));
+        sorts.add(new Sort(Sort.Field.ID, Sort.Direction.ASC));
+        assertFindAll(sorts, task1, task2, task3);
     }
 
     @Test
     void find_and_return_empty_list_if_no_task_exists() {
-        assertTrue(taskRepository.findAll().isEmpty());
-        assertTrue(taskRepository.findAll(0, 100).isEmpty());
-        assertTrue(taskRepository.findAll(10, 100).isEmpty());
+        assertFindAll(0, 100);
+        assertFindAll(10, 100);
     }
 
     @Test
@@ -242,7 +258,7 @@ class TaskRepositoryShould {
 
         taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
-        List<Task> failedTasks = taskRepository.findAllFailedTasks();
+        List<Task> failedTasks = findAllFailedTasks();
         assertEquals(1, failedTasks.size());
 
         Task failedTask = failedTasks.get(0);
@@ -256,29 +272,6 @@ class TaskRepositoryShould {
     }
 
     @Test
-    void find_and_return_failed_tasks() {
-        Task task1 = addTask();
-        Task task2 = addTask();
-
-        String exceptionMessage = "Exception message";
-        Exception exception = new Exception(exceptionMessage);
-
-        ExecutionFailure executionFailure1 = new ExecutionFailure(systemClock.now(), exception);
-        taskRepository.saveFailure(task1, executionFailure1);
-        ExecutionFailure executionFailure2 = new ExecutionFailure(systemClock.now().plusSeconds(1), exception);
-        taskRepository.saveFailure(task2, executionFailure2);
-
-        List<Task> failedTasks = taskRepository.findAllFailedTasks();
-        assertIdsOnly(Arrays.asList(task2, task1), failedTasks);
-
-        failedTasks = taskRepository.findAllFailedTasks(0, 100);
-        assertIdsOnly(Arrays.asList(task2, task1), failedTasks);
-
-        failedTasks = taskRepository.findAllFailedTasks(1, 100);
-        assertIdsOnly(Collections.singletonList(task1), failedTasks);
-    }
-
-    @Test
     void never_return_a_failed_task() {
         Task task = addTask();
 
@@ -287,20 +280,6 @@ class TaskRepositoryShould {
         List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
         assertEquals(0, tasks.size());
-    }
-
-    @Test
-    void return_empty_list_if_no_failed_task_exists() {
-        addTask();
-
-        List<Task> failedTasks = taskRepository.findAllFailedTasks();
-        assertTrue(failedTasks.isEmpty());
-
-        failedTasks = taskRepository.findAllFailedTasks(0, 100);
-        assertTrue(failedTasks.isEmpty());
-
-        failedTasks = taskRepository.findAllFailedTasks(10, 100);
-        assertTrue(failedTasks.isEmpty());
     }
 
     @Test
@@ -319,10 +298,10 @@ class TaskRepositoryShould {
         RuntimeException exception = new RuntimeException("Sorry");
         taskRepository.saveFailure(task, new ExecutionFailure(systemClock.now(), exception));
 
-        Task failedTask = taskRepository.findAllFailedTasks().get(0);
+        Task failedTask = findAllFailedTasks().get(0);
         database.connectNoResult(con -> taskRepository.deleteFailure(con, failedTask));
 
-        List<Task> allFailedTasks = taskRepository.findAllFailedTasks();
+        List<Task> allFailedTasks = findAllFailedTasks();
         assertTrue(allFailedTasks.isEmpty());
 
         Task taskWithoutFailure = taskRepository.findOne(task.getId());
@@ -350,7 +329,7 @@ class TaskRepositoryShould {
         tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, unknownTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
         assertEquals(tasks.size(), 0);
 
-        assertEquals(taskRepository.findAll().size(), 3);
+        assertEquals(findAllTasks().size(), 3);
     }
 
     @Test
@@ -405,11 +384,46 @@ class TaskRepositoryShould {
         return taskRepository.findOne(id);
     }
 
-    public static void assertIdsOnly(List<Task> expected, List<Task> actual) {
-        assertEquals(expected.size(), actual.size());
+    private void assertFindAll(Sort sort, Task... expectedTasks) {
+        assertFindAll(Collections.singletonList(sort), expectedTasks);
+    }
 
-        List<String> expectedIds = expected.stream().map(Task::getId).collect(Collectors.toList());
-        List<String> actualIds = actual.stream().map(Task::getId).collect(Collectors.toList());
-        assertTrue(expectedIds.containsAll(actualIds));
+    private void assertFindAll(List<Sort> sorts, Task... expectedTasks) {
+        List<Task> tasks = taskRepository.findAll(null, null, null, 0, 100, sorts.toArray(new Sort[0]));
+
+        assertEquals(expectedTasks.length, tasks.size());
+        for (int i = 0; i < expectedTasks.length; i++) {
+            Task expectedTask = expectedTasks[i];
+            assertEquals(expectedTask, tasks.get(i));
+        }
+    }
+
+    private void assertFindAll(int offset, int limit, Task... expectedTasks) {
+        assertFindAll(null, null, null, offset, limit, expectedTasks);
+    }
+
+    private void assertFindAll(String taskName, String taskParameter, Boolean failed, Task... expectedTasks) {
+        assertFindAll(taskName, taskParameter, failed, 0, 100, expectedTasks);
+    }
+
+    private void assertFindAll(String taskName, String taskParameter, Boolean failed, int offset, int limit, Task... expectedTasks) {
+        List<Task> tasks = taskRepository.findAll(taskName, taskParameter, failed, offset, limit);
+
+        assertEquals(expectedTasks.length, tasks.size());
+        List<Task> expected = Arrays.asList(expectedTasks);
+        assertTrue(tasks.containsAll(expected));
+    }
+
+    private void assertFindOne(String id, Task expected) {
+        Task actual = taskRepository.findOne(id);
+        assertEquals(expected, actual);
+    }
+
+    private List<Task> findAllTasks() {
+        return taskRepository.findAll(null, null, null, 0, 100);
+    }
+
+    private List<Task> findAllFailedTasks() {
+        return taskRepository.findAll(null, null, true, 0, 100);
     }
 }

@@ -31,6 +31,8 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
         config.setPassword(databaseTestConfig.password());
         config.setMaximumPoolSize(databaseTestConfig.maxPoolSize());
 
+        databaseTestConfig.getAdditionalConfigs().forEach(config::addDataSourceProperty);
+
         dataSource = new HikariDataSource(config);
 
         database = new Database(dataSource);
