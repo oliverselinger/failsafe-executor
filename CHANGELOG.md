@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2022-07-11
+### Added
+- Validation of JDBC driver's ability to return the effected row count for batched statements. Issue was raised with MariaDB JDBC driver version > 3 which returns SUCCESS_NO_INFO instead. For more details go to the FAQs!
+- Methods to retrieve current count of tasks
+- Ability to query tasks by different criteria and sort the result set in different ways
+
+### Changed  
+- Update JDBC drivers and database test container
+- Streamline select queries to retrieve tasks
+- Rename method `task` to `findOne`
+- Rename method `allTasks` to `findAll`
+  
+### Removed
+- API method `registerTask(String name, Schedule schedule, TaskFunction<String> function)`. No use case found for this function.
+
 ## [1.4.0] - 2021-12-19
 ### Added
 - Heartbeat scheduler that updates the lock time on tasks. This should avoid takeover of long-running tasks by another instance.
