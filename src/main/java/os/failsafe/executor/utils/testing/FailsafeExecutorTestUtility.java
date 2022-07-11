@@ -56,7 +56,7 @@ public class FailsafeExecutorTestUtility {
 
         if (taskExecutionListener.isAnyExecutionFailed()) {
             List<Task> failedTasks = taskExecutionListener.failedTasksByIds().stream()
-                    .map(failsafeExecutor::task)
+                    .map(failsafeExecutor::findOne)
                     .flatMap(o -> o.map(Stream::of).orElseGet(Stream::empty))
                     .collect(Collectors.toList());
 

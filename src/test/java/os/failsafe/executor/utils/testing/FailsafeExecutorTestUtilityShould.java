@@ -30,7 +30,7 @@ class FailsafeExecutorTestUtilityShould {
         }).when(failsafeExecutor).subscribe(any());
 
         Task failedTask = mock(Task.class);
-        when(failsafeExecutor.task("TaskId")).thenReturn(java.util.Optional.ofNullable(failedTask));
+        when(failsafeExecutor.findOne("TaskId")).thenReturn(java.util.Optional.ofNullable(failedTask));
 
         List<Task> actualFailedTasks = new ArrayList<>();
         awaitAllTasks(failsafeExecutor, () -> {

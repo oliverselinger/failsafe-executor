@@ -430,25 +430,43 @@ public class FailsafeExecutor {
         return taskRepository.add(connection, toSave);
     }
 
-
     /**
-     * Returns the newest persisted tasks with a limit of 100 rows.
+     * Returns the newest persisted tasks with a limit of 1000 rows.
+     *
+     * The result set is ordered by CREATED_DATE DESC, ID DESC.
      *
      * @return list of all persisted tasks
      */
-    public List<Task> allTasks() {
-        return taskRepository.findAll();
+    public List<Task> findAll() {
+        return taskRepository.findAll(null, null, null, 0, 1000);
     }
 
     /**
-     * Returns the newest persisted tasks with the given offset and limit.
+     * Returns all failed tasks with a limit of 1000 rows.
      *
-     * @param offset offset to start from
-     * @param limit  limit of the result set
+     * The result set is ordered by CREATED_DATE DESC, ID DESC.
+     *
+     * @return list of all failed tasks
+     */
+    public List<Task> findAllFailed() {
+        return taskRepository.findAll(null, null, true, 0, 1000);
+    }
+
+    /**
+     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
+     *
+     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
+     *
+     * @param taskName  finds the tasks by constraining the taskName
+     * @param parameter finds the tasks by constraining the parameter
+     * @param failed    finds the tasks by constraining if they are failed or not failed.
+     * @param offset    offset to start from
+     * @param limit     limit of the result set
+     * @param sorts     sort order of the result set. See {@link Sort} for available sort criteria.
      * @return list of all persisted tasks
      */
-    public List<Task> allTasks(int offset, int limit) {
-        return taskRepository.findAll(offset, limit);
+    public List<Task> findAll(String taskName, String parameter, Boolean failed, int offset, int limit, Sort... sorts) {
+        return taskRepository.findAll(taskName, parameter, failed, offset, limit, sorts);
     }
 
     /**
@@ -457,32 +475,38 @@ public class FailsafeExecutor {
      * @param taskId the id of the task
      * @return the task
      */
-    public Optional<Task> task(String taskId) {
+    public Optional<Task> findOne(String taskId) {
         return Optional.ofNullable(taskRepository.findOne(taskId));
     }
 
     /**
-     * Returns tasks that failed lately during execution with a limit of 100 rows.
+     * Returns the count of all tasks.
      *
-     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
-     *
-     * @return list of all failed tasks
+     * @return count of all tasks
      */
-    public List<Task> failedTasks() {
-        return taskRepository.findAllFailedTasks();
+    public int count() {
+        return taskRepository.count(null, null, null);
     }
 
     /**
-     * Returns tasks that failed lately during execution with the given offset and limit.
+     * Returns the count of all failed tasks.
      *
-     * <p>The failure details are found in the {@link ExecutionFailure} of a task.</p>
-     *
-     * @param offset offset to start from
-     * @param limit  limit of the result set
-     * @return list of all failed tasks
+     * @return count of all failed tasks
      */
-    public List<Task> failedTasks(int offset, int limit) {
-        return taskRepository.findAllFailedTasks(offset, limit);
+    public int countFailedTasks() {
+        return taskRepository.count(null, null, true);
+    }
+
+    /**
+     * Returns the count of all tasks matching the criteria. A null value as parameter means not constraining the result.
+     *
+     * @param taskName  counts the tasks by constraining the taskName
+     * @param parameter counts the tasks by constraining the parameter
+     * @param failed    counts the tasks by constraining if they are failed or not failed.
+     * @return count of all tasks
+     */
+    public int count(String taskName, String parameter, Boolean failed) {
+        return taskRepository.count(taskName, parameter, failed);
     }
 
     public boolean retry(Task failedTask) {

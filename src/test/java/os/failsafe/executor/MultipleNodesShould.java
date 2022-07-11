@@ -14,6 +14,7 @@ import os.failsafe.executor.utils.TestSystemClock;
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
@@ -130,12 +131,16 @@ class MultipleNodesShould {
         try {
             await().atMost(Duration.ofSeconds(1))
                     .pollInterval(Duration.ofMillis(100))
-                    .until(() -> taskRepository.findAll().isEmpty());
+                    .until(() -> findAllTasks().isEmpty());
         } catch (Exception e) {
             System.err.println("######################");
             System.err.println("Tasks still present:");
-            taskRepository.findAll().stream().forEach(task -> System.err.println(task.toString()));
+            findAllTasks().forEach(task -> System.err.println(task.toString()));
             System.err.println("######################");
         }
+    }
+
+    private List<Task> findAllTasks() {
+        return taskRepository.findAll(null, null, null, 0, 100);
     }
 }
