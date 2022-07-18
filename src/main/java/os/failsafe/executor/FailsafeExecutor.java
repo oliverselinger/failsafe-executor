@@ -602,6 +602,7 @@ public class FailsafeExecutor {
     }
 
     void storeException(Exception e) {
+        e.printStackTrace();
         lastRunException = e;
     }
 
