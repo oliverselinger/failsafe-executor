@@ -1,6 +1,7 @@
 package os.failsafe.executor.utils;
 
 import javax.sql.DataSource;
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -91,7 +92,7 @@ public class Database {
                 }
                 return result;
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -119,6 +120,12 @@ public class Database {
 
             int cnt = 0;
             for (Object param : params) {
+
+                if(param instanceof StringReader) {
+                    ps.setCharacterStream(++cnt, (StringReader)param);
+                    continue;
+                }
+
                 ps.setObject(++cnt, param);
             }
 
@@ -199,7 +206,7 @@ public class Database {
     }
 
     public interface RowMapper<R> {
-        R map(ResultSet rs) throws SQLException;
+        R map(ResultSet rs) throws Exception;
     }
 
     public interface ConnectionConsumer {

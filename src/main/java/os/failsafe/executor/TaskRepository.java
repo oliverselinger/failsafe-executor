@@ -1,9 +1,12 @@
 package os.failsafe.executor;
 
 import os.failsafe.executor.utils.Database;
+import os.failsafe.executor.utils.StringUtils;
 import os.failsafe.executor.utils.SystemClock;
 import os.failsafe.executor.utils.WhereBuilder;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -148,7 +151,7 @@ class TaskRepository {
                 null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
-                executionFailure != null ? executionFailure.getStackTrace() : null,
+                executionFailure != null ? new StringReader(executionFailure.getStackTrace()) : null,
                 task.getRetryCount(),
                 task.getVersion());
     }
@@ -164,7 +167,7 @@ class TaskRepository {
                 null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
-                executionFailure != null ? executionFailure.getStackTrace() : null,
+                executionFailure != null ? new StringReader(executionFailure.getStackTrace()) : null,
                 task.getRetryCount(),
                 task.getVersion());
     }
@@ -180,7 +183,7 @@ class TaskRepository {
                 null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
-                executionFailure != null ? executionFailure.getStackTrace() : null,
+                executionFailure != null ? new StringReader(executionFailure.getStackTrace()) : null,
                 task.getRetryCount(),
                 task.getVersion(),
                 task.getId());
@@ -352,7 +355,7 @@ class TaskRepository {
         return result;
     }
 
-    Task mapToPersistentTask(ResultSet rs) throws SQLException {
+    Task mapToPersistentTask(ResultSet rs) throws SQLException, IOException {
         Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
 
         return new Task(
@@ -366,14 +369,14 @@ class TaskRepository {
                 rs.getLong("VERSION"));
     }
 
-    ExecutionFailure mapToExecutionFailure(ResultSet rs) throws SQLException {
+    ExecutionFailure mapToExecutionFailure(ResultSet rs) throws SQLException, IOException {
         Timestamp failTime = rs.getTimestamp("FAIL_TIME");
-        String exceptionMessage = rs.getString("EXCEPTION_MESSAGE");
-        String stackTrace = rs.getString("STACK_TRACE");
-
-        if (failTime == null) {
+        if (rs.wasNull()) {
             return null;
         }
+
+        String exceptionMessage = rs.getString("EXCEPTION_MESSAGE");
+        String stackTrace = StringUtils.fromReader(rs.getCharacterStream("STACK_TRACE"));
 
         return new ExecutionFailure(failTime.toLocalDateTime(), exceptionMessage, stackTrace);
     }

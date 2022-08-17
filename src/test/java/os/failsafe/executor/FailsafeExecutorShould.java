@@ -488,6 +488,22 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void record_failure_with_a_very_long_stack_trace() {
+        StackTraceElement[] stackTrace = new StackTraceElement[5_000];
+        for (int i = 0; i < stackTrace.length; i++) {
+            stackTrace[i] = new StackTraceElement("abc.abc.abc.StackTraceEx", "show", "StackTraceEx.java", 9);
+        }
+
+        RuntimeException exception = new RuntimeException("Error");
+        exception.setStackTrace(stackTrace);
+
+        failsafeExecutor.recordFailure(TASK_NAME, TASK_NAME, parameter, exception);
+        List<Task> failedTasks = failsafeExecutor.findAllFailed();
+        assertEquals(1, failedTasks.size());
+        assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
+    }
+
+    @Test
     void update_lock_until_task_has_finished() throws SQLException {
         FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), Duration.ofMillis(40));
         failsafeExecutor.start();
@@ -527,7 +543,7 @@ class FailsafeExecutorShould {
             firstBlockingRunnable.run();
         });
 
-        for (int i = 0; i < parties-1; i++) {
+        for (int i = 0; i < parties - 1; i++) {
             failsafeExecutor.execute("LONG_RUNNING_TASK", "ignore");
         }
 
