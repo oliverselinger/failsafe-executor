@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
 import os.failsafe.executor.utils.BlockingRunnable;
+import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.FailsafeExecutorMetricsCollector;
 import os.failsafe.executor.utils.TestSystemClock;
 import os.failsafe.executor.utils.Transaction;
@@ -497,10 +498,13 @@ class FailsafeExecutorShould {
         RuntimeException exception = new RuntimeException("Error");
         exception.setStackTrace(stackTrace);
 
+        String expected = ExceptionUtils.stackTraceAsString(exception);
+
         failsafeExecutor.recordFailure(TASK_NAME, TASK_NAME, parameter, exception);
         List<Task> failedTasks = failsafeExecutor.findAllFailed();
         assertEquals(1, failedTasks.size());
         assertEquals("Error", failedTasks.get(0).getExecutionFailure().getExceptionMessage());
+        assertEquals(expected, failedTasks.get(0).getExecutionFailure().getStackTrace());
     }
 
     @Test
