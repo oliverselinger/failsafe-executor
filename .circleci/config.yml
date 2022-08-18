@@ -29,20 +29,20 @@ commands:
 jobs:
   jdk-8-build:
     docker:
-      - image: circleci/openjdk:8-jdk-stretch
+      - image: cimg/openjdk:8.0
     steps:
       - maven-package
 
   jdk-11-build:
     docker:
-      - image: circleci/openjdk:11-jdk-stretch
+      - image: cimg/openjdk:11.0
     steps:
       - maven-package
 
   test-postgres:
     docker:
-      - image: circleci/openjdk:8-jdk-stretch
-      - image: circleci/postgres:12-alpine
+      - image: cimg/openjdk:8.0
+      - image: cimg/postgres:13.7
         environment:
           POSTGRES_USER: failsafe
           POSTGRES_PASSWORD: failsafe
@@ -58,8 +58,8 @@ jobs:
 
   test-mysql:
     docker:
-      - image: circleci/openjdk:8-jdk-stretch
-      - image: circleci/mysql:8.0.4
+      - image: cimg/openjdk:8.0
+      - image: cimg/mysql:8.0.28
         environment:
           MYSQL_ROOT_PASSWORD: failsafe
           MYSQL_DATABASE: failsafe
@@ -76,8 +76,8 @@ jobs:
 
   test-maria:
     docker:
-      - image: circleci/openjdk:8-jdk-stretch
-      - image: circleci/mariadb:10.4
+      - image: cimg/openjdk:8.0
+      - image: cimg/mariadb:10.4
         environment:
           MYSQL_ROOT_PASSWORD: failsafe
           MYSQL_DATABASE: failsafe
