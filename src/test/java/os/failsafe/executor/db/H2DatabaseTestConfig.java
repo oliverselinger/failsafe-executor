@@ -8,7 +8,7 @@ class H2DatabaseTestConfig implements DatabaseTestConfig {
     public void createTable(Database database) {
         String createTableSql = FileUtil.readResourceFile("oracle.sql");
 
-        String[] split = createTableSql.split("\\n\\n");
+        String[] split = createTableSql.split("\\r\\n\\r\\n|\\n\\n");
 
         database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK",
                 split[0], split[1]);

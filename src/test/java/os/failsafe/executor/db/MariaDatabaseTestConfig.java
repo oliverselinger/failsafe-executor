@@ -3,7 +3,6 @@ package os.failsafe.executor.db;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.FileUtil;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,7 +12,7 @@ class MariaDatabaseTestConfig implements DatabaseTestConfig {
         database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK");
 
         String createTableSql = FileUtil.readResourceFile("mariadb.sql");
-        String[] split = createTableSql.split("\\n\\n");
+        String[] split = createTableSql.split("\\r\\n\\r\\n|\\n\\n");
         for (String stmt : split) {
             database.execute(stmt);
         }

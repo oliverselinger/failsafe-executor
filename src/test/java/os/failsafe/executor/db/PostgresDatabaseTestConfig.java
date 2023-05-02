@@ -9,7 +9,7 @@ class PostgresDatabaseTestConfig implements DatabaseTestConfig {
         database.execute("DROP TABLE IF EXISTS FAILSAFE_TASK");
 
         String createTableSql = FileUtil.readResourceFile("postgres.sql");
-        String[] split = createTableSql.split("\\n\\n");
+        String[] split = createTableSql.split("\\r\\n\\r\\n|\\n\\n");
         for (String stmt : split) {
             database.execute(stmt);
         }
