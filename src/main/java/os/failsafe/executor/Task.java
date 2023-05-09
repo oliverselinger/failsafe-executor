@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 public class Task {
-
     private final String id;
     private final String parameter;
     private final String name;
