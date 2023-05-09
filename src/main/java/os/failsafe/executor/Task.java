@@ -20,18 +20,9 @@ public class Task {
         this(id, name, parameter, null, null, plannedExecutionTime, null, null, 0, 0L);
     }
 
-    //TODO: here
     public Task(String id, String name, String parameter, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, int retryCount, Long version) {
-        this.id = id;
-        this.parameter = parameter;
-        this.name = name;
-        this.nodeId = null;
-        this.creationTime = creationTime;
-        this.plannedExecutionTime = plannedExecutionTime;
-        this.lockTime = lockTime;
-        this.executionFailure = executionFailure;
-        this.retryCount = retryCount;
-        this.version = version;
+        this(id, name, parameter, null, creationTime, plannedExecutionTime, lockTime, executionFailure, retryCount, version);
+
     }
 
     public Task(String id, String name, String parameter, String nodeId, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, int retryCount, Long version) {
