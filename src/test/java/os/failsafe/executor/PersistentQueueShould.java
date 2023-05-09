@@ -73,7 +73,7 @@ class PersistentQueueShould {
     void return_null_if_no_task_exists() {
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        assertEquals(0, persistentQueue.peekAndLock(processableTasks, 3).size());
+        assertEquals(0, persistentQueue.peekAndLock(processableTasks, 3, any()).size());
     }
 
     @Test
@@ -84,7 +84,7 @@ class PersistentQueueShould {
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
         when(taskRepository.lock(any(), any(), any())).thenReturn(taskList);
 
-        List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3);
+        List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3, any());
         assertEquals(1, nextTasks.size());
 
         verify(taskRepository).lock(any(), eq(taskList), any());
@@ -99,7 +99,7 @@ class PersistentQueueShould {
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked));
 
-        assertEquals(0, persistentQueue.peekAndLock(processableTasks, 3).size());
+        assertEquals(0, persistentQueue.peekAndLock(processableTasks, 3, any()).size());
     }
 
     @Test
@@ -109,7 +109,7 @@ class PersistentQueueShould {
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        persistentQueue.peekAndLock(processableTasks, 3);
+        persistentQueue.peekAndLock(processableTasks, 3, any());
         verify(observer).onPeek(3, 0, 0);
     }
 
@@ -124,7 +124,7 @@ class PersistentQueueShould {
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
         when(taskRepository.lock(any(), eq(taskList), any())).thenReturn(Collections.singletonList(toLock));
 
-        persistentQueue.peekAndLock(processableTasks, 3);
+        persistentQueue.peekAndLock(processableTasks, 3, any());
         verify(observer).onPeek(3, 2, 1);
     }
 
@@ -134,12 +134,12 @@ class PersistentQueueShould {
         persistentQueue.setObserver(observer);
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
-        persistentQueue.peekAndLock(processableTasks, 3);
+        persistentQueue.peekAndLock(processableTasks, 3, any());
         verify(observer).onPeek(3, 0, 0);
 
         persistentQueue.setObserver(null);
         Mockito.reset(observer);
-        persistentQueue.peekAndLock(processableTasks, 3);
+        persistentQueue.peekAndLock(processableTasks, 3, any());
         verify(observer, never()).onPeek(anyInt(), anyInt(), anyInt());
     }
 

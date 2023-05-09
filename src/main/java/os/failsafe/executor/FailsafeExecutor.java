@@ -104,6 +104,25 @@ public class FailsafeExecutor {
     }
 
     /**
+     * Start execution of any submitted tasks.
+     */
+    public void start(String nodeId) {
+        boolean shouldStart = running.compareAndSet(false, true);
+        if (!shouldStart) {
+            return;
+        }
+
+        executor.scheduleWithFixedDelay(
+                this::executeNextTasks,
+                initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+
+        workerPool.start();
+
+        executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+
+    /**
      * Initiates an orderly shutdown in which previously locked tasks are executed,
      * but no new tasks will be locked.
      *
@@ -583,7 +602,8 @@ public class FailsafeExecutor {
                 return;
             }
 
-            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+            // TODO change here
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, null);
             if (toExecute.isEmpty()) {
                 return;
             }

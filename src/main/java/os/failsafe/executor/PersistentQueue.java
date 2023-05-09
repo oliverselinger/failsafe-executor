@@ -33,7 +33,7 @@ class PersistentQueue {
         return taskRepository.add(connection, task);
     }
 
-    List<Task> peekAndLock(Set<String> processableTasks, int limit) {
+    List<Task> peekAndLock(Set<String> processableTasks, int limit, String nodeId) {
         return database.connect(connection -> {
             List<Task> nextTasksToLock = findNextForExecution(connection, processableTasks, limit);
 
