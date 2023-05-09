@@ -22,7 +22,6 @@ public class Task {
 
     public Task(String id, String name, String parameter, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, int retryCount, Long version) {
         this(id, name, parameter, null, creationTime, plannedExecutionTime, lockTime, executionFailure, retryCount, version);
-
     }
 
     public Task(String id, String name, String parameter, String nodeId, LocalDateTime creationTime, LocalDateTime plannedExecutionTime, LocalDateTime lockTime, ExecutionFailure executionFailure, int retryCount, Long version) {

@@ -89,22 +89,12 @@ public class FailsafeExecutor {
      * Start execution of any submitted tasks.
      */
     public void start() {
-        boolean shouldStart = running.compareAndSet(false, true);
-        if (!shouldStart) {
-            return;
-        }
-
-        executor.scheduleWithFixedDelay(
-                this::executeNextTasks,
-                initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-
-        workerPool.start();
-
-        executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
+        start(null);
     }
 
     /**
      * Start execution of any submitted tasks.
+     * @param nodeId id of the node that locks the given task
      */
     public void start(String nodeId) {
         boolean shouldStart = running.compareAndSet(false, true);
@@ -113,14 +103,13 @@ public class FailsafeExecutor {
         }
 
         executor.scheduleWithFixedDelay(
-                this::executeNextTasks,
+                () -> executeNextTasks(nodeId),
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
 
         workerPool.start();
 
         executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
-
 
     /**
      * Initiates an orderly shutdown in which previously locked tasks are executed,
@@ -595,15 +584,14 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
-    private void executeNextTasks() {
+    private void executeNextTasks(String nodeId) {
         try {
             int idleWorkerCount = workerPool.spareQueueCount();
             if (idleWorkerCount == 0) {
                 return;
             }
 
-            // TODO change here
-            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, null);
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, nodeId);
             if (toExecute.isEmpty()) {
                 return;
             }
@@ -619,6 +607,8 @@ public class FailsafeExecutor {
         } catch (Exception e) {
             storeException(e);
         }
+
+//        return Runnable();
     }
 
     void storeException(Exception e) {

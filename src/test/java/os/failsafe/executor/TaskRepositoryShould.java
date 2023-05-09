@@ -195,8 +195,8 @@ class TaskRepositoryShould {
         Task lockedTask = locked.get(0);
         Task foundTask = taskRepository.findOne(locked.get(0).getId());
 
-        assertEquals(nodeId, foundTask.getNodeId()); // TODO: this works
-//        assertEquals(nodeId, lockedTask.getNodeId()); // TODO: this does not work - node id is null
+        assertEquals(nodeId, foundTask.getNodeId()); // this works
+//        assertEquals(nodeId, lockedTask.getNodeId()); // this does not work - node id is null
 
         assertTrue(lockedTask.isLocked());
     }

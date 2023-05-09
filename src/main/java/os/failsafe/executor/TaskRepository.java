@@ -244,6 +244,7 @@ class TaskRepository {
         for (int i = 0; i < params.length; i++) {
             Task task = toLock.get(i);
             params[i] = new Object[]{timestamp, task.getVersion() + 1, nodeId, task.getId(), task.getVersion()};
+            //TODO readd things here
         }
 
         int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params);
@@ -350,7 +351,6 @@ class TaskRepository {
             }
             if (executionResult == 1) {
                 Task task = toUpdate.get(i);
-                // TODO: look into this
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getNodeId(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
             }
         }
