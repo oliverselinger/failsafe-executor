@@ -98,6 +98,10 @@ public class FailsafeExecutor {
      * @param nodeId id of the node that locks the given task
      */
     public void start(String nodeId) {
+        int nodeIdMaxLength = 48;
+        if(nodeId != null && nodeId.length() > nodeIdMaxLength)
+            throw new IllegalArgumentException(String.format("Length of nodeId can not exceed %d", nodeIdMaxLength));
+
         boolean shouldStart = running.compareAndSet(false, true);
         if (!shouldStart) {
             return;

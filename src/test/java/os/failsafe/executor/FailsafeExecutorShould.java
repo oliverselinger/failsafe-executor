@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -200,6 +201,19 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void throw_exception_if_nodeId_too_long(){
+        String id = UUID.randomUUID().toString() + UUID.randomUUID().toString();
+        String nodeId = id.substring(0, 49);
+
+        assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.start(nodeId));
+    }
+
+    @Test
+    void not_throw_exception_if_nodeID_null(){
+        assertDoesNotThrow(() -> failsafeExecutor.start());
+    }
+
+    @Test
     void execute_a_transactional_task() {
         String taskName = "transactionalTask";
         failsafeExecutor.registerTask(taskName, (con, param) -> {
@@ -245,6 +259,7 @@ class FailsafeExecutorShould {
 
         assertEquals(0, failsafeExecutor.findAll().size());
     }
+
 
     @Test
     void not_throw_an_exception_if_defered_task_is_already_existing() {
