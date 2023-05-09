@@ -46,7 +46,7 @@ class PersistentQueue {
                 return Collections.emptyList();
             }
 
-            List<Task> locked = taskRepository.lock(connection, nextTasksToLock);
+            List<Task> locked = taskRepository.lock(connection, nextTasksToLock, null);
             onPeek(limit, nextTasksToLock.size(), locked.size());
 
             return locked;

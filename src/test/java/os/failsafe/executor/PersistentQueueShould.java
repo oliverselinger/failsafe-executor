@@ -82,12 +82,12 @@ class PersistentQueueShould {
 
         List<Task> taskList = Collections.singletonList(task);
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
-        when(taskRepository.lock(any(), any())).thenReturn(taskList);
+        when(taskRepository.lock(any(), any(), any())).thenReturn(taskList);
 
         List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3);
         assertEquals(1, nextTasks.size());
 
-        verify(taskRepository).lock(any(), eq(taskList));
+        verify(taskRepository).lock(any(), eq(taskList), any());
         assertEquals(task, nextTasks.get(0));
     }
 
@@ -95,7 +95,7 @@ class PersistentQueueShould {
     void return_empty_list_if_first_result_list_cannot_be_locked_and_no_more_results_can_be_found() {
         Task alreadyLocked = Mockito.mock(Task.class);
 
-        when(taskRepository.lock(any(), any())).thenReturn(Collections.emptyList());
+        when(taskRepository.lock(any(), any(), any())).thenReturn(Collections.emptyList());
 
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(Arrays.asList(alreadyLocked, alreadyLocked, alreadyLocked));
 
@@ -122,7 +122,7 @@ class PersistentQueueShould {
         Task toLock = Mockito.mock(Task.class);
         List<Task> taskList = Arrays.asList(alreadyLocked, toLock);
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
-        when(taskRepository.lock(any(), eq(taskList))).thenReturn(Collections.singletonList(toLock));
+        when(taskRepository.lock(any(), eq(taskList), any())).thenReturn(Collections.singletonList(toLock));
 
         persistentQueue.peekAndLock(processableTasks, 3);
         verify(observer).onPeek(3, 2, 1);

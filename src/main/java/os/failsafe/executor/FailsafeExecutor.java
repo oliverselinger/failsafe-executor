@@ -637,7 +637,7 @@ public class FailsafeExecutor {
         // see https://jira.mariadb.org/browse/CONJ-920
         try (Connection connection = dataSource.getConnection();
              Transaction transaction = new Transaction(connection)) { // no commit of trx
-            tasks = taskRepository.lock(connection, tasks);
+            tasks = taskRepository.lock(connection, tasks, null);
             if (tasks.size() != 2) {
                 throw new IllegalStateException("Validation of database failed! Unable to lock tasks!");
             }
