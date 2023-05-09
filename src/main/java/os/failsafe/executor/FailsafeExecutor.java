@@ -53,6 +53,7 @@ public class FailsafeExecutor {
     private final Duration heartbeatInterval;
 
     private volatile Exception lastRunException;
+    private volatile String nodeId;
     private AtomicBoolean running = new AtomicBoolean();
 
     public FailsafeExecutor(DataSource dataSource) throws SQLException {
@@ -102,8 +103,10 @@ public class FailsafeExecutor {
             return;
         }
 
+        this.nodeId = nodeId;
+
         executor.scheduleWithFixedDelay(
-                () -> executeNextTasks(nodeId),
+                this::executeNextTasks,
                 initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
 
         workerPool.start();
@@ -584,7 +587,7 @@ public class FailsafeExecutor {
         return persistentQueue.add(connection, task);
     }
 
-    private void executeNextTasks(String nodeId) {
+    private void executeNextTasks() {
         try {
             int idleWorkerCount = workerPool.spareQueueCount();
             if (idleWorkerCount == 0) {
@@ -607,8 +610,6 @@ public class FailsafeExecutor {
         } catch (Exception e) {
             storeException(e);
         }
-
-//        return Runnable();
     }
 
     void storeException(Exception e) {
