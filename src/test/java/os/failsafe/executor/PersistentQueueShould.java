@@ -80,14 +80,16 @@ class PersistentQueueShould {
     void peek_and_lock_next_task() {
         Task task = Mockito.mock(Task.class);
 
+        String nodeId = "nodeId";
+
         List<Task> taskList = Collections.singletonList(task);
         when(taskRepository.findAllNotLockedOrderedByCreatedDate(any(), any(), any(), any(), anyInt())).thenReturn(taskList);
         when(taskRepository.lock(any(), any(), any())).thenReturn(taskList);
 
-        List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3, any());
+        List<Task> nextTasks = persistentQueue.peekAndLock(processableTasks, 3, nodeId);
         assertEquals(1, nextTasks.size());
 
-        verify(taskRepository).lock(any(), eq(taskList), any());
+        verify(taskRepository).lock(any(), eq(taskList), eq(nodeId));
         assertEquals(task, nextTasks.get(0));
     }
 
