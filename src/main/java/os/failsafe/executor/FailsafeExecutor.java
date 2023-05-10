@@ -36,6 +36,8 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
     public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
+    public static final int NODE_ID_MAX_LENGTH = 48;
+
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
@@ -98,9 +100,8 @@ public class FailsafeExecutor {
      * @param nodeId id of the node that locks the given task
      */
     public void start(String nodeId) {
-        int nodeIdMaxLength = 48;
-        if(nodeId != null && nodeId.length() > nodeIdMaxLength)
-            throw new IllegalArgumentException(String.format("Length of nodeId can not exceed %d", nodeIdMaxLength));
+        if(nodeId != null && nodeId.length() > NODE_ID_MAX_LENGTH)
+            throw new IllegalArgumentException(String.format("Length of nodeId can not exceed %d", NODE_ID_MAX_LENGTH));
 
         boolean shouldStart = running.compareAndSet(false, true);
         if (!shouldStart) {

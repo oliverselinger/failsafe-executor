@@ -203,7 +203,7 @@ class FailsafeExecutorShould {
     @Test
     void throw_exception_if_nodeId_too_long(){
         String id = UUID.randomUUID().toString() + UUID.randomUUID().toString();
-        String nodeId = id.substring(0, 49);
+        String nodeId = id.substring(0, FailsafeExecutor.NODE_ID_MAX_LENGTH + 1);
 
         assertThrows(IllegalArgumentException.class, () -> failsafeExecutor.start(nodeId));
     }
