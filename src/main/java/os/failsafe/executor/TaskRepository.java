@@ -244,15 +244,6 @@ class TaskRepository {
         for (int i = 0; i < params.length; i++) {
             Task task = toLock.get(i);
             params[i] = new Object[]{timestamp, task.getVersion() + 1, nodeId, task.getId(), task.getVersion()};
-
-//            The next few lines are redundant since line 246 already does the same thing hence why I commented them out
-//            params[i][0] = timestamp;
-//            params[i][1] = task.getVersion() + 1;
-//            params[i][2] = nodeId;
-//            params[i][3] = task.getId();
-//            params[i][4] = task.getVersion();
-
-
         }
 
         int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params);
