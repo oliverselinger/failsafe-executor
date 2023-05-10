@@ -176,11 +176,24 @@ class TaskRepositoryShould {
         LocalDateTime lockTime = systemClock.now();
         systemClock.fixedTime(lockTime);
 
-        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), null));
         assertEquals(1, locked.size());
 
         Task lockedTask = locked.get(0);
         assertEquals(lockTime, lockedTask.getLockTime());
+        assertTrue(lockedTask.isLocked());
+    }
+
+    @Test
+    void lock_a_task_with_a_nodeid(){
+        Task task = addTask();
+
+        String nodeId = String.valueOf(UUID.randomUUID());
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), nodeId));
+        assertEquals(1, locked.size());
+
+        Task lockedTask = locked.get(0);
+        assertEquals(nodeId, lockedTask.getNodeId());
         assertTrue(lockedTask.isLocked());
     }
 
@@ -193,9 +206,9 @@ class TaskRepositoryShould {
         LocalDateTime lockTime = systemClock.now();
         systemClock.fixedTime(lockTime);
 
-        database.connect(con -> taskRepository.lock(con, Collections.singletonList(taskMeanwhileLockedByOtherNode)));
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(taskMeanwhileLockedByOtherNode), null));
 
-        List<Task> locked = database.connect(con -> taskRepository.lock(con, Arrays.asList(taskToLock1, taskMeanwhileLockedByOtherNode, taskToLock2)));
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Arrays.asList(taskToLock1, taskMeanwhileLockedByOtherNode, taskToLock2), null));
         assertEquals(2, locked.size());
 
         Task lockedTask = locked.get(0);
@@ -213,7 +226,7 @@ class TaskRepositoryShould {
     void unlock_a_task_and_set_next_planned_execution_time() {
         Task task = addTask();
 
-        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        List<Task> locked = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), null));
         assertEquals(1, locked.size());
 
         LocalDateTime nextPlannedExecutionTime = systemClock.now().plusDays(1);
@@ -230,7 +243,7 @@ class TaskRepositoryShould {
     void never_return_a_locked_task_before_lock_timeout() {
         Task task = addTask();
 
-        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), null));
 
         List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now(), systemClock.now().minusMinutes(10), 3));
 
@@ -241,7 +254,7 @@ class TaskRepositoryShould {
     void return_a_locked_task_after_lock_timeout_is_reached() {
         Task task = addTask();
 
-        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), null));
 
         List<Task> tasks = database.connect(con -> taskRepository.findAllNotLockedOrderedByCreatedDate(con, processableTasks, systemClock.now().plusDays(1), systemClock.now(), 3));
 
@@ -337,7 +350,7 @@ class TaskRepositoryShould {
         systemClock.fixedTime(LocalDateTime.of(2020, 11, 12, 10, 0));
 
         Task task = addTask();
-        List<Task> lockedTasks = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task)));
+        List<Task> lockedTasks = database.connect(con -> taskRepository.lock(con, Collections.singletonList(task), null));
         Task locked = lockedTasks.get(0);
 
         systemClock.timeTravelBy(Duration.ofSeconds(5));

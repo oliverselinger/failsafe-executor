@@ -36,6 +36,8 @@ public class FailsafeExecutor {
     public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
     public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
+    public static final int NODE_ID_MAX_LENGTH = 48;
+
 
     private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
@@ -53,6 +55,7 @@ public class FailsafeExecutor {
     private final Duration heartbeatInterval;
 
     private volatile Exception lastRunException;
+    private volatile String nodeId;
     private AtomicBoolean running = new AtomicBoolean();
 
     public FailsafeExecutor(DataSource dataSource) throws SQLException {
@@ -89,10 +92,23 @@ public class FailsafeExecutor {
      * Start execution of any submitted tasks.
      */
     public void start() {
+        start(null);
+    }
+
+    /**
+     * Start execution of any submitted tasks.
+     * @param nodeId id of the node that locks the given task
+     */
+    public void start(String nodeId) {
+        if(nodeId != null && nodeId.length() > NODE_ID_MAX_LENGTH)
+            throw new IllegalArgumentException(String.format("Length of nodeId can not exceed %d", NODE_ID_MAX_LENGTH));
+
         boolean shouldStart = running.compareAndSet(false, true);
         if (!shouldStart) {
             return;
         }
+
+        this.nodeId = nodeId;
 
         executor.scheduleWithFixedDelay(
                 this::executeNextTasks,
@@ -583,7 +599,7 @@ public class FailsafeExecutor {
                 return;
             }
 
-            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount);
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, nodeId);
             if (toExecute.isEmpty()) {
                 return;
             }
@@ -637,7 +653,7 @@ public class FailsafeExecutor {
         // see https://jira.mariadb.org/browse/CONJ-920
         try (Connection connection = dataSource.getConnection();
              Transaction transaction = new Transaction(connection)) { // no commit of trx
-            tasks = taskRepository.lock(connection, tasks);
+            tasks = taskRepository.lock(connection, tasks, null);
             if (tasks.size() != 2) {
                 throw new IllegalStateException("Validation of database failed! Unable to lock tasks!");
             }

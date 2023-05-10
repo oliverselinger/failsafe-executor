@@ -45,23 +45,23 @@ class TaskRepository {
 
         this.insertStmtMysqlOrMariaDb = String.format(//language=SQL
                 "INSERT IGNORE INTO %s" +
-                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, NODE_ID, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                         " VALUES" +
-                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 tableName);
 
         this.insertStmtPostgres = String.format(//language=SQL
                 "INSERT INTO %s" +
-                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, NODE_ID, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
                         " VALUES" +
-                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+                        " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
                         " ON CONFLICT DO NOTHING",
                 tableName);
 
         this.insertStmtOracle = String.format(//language=SQL
                 "INSERT INTO %s" +
-                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
-                        " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
+                        " (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, NODE_ID, LOCK_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE, RETRY_COUNT, VERSION)" +
+                        " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM DUAL" +
                         " WHERE NOT EXISTS" +
                         " (SELECT ID FROM %s WHERE ID = ?)",
                 tableName, tableName);
@@ -69,21 +69,21 @@ class TaskRepository {
         this.lockStmt = String.format(//language=SQL
                 "UPDATE %s" +
                         " SET" +
-                        " LOCK_TIME=?, VERSION=?" +
+                        " LOCK_TIME=?, VERSION=?,  NODE_ID=?" +
                         " WHERE ID=? AND VERSION=?",
                 this.tableName);
 
         this.unlockStmt = String.format(//language=SQL
                 "UPDATE %s" +
                         " SET" +
-                        " LOCK_TIME=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
+                        " LOCK_TIME=NULL, NODE_ID=NULL, PLANNED_EXECUTION_TIME=?, VERSION=?" +
                         " WHERE ID=? AND VERSION=?",
                 tableName);
 
         this.saveFailureStmt = String.format(//language=SQL
                 "UPDATE %s" +
                         " SET" +
-                        " LOCK_TIME=null, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
+                        " LOCK_TIME=null, NODE_ID=NULL, FAIL_TIME=?, EXCEPTION_MESSAGE=?, STACK_TRACE=?, VERSION=?" +
                         " WHERE ID=?",
                 tableName);
 
@@ -149,6 +149,7 @@ class TaskRepository {
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
                 null,
+                null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
                 executionFailure != null ? new StringReader(executionFailure.getStackTrace()) : null,
@@ -165,6 +166,7 @@ class TaskRepository {
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
                 null,
+                null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
                 executionFailure != null ? new StringReader(executionFailure.getStackTrace()) : null,
@@ -180,6 +182,7 @@ class TaskRepository {
                 task.getParameter(),
                 Timestamp.valueOf(task.getPlannedExecutionTime()),
                 Timestamp.valueOf(creationTime),
+                null,
                 null,
                 executionFailure != null ? Timestamp.valueOf(executionFailure.getFailTime()) : null,
                 executionFailure != null ? executionFailure.getExceptionMessage() : null,
@@ -232,18 +235,15 @@ class TaskRepository {
                 whereClause.params);
     }
 
-    List<Task> lock(Connection connection, List<Task> toLock) {
+
+    List<Task> lock(Connection connection, List<Task> toLock, String nodeId) {
         LocalDateTime lockTime = systemClock.now();
         Timestamp timestamp = Timestamp.valueOf(lockTime);
 
-        Object[][] params = new Object[toLock.size()][4];
+        Object[][] params = new Object[toLock.size()][5];
         for (int i = 0; i < params.length; i++) {
             Task task = toLock.get(i);
-            params[i] = new Object[]{timestamp, task.getVersion() + 1, task.getId(), task.getVersion()};
-            params[i][0] = timestamp;
-            params[i][1] = task.getVersion() + 1;
-            params[i][2] = task.getId();
-            params[i][3] = task.getVersion();
+            params[i] = new Object[]{timestamp, task.getVersion() + 1, nodeId, task.getId(), task.getVersion()};
         }
 
         int[] updateCount = database.executeBatchUpdate(connection, lockStmt, params);
@@ -256,11 +256,12 @@ class TaskRepository {
             }
             if (executionResult == 1) {
                 Task task = toLock.get(i);
-                result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
-            }
+                result.add(new Task(task.getId(), task.getName(), task.getParameter(), nodeId, task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
+          }
         }
         return result;
     }
+
 
     void unlock(Task toUnLock, LocalDateTime nextPlannedExecutionTime) {
         int effectedRows = database.update(unlockStmt,
@@ -349,7 +350,7 @@ class TaskRepository {
             }
             if (executionResult == 1) {
                 Task task = toUpdate.get(i);
-                result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
+                result.add(new Task(task.getId(), task.getName(), task.getParameter(), task.getNodeId(), task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion()));
             }
         }
         return result;
@@ -361,6 +362,7 @@ class TaskRepository {
         return new Task(
                 rs.getString("ID"),
                 rs.getString("NAME"), rs.getString("PARAMETER"),
+                rs.getString("NODE_ID"),
                 rs.getTimestamp("CREATED_DATE").toLocalDateTime(),
                 rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
                 lockTime != null ? lockTime.toLocalDateTime() : null,
