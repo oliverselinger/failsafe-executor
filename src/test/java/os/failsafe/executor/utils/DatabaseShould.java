@@ -21,6 +21,6 @@ public class DatabaseShould {
         DataSource unsupportedDataSource = Mockito.mock(DataSource.class);
         when(unsupportedDataSource.getConnection()).thenReturn(connection);
 
-        assertThrows(RuntimeException.class, () -> new Database(unsupportedDataSource));
+        assertThrows(RuntimeException.class, () -> new Database(unsupportedDataSource, null));
     }
 }

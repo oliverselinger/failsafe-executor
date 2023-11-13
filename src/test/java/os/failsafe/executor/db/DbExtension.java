@@ -12,6 +12,7 @@ import os.failsafe.executor.utils.Database;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.util.TimeZone;
 
 public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
 
@@ -19,8 +20,18 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
     private final static DatabaseTestConfig databaseTestConfig = findDatabaseConfig();
 
+    private final TimeZone jdbcClientTimezone;
+
     private Database database;
     private HikariDataSource dataSource;
+
+    public DbExtension() {
+        this(null);
+    }
+
+    public DbExtension(TimeZone jdbcClientTimezone) {
+        this.jdbcClientTimezone = jdbcClientTimezone;
+    }
 
     @Override
     public void beforeAll(ExtensionContext extensionContext) throws SQLException {
@@ -35,7 +46,7 @@ public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterA
 
         dataSource = new HikariDataSource(config);
 
-        database = new Database(dataSource);
+        database = new Database(dataSource, jdbcClientTimezone);
 
         createTable();
     }

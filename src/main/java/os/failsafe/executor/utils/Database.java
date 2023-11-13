@@ -2,13 +2,11 @@ package os.failsafe.executor.utils;
 
 import javax.sql.DataSource;
 import java.io.StringReader;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -20,8 +18,9 @@ public class Database {
     private final boolean postgresDatabase;
     private final boolean h2Database;
     private final DataSource dataSource;
+    private final Calendar jdbcClientTimezone;
 
-    public Database(DataSource dataSource) throws SQLException {
+    public Database(DataSource dataSource, TimeZone clientTimeZone) throws SQLException {
         this.dataSource = dataSource;
 
         String databaseName = determineDatabase();
@@ -30,6 +29,7 @@ public class Database {
         postgresDatabase = databaseName.equalsIgnoreCase("PostgreSQL");
         h2Database = databaseName.equalsIgnoreCase("H2");
         mariaDatabase = databaseName.equalsIgnoreCase("MariaDB");
+        jdbcClientTimezone = (clientTimeZone == null) ? null : Calendar.getInstance(clientTimeZone);
 
         if (!oracleDatabase && !mysqlDatabase && !postgresDatabase && !h2Database && !mariaDatabase) {
             throw new RuntimeException("Unsupported database");
@@ -81,14 +81,14 @@ public class Database {
 
             if (params != null) {
                 for (Object param : params) {
-                    ps.setObject(++cnt, param);
+                    setPreparedStatementParameter(ps, ++cnt, param, jdbcClientTimezone);
                 }
             }
 
             try (ResultSet rs = ps.executeQuery()) {
                 List<T> result = new ArrayList<>();
                 while (rs.next()) {
-                    result.add(rowMapper.map(rs));
+                    result.add(rowMapper.map(rs, jdbcClientTimezone));
                 }
                 return result;
             }
@@ -98,8 +98,8 @@ public class Database {
     }
 
     public int insert(Connection connection,
-                       String sql,
-                       Object... params) {
+                      String sql,
+                      Object... params) {
         return executeUpdate(connection, sql, params);
     }
 
@@ -114,19 +114,13 @@ public class Database {
     }
 
     public int executeUpdate(Connection connection,
-                              String sql,
-                              Object... params) {
+                             String sql,
+                             Object... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
             int cnt = 0;
             for (Object param : params) {
-
-                if(param instanceof StringReader) {
-                    ps.setCharacterStream(++cnt, (StringReader)param);
-                    continue;
-                }
-
-                ps.setObject(++cnt, param);
+                setPreparedStatementParameter(ps, ++cnt, param, jdbcClientTimezone);
             }
 
             return ps.executeUpdate();
@@ -150,8 +144,8 @@ public class Database {
 
             for (Object[] batch : batchParams) {
                 int cnt = 0;
-                for(Object param : batch) {
-                    ps.setObject(++cnt, param);
+                for (Object param : batch) {
+                    setPreparedStatementParameter(ps, ++cnt, param, jdbcClientTimezone);
                 }
                 ps.addBatch();
             }
@@ -179,8 +173,8 @@ public class Database {
     public void transactionNoResult(ConnectionConsumer connectionConsumer) throws SQLException {
         connectNoResult(connection -> {
             try (DbTransaction dbTransaction = new DbTransaction(connection)) {
-                    connectionConsumer.accept(connection);
-                    dbTransaction.commit();
+                connectionConsumer.accept(connection);
+                dbTransaction.commit();
             } catch (Exception exception) {
                 throw new RuntimeException(exception);
             }
@@ -190,9 +184,9 @@ public class Database {
     public <T> T transaction(Function<Connection, T> connectionConsumer) {
         return connect(connection -> {
             try (DbTransaction dbTransaction = new DbTransaction(connection)) {
-                    T result = connectionConsumer.apply(connection);
-                    dbTransaction.commit();
-                    return result;
+                T result = connectionConsumer.apply(connection);
+                dbTransaction.commit();
+                return result;
             } catch (Exception exception) {
                 throw new RuntimeException(exception);
             }
@@ -206,11 +200,20 @@ public class Database {
     }
 
     public interface RowMapper<R> {
-        R map(ResultSet rs) throws Exception;
+        R map(ResultSet rs, Calendar timezone) throws Exception;
     }
 
     public interface ConnectionConsumer {
         void accept(Connection connection) throws Exception;
     }
 
+    private static void setPreparedStatementParameter(PreparedStatement ps, int index, Object value, Calendar timezone) throws SQLException {
+        if (value instanceof StringReader) {
+            ps.setCharacterStream(index, (StringReader) value);
+        } else if (value instanceof Timestamp) {
+            ps.setTimestamp(index, (Timestamp) value, timezone);
+        } else {
+            ps.setObject(index, value);
+        }
+    }
 }

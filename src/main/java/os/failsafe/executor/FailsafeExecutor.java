@@ -14,12 +14,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -67,6 +62,11 @@ public class FailsafeExecutor {
     }
 
     public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName) throws SQLException {
+        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, tableName, null);
+    }
+
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName, TimeZone jdbcClientTimezone) throws SQLException {
+
         if (queueSize < workerThreadCount) {
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
         }
@@ -75,7 +75,7 @@ public class FailsafeExecutor {
             System.err.println("LockTimeout very short! Recommendation is >= 1 minute");
         }
 
-        this.database = new Database(dataSource);
+        this.database = new Database(dataSource, jdbcClientTimezone);
         this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
         this.taskRepository = new TaskRepository(database, tableName, systemClock);
         this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);

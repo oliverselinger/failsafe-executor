@@ -55,7 +55,7 @@ class MultipleNodesShould {
         listenerA = Mockito.mock(TaskExecutionListener.class);
         listenerB = Mockito.mock(TaskExecutionListener.class);
 
-        taskRepository = new TaskRepository(new Database(dataSource), DEFAULT_TABLE_NAME, systemClock);
+        taskRepository = new TaskRepository(new Database(dataSource, null), DEFAULT_TABLE_NAME, systemClock);
 
         executorA.subscribe(listenerA);
         executorB.subscribe(listenerB);

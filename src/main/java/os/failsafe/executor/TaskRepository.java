@@ -7,16 +7,9 @@ import os.failsafe.executor.utils.WhereBuilder;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 class TaskRepository {
@@ -231,7 +224,7 @@ class TaskRepository {
 
         String sql = String.format(countAllStmt, whereClause.where);
 
-        return database.selectOne(sql, rs -> rs.getInt(1),
+        return database.selectOne(sql, (rs, timezone) -> rs.getInt(1),
                 whereClause.params);
     }
 
@@ -257,7 +250,7 @@ class TaskRepository {
             if (executionResult == 1) {
                 Task task = toLock.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), nodeId, task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
-          }
+            }
         }
         return result;
     }
@@ -356,23 +349,23 @@ class TaskRepository {
         return result;
     }
 
-    Task mapToPersistentTask(ResultSet rs) throws SQLException, IOException {
-        Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
+    Task mapToPersistentTask(ResultSet rs, Calendar timezone) throws SQLException, IOException {
+        Timestamp lockTime = rs.getTimestamp("LOCK_TIME", timezone);
 
         return new Task(
                 rs.getString("ID"),
                 rs.getString("NAME"), rs.getString("PARAMETER"),
                 rs.getString("NODE_ID"),
-                rs.getTimestamp("CREATED_DATE").toLocalDateTime(),
-                rs.getTimestamp("PLANNED_EXECUTION_TIME").toLocalDateTime(),
+                rs.getTimestamp("CREATED_DATE", timezone).toLocalDateTime(),
+                rs.getTimestamp("PLANNED_EXECUTION_TIME", timezone).toLocalDateTime(),
                 lockTime != null ? lockTime.toLocalDateTime() : null,
-                mapToExecutionFailure(rs),
+                mapToExecutionFailure(rs, timezone),
                 rs.getInt("RETRY_COUNT"),
                 rs.getLong("VERSION"));
     }
 
-    ExecutionFailure mapToExecutionFailure(ResultSet rs) throws SQLException, IOException {
-        Timestamp failTime = rs.getTimestamp("FAIL_TIME");
+    ExecutionFailure mapToExecutionFailure(ResultSet rs, Calendar timezone) throws SQLException, IOException {
+        Timestamp failTime = rs.getTimestamp("FAIL_TIME", timezone);
         if (rs.wasNull()) {
             return null;
         }
