@@ -412,6 +412,32 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void cancel_a_not_cancel_task_when_it_is_not_cancelable() {
+        executionShouldFail = true;
+
+        String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
+        assertListenerOnPersisting(TASK_NAME, taskId, parameter);
+
+        failsafeExecutor.start();
+
+        verify(taskExecutionListener, timeout((int) TimeUnit.SECONDS.toMillis(5))).failed(TASK_NAME, taskId, parameter, runtimeException);
+
+        List<Task> failedTasks = failsafeExecutor.findAllFailed();
+        assertEquals(1, failedTasks.size());
+
+        Task failedTask = failedTasks.get(0);
+        Task uncancelableTask = Mockito.mock(Task.class);
+        Mockito.when(uncancelableTask.isCancelable()).thenReturn(false);
+        Mockito.when(uncancelableTask.getId()).thenReturn(failedTask.getId());
+        Mockito.when(uncancelableTask.getVersion()).thenReturn(failedTask.getVersion());
+        assertFalse(failsafeExecutor.cancel(uncancelableTask));
+
+        verifyNoMoreInteractions(taskExecutionListener);
+        assertEquals(1, failsafeExecutor.findAll().size());
+        assertEquals(failedTask.getId(), failsafeExecutor.findAll().get(0).getId());
+    }
+
+    @Test
     @Tag("createTable")
     void fail_on_instantiation_when_table_does_not_exist() {
         DB_EXTENSION.dropTable();

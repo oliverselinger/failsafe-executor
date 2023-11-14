@@ -38,7 +38,7 @@ class PersistentQueueShould {
     private Set<String> processableTasks;
 
     @BeforeEach
-    void init() throws SQLException {
+    void init() {
         systemClock = new TestSystemClock();
         taskRepository = Mockito.mock(TaskRepository.class);
         connection = Mockito.mock(Connection.class);
