@@ -19,12 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static os.failsafe.executor.FailsafeExecutor.DEFAULT_TABLE_NAME;
 
 class TaskRepositoryShould {
@@ -372,6 +367,17 @@ class TaskRepositoryShould {
         assertNull(actual.getLockTime());
         assertEquals(task.getVersion(), actual.getVersion());
     }
+
+    @Test
+    void throws_exception_if_find_all_is_done_with_zero_limit() {
+        assertThrows(IllegalArgumentException.class, () -> taskRepository.findAll("aName", null, null, 0, 0));
+    }
+
+    @Test
+    void throws_exception_if_find_all_is_done_with_negative_offset() {
+        assertThrows(IllegalArgumentException.class, () -> taskRepository.findAll("aName", null, null, -1, 10));
+    }
+
 
     private Task addTask() {
         return addTask(UUID.randomUUID().toString());
