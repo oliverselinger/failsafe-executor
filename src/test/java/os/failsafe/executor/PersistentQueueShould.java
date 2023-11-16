@@ -7,7 +7,6 @@ import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
