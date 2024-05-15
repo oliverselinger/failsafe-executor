@@ -465,6 +465,49 @@ public class FailsafeExecutor {
     }
 
     /**
+     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
+     * <p>
+     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
+     *
+     * @param taskName          finds the tasks by constraining the taskName
+     * @param parameter         finds the tasks by constraining the parameter
+     * @param failed            finds the tasks by constraining if they are failed or not failed.
+     * @param errorMessage      finds the tasks by constraining the error message contains text (case-insensitive)
+     * @param createdDateFrom   finds the tasks by constraining from created date (exclusive).
+     * @param createdDateTo     finds the tasks by constraining to created date (exclusive).
+     * @param failureDateFrom   finds the tasks by constraining from failure date (exclusive).
+     * @param failureDateTo     finds the tasks by constraining to failure date (exclusive).
+     * @param offset            offset to start from
+     * @param limit             limit of the result set
+     * @param sorts             sort order of the result set. See {@link Sort} for available sort criteria.
+     * @return                  list of all persisted tasks
+     */
+    public List<Task> findAll(String taskName,
+                              String parameter,
+                              Boolean failed,
+                              String errorMessage,
+                              LocalDateTime createdDateFrom,
+                              LocalDateTime createdDateTo,
+                              LocalDateTime failureDateFrom,
+                              LocalDateTime failureDateTo,
+                              int offset,
+                              int limit,
+                              Sort... sorts) {
+        return taskRepository.findAll(
+                taskName,
+                parameter,
+                failed,
+                errorMessage,
+                createdDateFrom,
+                createdDateTo,
+                failureDateFrom,
+                failureDateTo,
+                offset,
+                limit,
+                sorts);
+    }
+
+    /**
      * Returns a single task.
      *
      * @param taskId the id of the task

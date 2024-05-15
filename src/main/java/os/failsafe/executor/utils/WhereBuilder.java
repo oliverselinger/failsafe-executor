@@ -33,6 +33,54 @@ public class WhereBuilder {
         return this;
     }
 
+    public WhereBuilder gt(String value, String field) {
+        if (StringUtils.isBlank(value)) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(%s > ?)", field));
+        params.add(value);
+        return this;
+    }
+
+    public WhereBuilder lt(String value, String field) {
+        if (StringUtils.isBlank(value)) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(%s < ?)", field));
+        params.add(value);
+        return this;
+    }
+
+    public WhereBuilder containsIgnoreCase(String value, String field) {
+        if (StringUtils.isBlank(value)) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(LOWER(%s) LIKE ?)", field.toLowerCase()));
+        params.add(value);
+        return this;
+    }
+
     public WhereBuilder isNullOrNotNull(Boolean notNull, String field) {
         if (notNull == null) {
             return this;
