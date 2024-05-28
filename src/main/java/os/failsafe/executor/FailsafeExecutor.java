@@ -473,10 +473,10 @@ public class FailsafeExecutor {
      * @param parameter         finds the tasks by constraining the parameter
      * @param failed            finds the tasks by constraining if they are failed or not failed.
      * @param errorMessage      finds the tasks by constraining the error message contains text (case-insensitive)
-     * @param createdDateFrom   finds the tasks by constraining from created date (exclusive).
-     * @param createdDateTo     finds the tasks by constraining to created date (exclusive).
-     * @param failureDateFrom   finds the tasks by constraining from failure date (exclusive).
-     * @param failureDateTo     finds the tasks by constraining to failure date (exclusive).
+     * @param createdDateFromInclusive   finds the tasks by constraining from created date (inclusive).
+     * @param createdDateToExclusive     finds the tasks by constraining to created date (exclusive).
+     * @param failureDateFromInclusive   finds the tasks by constraining from failure date (inclusive).
+     * @param failureDateToExclusive     finds the tasks by constraining to failure date (exclusive).
      * @param offset            offset to start from
      * @param limit             limit of the result set
      * @param sorts             sort order of the result set. See {@link Sort} for available sort criteria.
@@ -486,10 +486,10 @@ public class FailsafeExecutor {
                               String parameter,
                               Boolean failed,
                               String errorMessage,
-                              LocalDateTime createdDateFrom,
-                              LocalDateTime createdDateTo,
-                              LocalDateTime failureDateFrom,
-                              LocalDateTime failureDateTo,
+                              LocalDateTime createdDateFromInclusive,
+                              LocalDateTime createdDateToExclusive,
+                              LocalDateTime failureDateFromInclusive,
+                              LocalDateTime failureDateToExclusive,
                               int offset,
                               int limit,
                               Sort... sorts) {
@@ -498,10 +498,10 @@ public class FailsafeExecutor {
                 parameter,
                 failed,
                 errorMessage,
-                createdDateFrom,
-                createdDateTo,
-                failureDateFrom,
-                failureDateTo,
+                createdDateFromInclusive,
+                createdDateToExclusive,
+                failureDateFromInclusive,
+                failureDateToExclusive,
                 offset,
                 limit,
                 sorts);

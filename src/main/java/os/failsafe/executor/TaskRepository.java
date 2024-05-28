@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -224,8 +223,8 @@ class TaskRepository {
     }
 
 
-    public List<Task> findAll(String taskName, String parameter, Boolean failed, String errorMessage, LocalDateTime createdDateFrom, LocalDateTime createdDateTo,
-                              LocalDateTime failureDateFrom, LocalDateTime failureDateTo, int offset, int limit, Sort[] sorts) {
+    public List<Task> findAll(String taskName, String parameter, Boolean failed, String errorMessage, LocalDateTime createdDateFromInclusive, LocalDateTime createdDateToExclusive,
+                              LocalDateTime failureDateFromInclusive, LocalDateTime failureDateToExclusive, int offset, int limit, Sort[] sorts) {
         if (offset < 0) {
             throw new IllegalArgumentException("Offset must be greater or equal 0");
         }
@@ -242,10 +241,10 @@ class TaskRepository {
                 .where(taskName, "NAME")
                 .where(parameter, "PARAMETER")
                 .isNullOrNotNull(failed, "FAIL_TIME")
-                .gt(getTimeString(createdDateFrom), "CREATED_DATE")
-                .lt(getTimeString(createdDateTo), "CREATED_DATE")
-                .gt(getTimeString(failureDateFrom), "FAIL_TIME")
-                .lt(getTimeString(failureDateTo), "FAIL_TIME")
+                .gte(createdDateFromInclusive, "CREATED_DATE")
+                .lt(createdDateToExclusive, "CREATED_DATE")
+                .gte(failureDateFromInclusive, "FAIL_TIME")
+                .lt(failureDateToExclusive, "FAIL_TIME")
                 .containsIgnoreCase(errorMessage, "EXCEPTION_MESSAGE")
                 .orderBy(sorts)
                 .limit(offset, limit)
@@ -415,11 +414,5 @@ class TaskRepository {
         String stackTrace = StringUtils.fromReader(rs.getCharacterStream("STACK_TRACE"));
 
         return new ExecutionFailure(failTime.toLocalDateTime(), exceptionMessage, stackTrace);
-    }
-
-    private static String getTimeString(LocalDateTime time) {
-        return Optional.ofNullable(time)
-                .map(LocalDateTime::toString)
-                .orElse(null);
     }
 }

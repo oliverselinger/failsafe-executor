@@ -2,9 +2,9 @@ package os.failsafe.executor.utils;
 
 import os.failsafe.executor.Sort;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.sql.*;
+import java.time.*;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class WhereBuilder {
@@ -33,8 +33,10 @@ public class WhereBuilder {
         return this;
     }
 
-    public WhereBuilder gt(String value, String field) {
-        if (StringUtils.isBlank(value)) {
+    public WhereBuilder gte(LocalDateTime value, String field) {
+        Optional<Timestamp> date = mapToTimestamp(value);
+
+        if (!date.isPresent()) {
             return this;
         }
 
@@ -44,13 +46,15 @@ public class WhereBuilder {
             sb.append(" WHERE ");
         }
 
-        sb.append(String.format("(%s > ?)", field));
-        params.add(value);
+        sb.append(String.format("(%s >= ?)", field));
+        params.add(date.get());
         return this;
     }
 
-    public WhereBuilder lt(String value, String field) {
-        if (StringUtils.isBlank(value)) {
+    public WhereBuilder lt(LocalDateTime value, String field) {
+        Optional<Timestamp> date = mapToTimestamp(value);
+
+        if (!date.isPresent()) {
             return this;
         }
 
@@ -61,7 +65,7 @@ public class WhereBuilder {
         }
 
         sb.append(String.format("(%s < ?)", field));
-        params.add(value);
+        params.add(date.get());
         return this;
     }
 
@@ -132,5 +136,10 @@ public class WhereBuilder {
             this.where = where;
             this.params = params;
         }
+    }
+
+    private static Optional<Timestamp> mapToTimestamp(LocalDateTime time) {
+        return Optional.ofNullable(time)
+                .map(Timestamp::valueOf);
     }
 }
