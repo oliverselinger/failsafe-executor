@@ -2,9 +2,9 @@ package os.failsafe.executor.utils;
 
 import os.failsafe.executor.Sort;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.sql.*;
+import java.time.*;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class WhereBuilder {
@@ -29,6 +29,58 @@ public class WhereBuilder {
         }
 
         sb.append(String.format("(%s = ?)", field));
+        params.add(value);
+        return this;
+    }
+
+    public WhereBuilder gte(LocalDateTime value, String field) {
+        Optional<Timestamp> date = mapToTimestamp(value);
+
+        if (!date.isPresent()) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(%s >= ?)", field));
+        params.add(date.get());
+        return this;
+    }
+
+    public WhereBuilder lt(LocalDateTime value, String field) {
+        Optional<Timestamp> date = mapToTimestamp(value);
+
+        if (!date.isPresent()) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(%s < ?)", field));
+        params.add(date.get());
+        return this;
+    }
+
+    public WhereBuilder containsIgnoreCase(String value, String field) {
+        if (StringUtils.isBlank(value)) {
+            return this;
+        }
+
+        if (sb.length() > 0) {
+            sb.append(" AND ");
+        } else {
+            sb.append(" WHERE ");
+        }
+
+        sb.append(String.format("(LOWER(%s) LIKE ?)", field.toLowerCase()));
         params.add(value);
         return this;
     }
@@ -84,5 +136,10 @@ public class WhereBuilder {
             this.where = where;
             this.params = params;
         }
+    }
+
+    private static Optional<Timestamp> mapToTimestamp(LocalDateTime time) {
+        return Optional.ofNullable(time)
+                .map(Timestamp::valueOf);
     }
 }

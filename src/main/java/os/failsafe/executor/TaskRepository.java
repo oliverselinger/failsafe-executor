@@ -222,6 +222,39 @@ class TaskRepository {
         return database.selectAll(sql, this::mapToPersistentTask, whereClause.params);
     }
 
+
+    public List<Task> findAll(String taskName, String parameter, Boolean failed, String errorMessage, LocalDateTime createdDateFromInclusive, LocalDateTime createdDateToExclusive,
+                              LocalDateTime failureDateFromInclusive, LocalDateTime failureDateToExclusive, int offset, int limit, Sort[] sorts) {
+        if (offset < 0) {
+            throw new IllegalArgumentException("Offset must be greater or equal 0");
+        }
+
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit must be greater than 0");
+        }
+
+        if (sorts.length == 0) {
+            sorts = new Sort[]{new Sort(Sort.Field.CREATED_DATE, Sort.Direction.DESC), new Sort(Sort.Field.ID, Sort.Direction.DESC)};
+        }
+
+        WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
+                .where(taskName, "NAME")
+                .where(parameter, "PARAMETER")
+                .isNullOrNotNull(failed, "FAIL_TIME")
+                .gte(createdDateFromInclusive, "CREATED_DATE")
+                .lt(createdDateToExclusive, "CREATED_DATE")
+                .gte(failureDateFromInclusive, "FAIL_TIME")
+                .lt(failureDateToExclusive, "FAIL_TIME")
+                .containsIgnoreCase(errorMessage, "EXCEPTION_MESSAGE")
+                .orderBy(sorts)
+                .limit(offset, limit)
+                .build();
+
+        String sql = String.format(findAllPagingStmt, whereClause.where);
+
+        return database.selectAll(sql, this::mapToPersistentTask, whereClause.params);
+    }
+
     int count(String taskName, String parameter, Boolean failed) {
         WhereBuilder.WhereClause whereClause = new WhereBuilder(database)
                 .where(taskName, "NAME")
@@ -257,7 +290,7 @@ class TaskRepository {
             if (executionResult == 1) {
                 Task task = toLock.get(i);
                 result.add(new Task(task.getId(), task.getName(), task.getParameter(), nodeId, task.getCreationTime(), task.getPlannedExecutionTime(), lockTime, null, task.getRetryCount(), task.getVersion() + 1));
-          }
+            }
         }
         return result;
     }

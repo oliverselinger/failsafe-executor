@@ -189,6 +189,57 @@ class FailsafeExecutorShould {
     }
 
     @Test
+    void find_not_failed_task_by_more_filters() {
+        String taskIdNotFailed = failsafeExecutor.execute(TASK_NAME, parameter);
+        assertTrue(failsafeExecutor.findOne(taskIdNotFailed).isPresent());
+
+        List<Task> all = failsafeExecutor.findAll();
+        assertEquals(1, all.size());
+
+        LocalDateTime from = LocalDateTime.now().minusMinutes(1);
+        LocalDateTime dateTo = LocalDateTime.now().plusMinutes(1);
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(TASK_NAME, null, null, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, from, dateTo, from, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, from, dateTo, null, dateTo, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, true, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, from, dateTo, from, dateTo, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, "ERROR MESSAGE", null, null, null, null, 0, 10).size());
+
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, LocalDateTime.now().plusMinutes(1), null, null, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, null, null, LocalDateTime.now().plusMinutes(1), null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, null, null, LocalDateTime.now().plusMinutes(1), null, 0, 10).size());
+    }
+
+    @Test
+    void find_failed_task_by_more_filters() throws Exception {
+        executionShouldFail = true;
+        failsafeExecutor.start();
+        awaitAllTasks(failsafeExecutor, () -> failsafeExecutor.execute(TASK_NAME, parameter), failures -> {
+            assertEquals(1, failures.size());
+            assertEquals(TASK_NAME, failures.get(0).getName());
+            assertEquals(parameter, failures.get(0).getParameter());
+        });
+
+        List<Task> all = failsafeExecutor.findAll();
+        assertEquals(1, all.size());
+
+        LocalDateTime from = LocalDateTime.now().minusMinutes(1);
+        LocalDateTime dateTo = LocalDateTime.now().plusMinutes(1);
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(TASK_NAME, null, null, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, from, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, null, dateTo, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, true, null, from, dateTo, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, from, dateTo, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, "", null, null, null, null, 0, 10).size());
+
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, dateTo, null, null, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, null, null, dateTo, null, 0, 10).size());
+        assertEquals(0, failsafeExecutor.findAll(null, null, null, null, null, null, dateTo, null, 0, 10).size());
+    }
+
+    @Test
     void execute_a_task() {
         String taskId = failsafeExecutor.execute(TASK_NAME, parameter);
 

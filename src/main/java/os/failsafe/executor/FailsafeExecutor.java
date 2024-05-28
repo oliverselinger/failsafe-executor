@@ -465,6 +465,49 @@ public class FailsafeExecutor {
     }
 
     /**
+     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
+     * <p>
+     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
+     *
+     * @param taskName          finds the tasks by constraining the taskName
+     * @param parameter         finds the tasks by constraining the parameter
+     * @param failed            finds the tasks by constraining if they are failed or not failed.
+     * @param errorMessage      finds the tasks by constraining the error message contains text (case-insensitive)
+     * @param createdDateFromInclusive   finds the tasks by constraining from created date (inclusive).
+     * @param createdDateToExclusive     finds the tasks by constraining to created date (exclusive).
+     * @param failureDateFromInclusive   finds the tasks by constraining from failure date (inclusive).
+     * @param failureDateToExclusive     finds the tasks by constraining to failure date (exclusive).
+     * @param offset            offset to start from
+     * @param limit             limit of the result set
+     * @param sorts             sort order of the result set. See {@link Sort} for available sort criteria.
+     * @return                  list of all persisted tasks
+     */
+    public List<Task> findAll(String taskName,
+                              String parameter,
+                              Boolean failed,
+                              String errorMessage,
+                              LocalDateTime createdDateFromInclusive,
+                              LocalDateTime createdDateToExclusive,
+                              LocalDateTime failureDateFromInclusive,
+                              LocalDateTime failureDateToExclusive,
+                              int offset,
+                              int limit,
+                              Sort... sorts) {
+        return taskRepository.findAll(
+                taskName,
+                parameter,
+                failed,
+                errorMessage,
+                createdDateFromInclusive,
+                createdDateToExclusive,
+                failureDateFromInclusive,
+                failureDateToExclusive,
+                offset,
+                limit,
+                sorts);
+    }
+
+    /**
      * Returns a single task.
      *
      * @param taskId the id of the task
