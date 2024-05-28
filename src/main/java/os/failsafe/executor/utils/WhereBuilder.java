@@ -34,11 +34,11 @@ public class WhereBuilder {
     }
 
     public WhereBuilder gte(LocalDateTime value, String field) {
-        Optional<Timestamp> date = mapToTimestamp(value);
-
-        if (!date.isPresent()) {
+        if (value == null) {
             return this;
         }
+
+        Timestamp date = Timestamp.valueOf(value);
 
         if (sb.length() > 0) {
             sb.append(" AND ");
@@ -47,16 +47,16 @@ public class WhereBuilder {
         }
 
         sb.append(String.format("(%s >= ?)", field));
-        params.add(date.get());
+        params.add(date);
         return this;
     }
 
     public WhereBuilder lt(LocalDateTime value, String field) {
-        Optional<Timestamp> date = mapToTimestamp(value);
-
-        if (!date.isPresent()) {
+        if (value == null) {
             return this;
         }
+
+        Timestamp date = Timestamp.valueOf(value);
 
         if (sb.length() > 0) {
             sb.append(" AND ");
@@ -65,7 +65,7 @@ public class WhereBuilder {
         }
 
         sb.append(String.format("(%s < ?)", field));
-        params.add(date.get());
+        params.add(date);
         return this;
     }
 
@@ -136,10 +136,5 @@ public class WhereBuilder {
             this.where = where;
             this.params = params;
         }
-    }
-
-    private static Optional<Timestamp> mapToTimestamp(LocalDateTime time) {
-        return Optional.ofNullable(time)
-                .map(Timestamp::valueOf);
     }
 }
