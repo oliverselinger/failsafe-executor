@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -37,9 +38,7 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -72,7 +71,7 @@ class FailsafeExecutorShould {
     boolean executionShouldFail;
     private static final String TASK_NAME = "TestTask";
     private final String parameter = " world!";
-    private final RuntimeException runtimeException = new RuntimeException();
+    private final RuntimeException runtimeException = new RuntimeException("LONG message");
 
     @BeforeEach
     void init() throws SQLException {
@@ -232,7 +231,8 @@ class FailsafeExecutorShould {
         assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, null, dateTo, 0, 10).size());
         assertEquals(1, failsafeExecutor.findAll(null, null, true, null, from, dateTo, null, null, 0, 10).size());
         assertEquals(1, failsafeExecutor.findAll(null, null, null, null, from, dateTo, from, dateTo, 0, 10).size());
-        assertEquals(1, failsafeExecutor.findAll(null, null, null, "", null, null, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, "MESSAGE", null, null, null, null, 0, 10).size());
+        assertEquals(1, failsafeExecutor.findAll(null, null, null, runtimeException.getMessage().toUpperCase(Locale.ROOT), null, null, null, null, 0, 10).size());
 
         assertEquals(0, failsafeExecutor.findAll(null, null, null, null, dateTo, null, null, null, 0, 10).size());
         assertEquals(0, failsafeExecutor.findAll(null, null, null, null, null, null, dateTo, null, 0, 10).size());
