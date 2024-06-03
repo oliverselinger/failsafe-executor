@@ -80,8 +80,9 @@ public class WhereBuilder {
             sb.append(" WHERE ");
         }
 
-        sb.append(String.format("(LOWER(%s) LIKE ?)", field.toLowerCase()));
-        params.add(value);
+        sb.append(String.format("(LOWER(%s) LIKE ?)", field));
+        String formattedValue = "%" + value.toLowerCase() + "%";
+        params.add(formattedValue);
         return this;
     }
 
@@ -113,7 +114,7 @@ public class WhereBuilder {
     }
 
     public WhereBuilder limit(int offset, int limit) {
-        if(database.isMysqlOrMariaDb()) {
+        if (database.isMysqlOrMariaDb()) {
             sb.append(" LIMIT ?, ?");
         } else {
             sb.append(" OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
