@@ -132,7 +132,7 @@ public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCa
 
         if (testDB == null) {
             log.info("TEST_DB environment variable not set, using H2 database");
-            return DatabaseType.MARIADB;
+            return DatabaseType.H2;
         }
 
         try {
