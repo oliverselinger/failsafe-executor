@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.DbExtension;
+import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.TestSystemClock;
@@ -30,7 +31,7 @@ import static os.failsafe.executor.FailsafeExecutor.DEFAULT_TABLE_NAME;
 class TaskRepositoryShould {
 
     @RegisterExtension
-    static final DbExtension DB_EXTENSION = new DbExtension();
+    static final TestcontainersDbExtension DB_EXTENSION = new TestcontainersDbExtension();
 
     private final TestSystemClock systemClock = new TestSystemClock();
     private Database database;

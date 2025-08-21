@@ -13,6 +13,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import os.failsafe.executor.db.DbExtension;
+import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
 import os.failsafe.executor.utils.BlockingRunnable;
 import os.failsafe.executor.utils.ExceptionUtils;
@@ -62,7 +63,7 @@ class FailsafeExecutorShould {
     private final TestSystemClock systemClock = new TestSystemClock();
 
     @RegisterExtension
-    static final DbExtension DB_EXTENSION = new DbExtension();
+    static final TestcontainersDbExtension DB_EXTENSION = new TestcontainersDbExtension();
 
     DataSource dataSource;
     FailsafeExecutor failsafeExecutor;

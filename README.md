@@ -2,7 +2,7 @@
 
 [![](https://img.shields.io/maven-central/v/com.github.oliverselinger/failsafe-executor)]()
 [![](https://jitpack.io/v/oliverselinger/failsafe-executor.svg)](https://jitpack.io/#oliverselinger/failsafe-executor)
-[![CircleCI](https://circleci.com/gh/oliverselinger/failsafe-executor.svg?style=svg)](https://circleci.com/gh/oliverselinger/failsafe-executor)
+[![Build and Test](https://github.com/oliverselinger/failsafe-executor/actions/workflows/maven.yml/badge.svg)](https://github.com/oliverselinger/failsafe-executor/actions/workflows/maven.yml)
 [![codecov](https://codecov.io/gh/oliverselinger/failsafe-executor/branch/master/graph/badge.svg)](https://codecov.io/gh/oliverselinger/failsafe-executor)
 
 Persistent executor service for Java that was inspired by the need for a reliable and multi-node compatible execution of processes.

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import os.failsafe.executor.db.DbExtension;
+import os.failsafe.executor.db.TestcontainersDbExtension;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -23,7 +24,7 @@ import java.util.logging.Level;
 public class LoggingTest {
 
     @RegisterExtension
-    static DbExtension dbExtension = new DbExtension();
+    static TestcontainersDbExtension dbExtension = new TestcontainersDbExtension();
     
     @TempDir
     Path tempDir;

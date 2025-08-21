@@ -8,6 +8,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import os.failsafe.executor.db.DbExtension;
+import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;
 
@@ -34,7 +35,7 @@ class MultipleNodesShould {
     private static final Logger log = LoggerFactory.getLogger(MultipleNodesShould.class);
 
     @RegisterExtension
-    static final DbExtension DB_EXTENSION = new DbExtension();
+    static final TestcontainersDbExtension DB_EXTENSION = new TestcontainersDbExtension();
 
     DataSource dataSource;
     FailsafeExecutor executorA;
@@ -129,7 +130,7 @@ class MultipleNodesShould {
 
     private void awaitEmptyTaskTable() {
         try {
-            await().atMost(Duration.ofSeconds(1))
+            await().atMost(Duration.ofSeconds(3))
                     .pollInterval(Duration.ofMillis(100))
                     .until(() -> findAllTasks().isEmpty());
         } catch (Exception e) {
