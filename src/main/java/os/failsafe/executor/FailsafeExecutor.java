@@ -43,7 +43,7 @@ public class FailsafeExecutor {
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+    private ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
     private final TaskRepository taskRepository;
@@ -154,6 +154,33 @@ public class FailsafeExecutor {
         workerPool.stop(timeout, timeUnit);
 
         running.set(false);
+    }
+    
+    /**
+     * Restarts the executor after it has been stopped.
+     * This creates a new ScheduledExecutorService and starts the worker pool again.
+     */
+    public void restart() {
+        restart(null);
+    }
+    
+    /**
+     * Restarts the executor after it has been stopped.
+     * This creates a new ScheduledExecutorService and starts the worker pool again.
+     * If the executor is already running, it will be stopped first.
+     * 
+     * @param nodeId id of the node that locks the given task
+     */
+    public void restart(String nodeId) {
+        if (running.get()) {
+            stop();
+        }
+        
+        // Create a new executor since the old one cannot be restarted
+        executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+        
+        // Start the executor with the provided nodeId
+        start(nodeId);
     }
 
     /**
