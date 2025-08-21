@@ -72,6 +72,10 @@ public class HeartbeatService {
 
     void heartbeat() {
         try {
+            // If this method is called directly (not through the executor), 
+            // it means the executor might have been terminated unexpectedly
+            // The executeNextTasks method will handle the restart
+            
             List<Task> toUpdate = findAllOutdatedLocks();
             if (toUpdate.isEmpty()) {
                 logger.debug("No outdated locks to update");

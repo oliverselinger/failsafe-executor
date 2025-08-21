@@ -799,6 +799,25 @@ public class FailsafeExecutor {
 
     private void executeNextTasks() {
         try {
+            // Check if the executor service has been terminated unexpectedly
+            if (executor.isShutdown() || executor.isTerminated()) {
+                logger.error("Executor service has been terminated unexpectedly. Attempting to restart...");
+                // Create a new executor since the old one cannot be restarted
+                executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+                
+                // Reschedule the tasks
+                logger.info("Rescheduling tasks after executor service restart");
+                executor.scheduleWithFixedDelay(
+                        this::executeNextTasks,
+                        initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+                
+                executor.scheduleWithFixedDelay(heartbeatService::heartbeat, 
+                        initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
+                
+                logger.info("Executor service restarted successfully");
+                return;
+            }
+            
             int idleWorkerCount = workerPool.spareQueueCount();
             if (idleWorkerCount == 0) {
                 logger.debug("No idle workers available, skipping task execution");
