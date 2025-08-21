@@ -49,7 +49,7 @@ public class MariaDbTestContainer implements TestDatabaseContainer {
 
     @Override
     public String getCreateTableScript() {
-        return FileUtil.readResourceFile("mysql.sql");
+        return FileUtil.readResourceFile("mariadb.sql");
     }
 
     @Override
