@@ -212,6 +212,61 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 **Note:** The lockTime is periodically updated by a scheduled heartbeat. It runs every `lockTimeout / 4` duration.   
 
+## Logging Configuration
+
+The `FailsafeExecutor` uses Java's built-in logging (java.util.logging) with a structured format. By default, it loads a configuration from the classpath resource `logging.properties` that provides:
+
+- Timestamps, log levels, class names, and formatted messages
+- Default log levels for different packages
+- Console handler configuration
+
+You can override this configuration in two ways:
+
+### 1. Using a custom properties file
+
+```java
+// Load custom configuration from a file
+failsafeExecutor.loadLoggingConfiguration("/path/to/custom-logging.properties");
+```
+
+### 2. Using Properties object
+
+```java
+// Create custom logging properties
+Properties props = new Properties();
+props.setProperty("handlers", "java.util.logging.ConsoleHandler");
+props.setProperty(".level", "INFO");
+props.setProperty("os.failsafe.executor.level", "FINE");
+props.setProperty("java.util.logging.ConsoleHandler.level", "FINE");
+props.setProperty("java.util.logging.ConsoleHandler.formatter", "java.util.logging.SimpleFormatter");
+props.setProperty("java.util.logging.SimpleFormatter.format", 
+                  "[CUSTOM] %1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS.%1$tL %4$s [%3$s] %5$s%6$s%n");
+
+// Load custom configuration from properties
+failsafeExecutor.loadLoggingConfiguration(props);
+```
+
+### 3. Using system property
+
+You can also set the system property `java.util.logging.config.file` to point to your custom configuration file:
+
+```
+java -Djava.util.logging.config.file=/path/to/custom-logging.properties -jar your-application.jar
+```
+
+For convenience, the `FailsafeExecutor` also provides methods to quickly change log levels:
+
+```java
+// Set specific log level
+failsafeExecutor.setLogLevel(Level.INFO);
+
+// Enable debug logging (FINE level)
+failsafeExecutor.enableDebugLogging();
+
+// Enable error-only logging (SEVERE level)
+failsafeExecutor.enableErrorOnlyLogging();
+```
+
 ## Testability
 
 In class `FailsafeExecutorTestUtility` you find some static methods to support you with your integration tests. Just wrap your business logic with `awaitAllTasks`. This registers a listener before executing your business logic.

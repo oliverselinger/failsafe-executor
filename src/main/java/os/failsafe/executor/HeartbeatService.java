@@ -1,5 +1,6 @@
 package os.failsafe.executor;
 
+import os.failsafe.executor.utils.Log;
 import os.failsafe.executor.utils.SystemClock;
 
 import java.time.Duration;
@@ -14,6 +15,7 @@ public class HeartbeatService {
     private final TaskRepository taskRepository;
     private final FailsafeExecutor failsafeExecutor;
     private final Duration heartbeatInterval;
+    private final Log logger = Log.get(HeartbeatService.class);
 
     private final ConcurrentHashMap<String, Task> lockedTasks = new ConcurrentHashMap<>();
 
@@ -25,29 +27,73 @@ public class HeartbeatService {
     }
 
     public void register(Task task) {
-        lockedTasks.put(task.getId(), task);
+        try {
+            if (task == null) {
+                logger.warn("Attempted to register null task");
+                return;
+            }
+            
+            String taskId = task.getId();
+            if (taskId == null) {
+                logger.warn("Attempted to register task with null ID");
+                return;
+            }
+            
+            lockedTasks.put(taskId, task);
+            logger.debug("Registered task: " + task.getName() + " (ID: " + taskId + ")");
+        } catch (Exception e) {
+            logger.error("Error registering task", e);
+        }
     }
 
     public void unregister(Task task) {
-        lockedTasks.remove(task.getId());
+        try {
+            if (task == null) {
+                logger.warn("Attempted to unregister null task");
+                return;
+            }
+            
+            String taskId = task.getId();
+            if (taskId == null) {
+                logger.warn("Attempted to unregister task with null ID");
+                return;
+            }
+            
+            Task removed = lockedTasks.remove(taskId);
+            if (removed != null) {
+                logger.debug("Unregistered task: " + task.getName() + " (ID: " + taskId + ")");
+            } else {
+                logger.warn("Attempted to unregister task that was not registered: " + task.getName() + " (ID: " + taskId + ")");
+            }
+        } catch (Exception e) {
+            logger.error("Error unregistering task", e);
+        }
     }
 
     void heartbeat() {
         try {
             List<Task> toUpdate = findAllOutdatedLocks();
             if (toUpdate.isEmpty()) {
+                logger.debug("No outdated locks to update");
                 return;
             }
 
+            logger.debug("Updating lock time for " + toUpdate.size() + " tasks");
             List<Task> updated = taskRepository.updateLockTime(toUpdate);
+
+            if (updated.size() != toUpdate.size()) {
+                logger.warn("Not all locks were updated. Expected: " + toUpdate.size() + ", Actual: " + updated.size());
+            }
 
             for (Task task : updated) {
                 lockedTasks.computeIfPresent(task.getId(), (k, v) -> task);
+                logger.debug("Updated lock time for task: " + task.getName() + " (ID: " + task.getId() + ")");
             }
 
             failsafeExecutor.clearException();
 
         } catch (Exception e) {
+            logger.error("Error during heartbeat operation", e);
             failsafeExecutor.storeException(e);
         }
     }
@@ -55,13 +101,38 @@ public class HeartbeatService {
     private List<Task> findAllOutdatedLocks() {
         List<Task> toUpdate = new ArrayList<>();
         LocalDateTime threshold = systemClock.now().minus(heartbeatInterval);
-
+        int totalLockedTasks = lockedTasks.size();
+        
+        logger.debug("Checking " + totalLockedTasks + " locked tasks for outdated locks (threshold: " + threshold + ")");
+        
         for (String taskId : lockedTasks.keySet()) {
-            Task task = lockedTasks.get(taskId);
-            if (task != null && task.getLockTime().isBefore(threshold)) {
-                toUpdate.add(task);
+            try {
+                Task task = lockedTasks.get(taskId);
+                if (task == null) {
+                    logger.warn("Task with ID " + taskId + " was found in keySet but returned null from get");
+                    continue;
+                }
+                
+                LocalDateTime lockTime = task.getLockTime();
+                if (lockTime == null) {
+                    logger.warn("Task with ID " + taskId + " has null lock time");
+                    continue;
+                }
+                
+                if (lockTime.isBefore(threshold)) {
+                    logger.debug("Task " + task.getName() + " (ID: " + taskId + ") has outdated lock: " + lockTime);
+                    toUpdate.add(task);
+                }
+            } catch (Exception e) {
+                logger.error("Error checking lock for task ID: " + taskId, e);
+                // Continue with other tasks even if one fails
             }
         }
+        
+        if (!toUpdate.isEmpty()) {
+            logger.debug("Found " + toUpdate.size() + " tasks with outdated locks out of " + totalLockedTasks + " locked tasks");
+        }
+        
         return toUpdate;
     }
 }
