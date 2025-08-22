@@ -338,24 +338,19 @@ Yes, in the JitPack repository. For usage add the JitPack repository to your bui
 
 #### How to test against a specific database?
 
-All db configurations for the tests can be found in XxxDatabaseTestConfig classes. As an example testing against MariaDB:
+Testcontainers are available for running tests against different database types. You can specify the database by setting the `TEST_DB` environment variable. By default, H2 is used if no database is specified.
 
-1) Start a docker container.
+Supported database types (from `TestcontainersDbExtension.DatabaseType`):
+- H2 (default)
+- POSTGRES
+- MYSQL
+- MARIADB
+- ORACLE
 
-MariaDB:
-
+Example usage:
 ```
-docker run -p 127.0.0.1:3306:3306 --name mariadb-failsafe -e MARIADB_ROOT_PASSWORD=failsafe -e MYSQL_DATABASE=failsafe -e MYSQL_USER=failsafe -e MYSQL_PASSWORD=failsafe -d mariadb:10.4
+TEST_DB=MARIADB mvn test
 ```
-
-Postgres:
-
-```
-docker run -p 127.0.0.1:5432:5432 --name postgres-failsafe -e POSTGRES_USER=failsafe -e POSTGRES_PASSWORD=failsafe -e POSTGRES_DB=failsafe -d postgres
-```
-
-2) Add the environment variable `TEST_DB=MARIA` or `TEST_DB=POSTGRES` to your test run configuration. 
-3) Run your tests.
 
 #### What should you do in case you experience an exception with "CAUTION! JDBC driver returns SUCCESS_NO_INFO..." ?
 
