@@ -214,13 +214,7 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 ## Logging Configuration
 
-The `FailsafeExecutor` uses Java's built-in logging (java.util.logging) with a structured format. By default, it loads a configuration from the classpath resource `logging.properties` that provides:
-
-- Timestamps, log levels, class names, and formatted messages
-- Default log levels for different packages
-- Console handler configuration
-
-You can override this configuration in two ways:
+The `FailsafeExecutor` uses Java's built-in logging (java.util.logging). By default, no configuration is defined. You can provide a configuration in two ways:
 
 ### 1. Using a custom properties file
 
@@ -252,6 +246,14 @@ You can also set the system property `java.util.logging.config.file` to point to
 
 ```
 java -Djava.util.logging.config.file=/path/to/custom-logging.properties -jar your-application.jar
+```
+
+### 4. Redirecting Logs with JavaLoggingBridgeHandler
+
+Use an implementation of java.util.logging.Handler to route Java Util Logging (java.util.logging) messages into your preferred logging framework. This is how you install the handler:
+
+```java
+LogManager.getLogManager().getLogger("").addHandler(new JavaLoggingBridgeHandler());
 ```
 
 For convenience, the `FailsafeExecutor` also provides methods to quickly change log levels:
