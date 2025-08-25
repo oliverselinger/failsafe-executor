@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-08-25
+### Added
+- Restart method for FailsafeExecutor to recover from unexpected termination
+- Enhanced logging system for better observability
+- TestContainers support for database testing
+
+### Changed
+- Updated dependencies in pom.xml
+- Migrated from CircleCI to GitHub Actions for CI/CD
+- Build with JDK 17 in GitHub workflow
+
+### Fixed
+- Error handling improvements for better resilience
+- MariaDB schema issues
+
 ## [2.1.1] - 2024-06-03
 ### Fixed
 - Fix findAll tasks contains filter criteria
