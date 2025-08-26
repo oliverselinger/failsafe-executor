@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-08-26
+### Fixed
+- Jitpack build and build for Java 8 again
+
 ## [2.2.0] - 2025-08-25
 ### Added
 - Restart method for FailsafeExecutor to recover from unexpected termination
