@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class HeartbeatService {
 
@@ -41,22 +42,17 @@ public class HeartbeatService {
     void heartbeat() {
         try {
             List<Task> toUpdate = findAllOutdatedLocks();
+
             logger.debug("Found " + toUpdate.size() + " tasks with outdated locks out of " + lockedTasks.size() + " locked tasks");
 
             if (toUpdate.isEmpty()) {
                 return;
             }
 
-            List<Task> updated = taskRepository.updateLockTime(toUpdate);
-
-            if (updated.size() != toUpdate.size()) {
-                logger.warn("Not all locks were updated. Expected: " + toUpdate.size() + ", Actual: " + updated.size());
-            }
-
-            for (Task task : updated) {
+            taskRepository.updateLockTime(toUpdate).forEach(task -> {
                 lockedTasks.computeIfPresent(task.getId(), (k, v) -> task);
-                logger.debug("Updated lock time for task: " + task.getName() + " (ID: " + task.getId() + ")");
-            }
+                logger.debug("Updated lock time for task: " + task.getName() + " (ID: " + task.getId() + ") with lockTime: " + task.getLockTime());
+            });
 
         } catch (Exception e) {
             logger.error("Error during heartbeat operation", e);
@@ -64,26 +60,9 @@ public class HeartbeatService {
     }
 
     private List<Task> findAllOutdatedLocks() {
-        List<Task> toUpdate = new ArrayList<>();
         LocalDateTime threshold = systemClock.now().minus(heartbeatInterval);
-
-        for (String taskId : lockedTasks.keySet()) {
-            Task task = lockedTasks.get(taskId);
-            if (task == null) {
-                continue;
-            }
-
-            LocalDateTime lockTime = task.getLockTime();
-            if (lockTime == null) {
-                logger.warn("Task with ID " + taskId + " has null lock time");
-                continue;
-            }
-
-            if (lockTime.isBefore(threshold)) {
-                toUpdate.add(task);
-            }
-        }
-
-        return toUpdate;
+        return lockedTasks.values().stream()
+                .filter(task -> task != null && task.getLockTime() != null && task.getLockTime().isBefore(threshold))
+                .collect(Collectors.toList());
     }
 }
