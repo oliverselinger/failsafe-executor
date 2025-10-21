@@ -7,7 +7,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.TestSystemClock;

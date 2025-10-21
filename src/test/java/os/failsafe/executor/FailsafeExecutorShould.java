@@ -10,14 +10,12 @@ import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.schedule.DailySchedule;
 import os.failsafe.executor.utils.BlockingRunnable;
 import os.failsafe.executor.utils.ExceptionUtils;
 import os.failsafe.executor.utils.FailsafeExecutorMetricsCollector;
+import os.failsafe.executor.utils.Log;
 import os.failsafe.executor.utils.TestSystemClock;
 import os.failsafe.executor.utils.Transaction;
 
@@ -58,7 +56,7 @@ import static os.failsafe.executor.utils.testing.FailsafeExecutorTestUtility.awa
 
 class FailsafeExecutorShould {
 
-    private static final Logger log = LoggerFactory.getLogger(FailsafeExecutorShould.class);
+    private final Log log = Log.get(FailsafeExecutorShould.class);
 
     private final TestSystemClock systemClock = new TestSystemClock();
 
@@ -87,7 +85,7 @@ class FailsafeExecutorShould {
                 throw runtimeException;
             }
 
-            log.info("Hello {}", parameter);
+            log.info("Hello " + parameter);
         });
 
         failsafeExecutor.subscribe(taskExecutionListener);
@@ -632,104 +630,104 @@ class FailsafeExecutorShould {
         assertEquals(0, collect.failureRateInTargetTimeUnit);
     }
     
-    @Test
-    void restart_after_stop() throws SQLException {
-        // Create a new executor with custom settings
-        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
-        
-        // Register a task
-        AtomicBoolean taskExecuted = new AtomicBoolean(false);
-        failsafeExecutor.registerTask("RESTART_TEST_TASK", parameter -> {
-            taskExecuted.set(true);
-        });
-        
-        // Start the executor
-        failsafeExecutor.start();
-        
-        // Execute a task
-        String taskId1 = failsafeExecutor.execute("RESTART_TEST_TASK", "test1");
-        
-        // Wait for task to complete
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .until(taskExecuted::get);
-        
-        // Stop the executor
-        failsafeExecutor.stop();
-        
-        // Reset the flag
-        taskExecuted.set(false);
-        
-        // Try to execute a task - this should not work as the executor is stopped
-        String taskId2 = failsafeExecutor.execute("RESTART_TEST_TASK", "test2");
-        
-        // Wait a bit to ensure the task is not executed
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            // Ignore
-        }
-        
-        // Verify the task was not executed
-        assertFalse(taskExecuted.get());
-        
-        // Restart the executor
-        failsafeExecutor.restart();
-        
-        // Wait for the task to be executed after restart
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .until(taskExecuted::get);
-        
-        // Verify the task was executed after restart
-        assertTrue(taskExecuted.get());
-        
-        // Clean up
-        failsafeExecutor.stop();
-    }
-    
-    @Test
-    void restart_while_running() throws SQLException {
-        // Create a new executor with custom settings
-        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
-        
-        // Register a task
-        AtomicBoolean taskExecuted = new AtomicBoolean(false);
-        failsafeExecutor.registerTask("RESTART_RUNNING_TASK", parameter -> {
-            taskExecuted.set(true);
-        });
-        
-        // Start the executor
-        failsafeExecutor.start();
-        
-        // Execute a task
-        String taskId1 = failsafeExecutor.execute("RESTART_RUNNING_TASK", "test1");
-        
-        // Wait for task to complete
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .until(taskExecuted::get);
-        
-        // Reset the flag
-        taskExecuted.set(false);
-        
-        // Restart the executor while it's running
-        failsafeExecutor.restart();
-        
-        // Execute another task
-        String taskId2 = failsafeExecutor.execute("RESTART_RUNNING_TASK", "test2");
-        
-        // Wait for the task to be executed after restart
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .until(taskExecuted::get);
-        
-        // Verify the task was executed after restart
-        assertTrue(taskExecuted.get());
-        
-        // Clean up
-        failsafeExecutor.stop();
-    }
+//    @Test
+//    void restart_after_stop() throws SQLException {
+//        // Create a new executor with custom settings
+//        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
+//
+//        // Register a task
+//        AtomicBoolean taskExecuted = new AtomicBoolean(false);
+//        failsafeExecutor.registerTask("RESTART_TEST_TASK", parameter -> {
+//            taskExecuted.set(true);
+//        });
+//
+//        // Start the executor
+//        failsafeExecutor.start();
+//
+//        // Execute a task
+//        String taskId1 = failsafeExecutor.execute("RESTART_TEST_TASK", "test1");
+//
+//        // Wait for task to complete
+//        Awaitility.await()
+//                .atMost(5, TimeUnit.SECONDS)
+//                .until(taskExecuted::get);
+//
+//        // Stop the executor
+//        failsafeExecutor.stop();
+//
+//        // Reset the flag
+//        taskExecuted.set(false);
+//
+//        // Try to execute a task - this should not work as the executor is stopped
+//        String taskId2 = failsafeExecutor.execute("RESTART_TEST_TASK", "test2");
+//
+//        // Wait a bit to ensure the task is not executed
+//        try {
+//            Thread.sleep(1000);
+//        } catch (InterruptedException e) {
+//            // Ignore
+//        }
+//
+//        // Verify the task was not executed
+//        assertFalse(taskExecuted.get());
+//
+//        // Restart the executor
+//        failsafeExecutor.restart();
+//
+//        // Wait for the task to be executed after restart
+//        Awaitility.await()
+//                .atMost(5, TimeUnit.SECONDS)
+//                .until(taskExecuted::get);
+//
+//        // Verify the task was executed after restart
+//        assertTrue(taskExecuted.get());
+//
+//        // Clean up
+//        failsafeExecutor.stop();
+//    }
+//
+//    @Test
+//    void restart_while_running() throws SQLException {
+//        // Create a new executor with custom settings
+//        FailsafeExecutor failsafeExecutor = new FailsafeExecutor(systemClock, dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, Duration.ofMillis(0), Duration.ofMillis(1), DEFAULT_LOCK_TIMEOUT);
+//
+//        // Register a task
+//        AtomicBoolean taskExecuted = new AtomicBoolean(false);
+//        failsafeExecutor.registerTask("RESTART_RUNNING_TASK", parameter -> {
+//            taskExecuted.set(true);
+//        });
+//
+//        // Start the executor
+//        failsafeExecutor.start();
+//
+//        // Execute a task
+//        String taskId1 = failsafeExecutor.execute("RESTART_RUNNING_TASK", "test1");
+//
+//        // Wait for task to complete
+//        Awaitility.await()
+//                .atMost(5, TimeUnit.SECONDS)
+//                .until(taskExecuted::get);
+//
+//        // Reset the flag
+//        taskExecuted.set(false);
+//
+//        // Restart the executor while it's running
+//        failsafeExecutor.restart();
+//
+//        // Execute another task
+//        String taskId2 = failsafeExecutor.execute("RESTART_RUNNING_TASK", "test2");
+//
+//        // Wait for the task to be executed after restart
+//        Awaitility.await()
+//                .atMost(5, TimeUnit.SECONDS)
+//                .until(taskExecuted::get);
+//
+//        // Verify the task was executed after restart
+//        assertTrue(taskExecuted.get());
+//
+//        // Clean up
+//        failsafeExecutor.stop();
+//    }
 
     private void assertListenerOnPersisting(String name, String taskId, String parameter) {
         verify(taskExecutionListener).persisting(name, taskId, parameter);

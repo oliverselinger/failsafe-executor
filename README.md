@@ -214,47 +214,9 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 
 ## Logging Configuration
 
-The `FailsafeExecutor` uses Java's built-in logging (java.util.logging). By default, no configuration is defined. You can provide a configuration in two ways:
+The `FailsafeExecutor` uses Java's built-in logging (java.util.logging). By default, no configuration is defined. You can provide a configuration via standard `logging.properties` or programmatically.
 
-### 1. Using a custom properties file
-
-```java
-// Load custom configuration from a file
-failsafeExecutor.loadLoggingConfiguration("/path/to/custom-logging.properties");
-```
-
-### 2. Using Properties object
-
-```java
-// Create custom logging properties
-Properties props = new Properties();
-props.setProperty("handlers", "java.util.logging.ConsoleHandler");
-props.setProperty(".level", "INFO");
-props.setProperty("os.failsafe.executor.level", "FINE");
-props.setProperty("java.util.logging.ConsoleHandler.level", "FINE");
-props.setProperty("java.util.logging.ConsoleHandler.formatter", "java.util.logging.SimpleFormatter");
-props.setProperty("java.util.logging.SimpleFormatter.format", 
-                  "[CUSTOM] %1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS.%1$tL %4$s [%3$s] %5$s%6$s%n");
-
-// Load custom configuration from properties
-failsafeExecutor.loadLoggingConfiguration(props);
-```
-
-### 3. Using system property
-
-You can also set the system property `java.util.logging.config.file` to point to your custom configuration file:
-
-```
-java -Djava.util.logging.config.file=/path/to/custom-logging.properties -jar your-application.jar
-```
-
-### 4. Redirecting Logs with JavaLoggingBridgeHandler
-
-Use an implementation of java.util.logging.Handler to route Java Util Logging (java.util.logging) messages into your preferred logging framework. This is how you install the handler:
-
-```java
-LogManager.getLogManager().getLogger("").addHandler(new JavaLoggingBridgeHandler());
-```
+Can be redirected or bridged by an implementation of java.util.logging.Handler to route Java Util Logging (java.util.logging) messages into your preferred logging framework (e.g., to SLF4J or Log4j).
 
 For convenience, the `FailsafeExecutor` also provides methods to quickly change log levels:
 

@@ -4,6 +4,7 @@ package os.failsafe.executor;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.SystemClock;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;

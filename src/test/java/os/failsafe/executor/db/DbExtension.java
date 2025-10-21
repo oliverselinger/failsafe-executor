@@ -6,16 +6,15 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import os.failsafe.executor.utils.Database;
+import os.failsafe.executor.utils.Log;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
 
 public class DbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
 
-    private final static Logger log = LoggerFactory.getLogger(DbExtension.class);
+    private static final Log log = Log.get(DbExtension.class);
 
     private final static DatabaseTestConfig databaseTestConfig = findDatabaseConfig();
 

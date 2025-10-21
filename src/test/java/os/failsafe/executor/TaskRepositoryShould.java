@@ -3,7 +3,6 @@ package os.failsafe.executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import os.failsafe.executor.db.DbExtension;
 import os.failsafe.executor.db.TestcontainersDbExtension;
 import os.failsafe.executor.utils.Database;
 import os.failsafe.executor.utils.ExceptionUtils;

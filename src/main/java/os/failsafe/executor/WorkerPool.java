@@ -3,54 +3,57 @@ package os.failsafe.executor;
 import os.failsafe.executor.utils.Log;
 import os.failsafe.executor.utils.NamedThreadFactory;
 
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 class WorkerPool {
 
     private final int threadCount;
-    private final AtomicInteger spareQueueCount;
-    private ExecutorService workers;
+    private ThreadPoolExecutor workers;
+    private final int queueSize;
     private final HeartbeatService heartbeatService;
     private final Log logger = Log.get(WorkerPool.class);
 
     WorkerPool(int threadCount, int queueSize, HeartbeatService heartbeatService) {
         this.threadCount = threadCount;
-        spareQueueCount = new AtomicInteger(queueSize);
+        this.queueSize = queueSize;
         this.heartbeatService = heartbeatService;
     }
 
     void start() {
-        workers = Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
+        workers = (ThreadPoolExecutor) Executors.newFixedThreadPool(threadCount, new NamedThreadFactory("Failsafe-Worker-"));
         logger.info("Started worker pool with " + threadCount + " threads");
     }
 
     public Future<String> execute(Task task, Runnable runnable) {
-        spareQueueCount.decrementAndGet();
         heartbeatService.register(task);
-        logger.debug("Executing task: " + task.getName() + " (ID: " + task.getId() + ")");
+        logger.debug("Submitting task: " + task.getName() + " (ID: " + task.getId() + ")");
 
         return workers.submit(() -> {
             try {
-                logger.debug("Started task: " + task.getName() + " (ID: " + task.getId() + ")");
+                logger.info("Starting task: " + task.getName() + " (ID: " + task.getId() + ")");
+
                 runnable.run();
+
                 logger.debug("Completed task: " + task.getName() + " (ID: " + task.getId() + ")");
             } catch (Exception e) {
                 logger.error("Error executing task: " + task.getName() + " (ID: " + task.getId() + ")", e);
                 throw e; // rethrow to mark the Future as failed
             } finally {
                 heartbeatService.unregister(task);
-                spareQueueCount.incrementAndGet();
             }
             return task.getId();
         });
     }
 
-    int spareQueueCount() {
-        return spareQueueCount.get();
+    int getQueuedTaskCount() {
+        return workers.getQueue().size();
+    }
+
+    int freeSlots() {
+        return queueSize - getQueuedTaskCount();
     }
 
     void stop(long timeout, TimeUnit timeUnit) {
@@ -59,13 +62,12 @@ class WorkerPool {
             return;
         }
 
-        logger.info("Shutting down worker pool");
+        logger.info("Stopping worker pool with timeout: " + timeout + " " + timeUnit);
+
         workers.shutdown();
         try {
             boolean terminated = workers.awaitTermination(timeout, timeUnit);
-            if (terminated) {
-                logger.info("Worker pool shutdown completed successfully");
-            } else {
+            if (!terminated) {
                 logger.warn("Worker pool did not terminate within the timeout period of " + timeout + " " + timeUnit);
             }
         } catch (InterruptedException e) {

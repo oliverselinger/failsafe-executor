@@ -10,7 +10,6 @@ import os.failsafe.executor.utils.Throwing;
 import os.failsafe.executor.utils.Transaction;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -20,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,7 +27,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 public class FailsafeExecutor {
@@ -47,7 +44,7 @@ public class FailsafeExecutor {
     private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
-    private ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+    private ScheduledExecutorService executor;
     private final PersistentQueue persistentQueue;
     private final WorkerPool workerPool;
     private final TaskRepository taskRepository;
@@ -57,11 +54,11 @@ public class FailsafeExecutor {
     private final SystemClock systemClock;
     private final HeartbeatService heartbeatService;
     private final Duration heartbeatInterval;
+    private final int queueSize;
 
     private volatile Exception lastRunException;
     private volatile String nodeId;
-    private AtomicBoolean running = new AtomicBoolean();
-    
+
     private final Log logger = Log.get(FailsafeExecutor.class);
 
     public FailsafeExecutor(DataSource dataSource) throws SQLException {
@@ -80,7 +77,14 @@ public class FailsafeExecutor {
         logger.info("  - Polling interval: " + pollingInterval);
         logger.info("  - Lock timeout: " + lockTimeout);
         logger.info("  - Table name: " + tableName);
-        
+
+        this.initialDelay = initialDelay;
+        this.pollingInterval = pollingInterval;
+        this.queueSize = queueSize;
+        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
+
+        logger.info("  - Heartbeat interval: " + heartbeatInterval);
+
         if (queueSize < workerThreadCount) {
             logger.error("QueueSize must be >= workerThreadCount");
             throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
@@ -92,25 +96,18 @@ public class FailsafeExecutor {
 
         try {
             this.database = new Database(dataSource);
-            
+
             this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
-            
+
             this.taskRepository = new TaskRepository(database, tableName, systemClock);
-            
+
             this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-            
-            this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
-            logger.debug("Setting heartbeat interval to: " + heartbeatInterval);
-            
-            this.heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository, this);
-            
+
+            this.heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository);
+
             this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatService);
-            
-            this.initialDelay = initialDelay;
-            this.pollingInterval = pollingInterval;
 
             validateDatabase(dataSource);
-            logger.info("FailsafeExecutor initialized successfully");
         } catch (Exception e) {
             logger.error("Failed to initialize FailsafeExecutor", e);
             throw e;
@@ -130,33 +127,30 @@ public class FailsafeExecutor {
      */
     public void start(String nodeId) {
         try {
-            logger.info("Starting FailsafeExecutor" + (nodeId != null ? " with nodeId: " + nodeId : ""));
-            
-            if(nodeId != null && nodeId.length() > NODE_ID_MAX_LENGTH) {
+            if (nodeId != null && nodeId.length() > NODE_ID_MAX_LENGTH) {
                 String errorMsg = String.format("Length of nodeId can not exceed %d", NODE_ID_MAX_LENGTH);
                 logger.error(errorMsg);
                 throw new IllegalArgumentException(errorMsg);
             }
 
-            boolean shouldStart = running.compareAndSet(false, true);
-            if (!shouldStart) {
-                logger.warn("FailsafeExecutor already running, ignoring start request");
+            if (executor != null && !executor.isShutdown()) {
+                logger.warn("FailsafeExecutor is running, ignoring start request");
                 return;
             }
 
             this.nodeId = nodeId;
 
-            logger.debug("Scheduling task execution with initial delay: " + initialDelay + ", polling interval: " + pollingInterval);
+            this.executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
+
             executor.scheduleWithFixedDelay(
                     this::executeNextTasks,
                     initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
 
             workerPool.start();
 
-            logger.debug("Scheduling heartbeat service with initial delay: " + initialDelay + ", heartbeat interval: " + heartbeatInterval);
             executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
-            
-            logger.info("FailsafeExecutor started successfully");
+
+            logger.info("Started FailsafeExecutor" + (nodeId != null ? " with nodeId: " + nodeId : ""));
         } catch (Exception e) {
             logger.error("Failed to start FailsafeExecutor", e);
             throw e;
@@ -174,68 +168,31 @@ public class FailsafeExecutor {
     public void stop() {
         stop(15, TimeUnit.SECONDS);
     }
-    
+
     /**
      * Sets the log level for the FailsafeExecutor.
      * This affects all components (FailsafeExecutor, WorkerPool, HeartbeatService).
-     * 
+     *
      * @param level The log level to set
      */
     public void setLogLevel(Level level) {
-        logger.info("Setting log level to: " + level);
         Log.setLevel(level);
     }
-    
+
     /**
      * Enables debug logging for the FailsafeExecutor.
      * This is a convenience method for troubleshooting issues.
      */
     public void enableDebugLogging() {
-        logger.info("Enabling debug logging");
-        Log.enableDebugLogging();
+        Log.setLevel(Level.FINE);
     }
-    
+
     /**
      * Enables error-only logging for the FailsafeExecutor.
      * This reduces log output to only show errors.
      */
     public void enableErrorOnlyLogging() {
-        logger.info("Enabling error-only logging");
-        Log.enableErrorOnlyLogging();
-    }
-    
-    /**
-     * Loads a custom logging configuration from the specified file path.
-     * This will override the default configuration.
-     *
-     * @param configFilePath Path to the logging properties file
-     * @throws IOException If the file cannot be read
-     */
-    public void loadLoggingConfiguration(String configFilePath) throws IOException {
-        try {
-            Log.loadConfiguration(configFilePath);
-            logger.info("Loaded logging configuration from: " + configFilePath);
-        } catch (IOException e) {
-            logger.error("Failed to load logging configuration", e);
-            throw e;
-        }
-    }
-    
-    /**
-     * Loads a custom logging configuration from the provided properties.
-     * This will override the default configuration.
-     *
-     * @param properties Logging properties
-     * @throws IOException If the properties cannot be loaded
-     */
-    public void loadLoggingConfiguration(Properties properties) throws IOException {
-        try {
-            Log.loadConfiguration(properties);
-            logger.info("Loaded custom logging configuration from properties");
-        } catch (IOException e) {
-            logger.error("Failed to load logging configuration from properties", e);
-            throw e;
-        }
+        Log.setLevel(Level.SEVERE);
     }
 
     /**
@@ -252,15 +209,15 @@ public class FailsafeExecutor {
     public void stop(long timeout, TimeUnit timeUnit) {
         try {
             logger.info("Stopping FailsafeExecutor with timeout: " + timeout + " " + timeUnit);
-            
-            logger.debug("Shutting down executor service");
+
+            if (executor == null) {
+                return;
+            }
+
             executor.shutdown();
             try {
-                logger.debug("Waiting for executor service to terminate (5 seconds)");
                 boolean terminated = executor.awaitTermination(5, TimeUnit.SECONDS);
-                if (terminated) {
-                    logger.debug("Executor service terminated successfully");
-                } else {
+                if (!terminated) {
                     logger.warn("Executor service did not terminate within the timeout period");
                 }
             } catch (InterruptedException e) {
@@ -268,17 +225,15 @@ public class FailsafeExecutor {
                 Thread.currentThread().interrupt(); // Preserve interrupt status
             }
 
-            logger.debug("Stopping worker pool with timeout: " + timeout + " " + timeUnit);
             workerPool.stop(timeout, timeUnit);
 
-            running.set(false);
             logger.info("FailsafeExecutor stopped successfully");
         } catch (Exception e) {
             logger.error("Error during FailsafeExecutor shutdown", e);
             throw e;
         }
     }
-    
+
     /**
      * Restarts the executor after it has been stopped.
      * This creates a new ScheduledExecutorService and starts the worker pool again.
@@ -286,32 +241,29 @@ public class FailsafeExecutor {
     public void restart() {
         restart(null);
     }
-    
+
     /**
      * Restarts the executor after it has been stopped.
      * This creates a new ScheduledExecutorService and starts the worker pool again.
      * If the executor is already running, it will be stopped first.
-     * 
+     *
      * @param nodeId id of the node that locks the given task
      */
     public void restart(String nodeId) {
         try {
             logger.info("Restarting FailsafeExecutor" + (nodeId != null ? " with nodeId: " + nodeId : ""));
-            
-            if (running.get()) {
-                logger.debug("FailsafeExecutor is currently running, stopping first");
+
+            if (!executor.isShutdown()) {
                 stop();
             } else {
                 logger.debug("FailsafeExecutor is not running, proceeding with restart");
             }
-            
+
             // Create a new executor since the old one cannot be restarted
             executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-            
+
             // Start the executor with the provided nodeId
             start(nodeId);
-            
-            logger.info("FailsafeExecutor restarted successfully");
         } catch (Exception e) {
             logger.error("Failed to restart FailsafeExecutor", e);
             throw e;
@@ -642,7 +594,7 @@ public class FailsafeExecutor {
      * @param offset            offset to start from
      * @param limit             limit of the result set
      * @param sorts             sort order of the result set. See {@link Sort} for available sort criteria.
-     * @return                  list of all persisted tasks
+     * @return list of all persisted tasks
      */
     public List<Task> findAll(String taskName,
                               String parameter,
@@ -799,43 +751,23 @@ public class FailsafeExecutor {
 
     private void executeNextTasks() {
         try {
-            // Check if the executor service has been terminated unexpectedly
-            if (executor.isShutdown() || executor.isTerminated()) {
-                logger.error("Executor service has been terminated unexpectedly. Attempting to restart...");
-                // Create a new executor since the old one cannot be restarted
-                executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-                
-                // Reschedule the tasks
-                logger.info("Rescheduling tasks after executor service restart");
-                executor.scheduleWithFixedDelay(
-                        this::executeNextTasks,
-                        initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-                
-                executor.scheduleWithFixedDelay(heartbeatService::heartbeat, 
-                        initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
-                
-                logger.info("Executor service restarted successfully");
-                return;
-            }
-            
-            int idleWorkerCount = workerPool.spareQueueCount();
-            if (idleWorkerCount == 0) {
-                logger.debug("No idle workers available, skipping task execution");
+            int freeSlots = workerPool.freeSlots();
+            if (freeSlots <= 0) {
+                logger.trace("No free queue slots available, skipping task execution");
                 return;
             }
 
-            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, nodeId);
+            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, freeSlots, nodeId);
             if (toExecute.isEmpty()) {
-                logger.debug("No tasks to execute");
+                logger.trace("No tasks to execute");
                 return;
             }
 
-            logger.info("Executing " + toExecute.size() + " tasks");
+            logger.trace("Executing " + toExecute.size() + " tasks");
             for (Task task : toExecute) {
                 try {
                     TaskRegistration registration = taskRegistrationsByName.get(task.getName());
                     Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
-                    logger.debug("Submitting task: " + task.getName() + " (ID: " + task.getId() + ")");
                     workerPool.execute(task, execution::perform);
                 } catch (Exception e) {
                     logger.error("Failed to submit task: " + task.getName() + " (ID: " + task.getId() + ")", e);

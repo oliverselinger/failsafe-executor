@@ -30,7 +30,7 @@ public class HeartbeatServiceShould {
         taskRepository = Mockito.mock(TaskRepository.class);
         heartbeatInterval = Duration.ofMinutes(1);
         failsafeExecutor = Mockito.mock(FailsafeExecutor.class);
-        heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository, failsafeExecutor);
+        heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository);
     }
 
     @Test

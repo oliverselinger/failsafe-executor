@@ -3,7 +3,6 @@ package os.failsafe.executor.db.testcontainers;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.testcontainers.containers.JdbcDatabaseContainer;
-import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
 import java.util.Map;

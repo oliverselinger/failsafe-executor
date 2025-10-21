@@ -25,7 +25,7 @@ class WorkerPoolShould {
     private static final TestSystemClock systemClock = new TestSystemClock();
 
     private int threadCount = 2;
-    private int queueSize = threadCount * 2;
+    private int queueSize = 2;
     private WorkerPool workerPool;
     private HeartbeatService heartbeatService;
 
@@ -43,7 +43,7 @@ class WorkerPoolShould {
 
     @Test
     void accept_more_tasks_if_workers_are_idle() {
-        assertEquals(queueSize, workerPool.spareQueueCount());
+        assertEquals(0, workerPool.getQueuedTaskCount());
     }
 
     @Test
@@ -53,22 +53,26 @@ class WorkerPoolShould {
 
         firstBlockingRunnable.waitForSetup();
 
-        List<BlockingRunnable> blockingRunnables = IntStream.range(1, queueSize)
+        List<BlockingRunnable> blockingRunnables = IntStream.range(1, queueSize + threadCount)
                 .mapToObj(i -> new BlockingRunnable())
                 .peek(blockingRunnable -> workerPool.execute(createTask(), blockingRunnable))
                 .collect(Collectors.toList());
 
-        assertEquals(0, workerPool.spareQueueCount());
+        assertEquals(0, workerPool.freeSlots());
 
         firstBlockingRunnable.release();
         execution.get();
 
-        assertEquals(1, workerPool.spareQueueCount());
+        Thread.sleep(10);
+
+        int actual = workerPool.freeSlots();
+        System.out.println(actual);
+        assertEquals(1, actual);
 
         BlockingRunnable nextBlockingRunnable = new BlockingRunnable();
         workerPool.execute(createTask(), nextBlockingRunnable);
 
-        assertEquals(0, workerPool.spareQueueCount());
+        assertEquals(0, workerPool.freeSlots());
 
         blockingRunnables.forEach(BlockingRunnable::waitForSetupAndRelease);
         nextBlockingRunnable.waitForSetupAndRelease();

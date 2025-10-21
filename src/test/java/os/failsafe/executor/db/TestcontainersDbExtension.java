@@ -4,10 +4,14 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import os.failsafe.executor.db.testcontainers.*;
+import os.failsafe.executor.db.testcontainers.H2TestContainer;
+import os.failsafe.executor.db.testcontainers.MariaDbTestContainer;
+import os.failsafe.executor.db.testcontainers.MySqlTestContainer;
+import os.failsafe.executor.db.testcontainers.OracleTestContainer;
+import os.failsafe.executor.db.testcontainers.PostgresTestContainer;
+import os.failsafe.executor.db.testcontainers.TestDatabaseContainer;
 import os.failsafe.executor.utils.Database;
+import os.failsafe.executor.utils.Log;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -18,7 +22,7 @@ import java.sql.SQLException;
  */
 public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCallback, AfterAllCallback {
 
-    private final static Logger log = LoggerFactory.getLogger(TestcontainersDbExtension.class);
+    private static final Log log = Log.get(TestcontainersDbExtension.class);
 
     private final TestDatabaseContainer databaseContainer;
     private Database database;
@@ -138,7 +142,7 @@ public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCa
         try {
             return DatabaseType.valueOf(testDB);
         } catch (IllegalArgumentException e) {
-            log.warn("Unknown TEST_DB value: {}, using H2 database", testDB);
+            log.warn("Unknown TEST_DB value: " + testDB + ", using H2 database");
             return DatabaseType.H2;
         }
     }
