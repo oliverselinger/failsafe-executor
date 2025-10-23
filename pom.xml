@@ -147,7 +147,7 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>oracle-free</artifactId>
-            <version>1.20.0</version>
+            <version>1.21.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -159,7 +159,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.12.1</version>
                 <configuration>
-                    <release>8</release>
+                    <release>17</release>
                 </configuration>
             </plugin>
             <plugin>
