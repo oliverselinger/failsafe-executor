@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated APIs where necessary for simplification
 - Removal of legacy utilities and redundant abstractions
 - Reduced public API surface for clarity and maintenance
+- Test function `awaitAllTasks` is now replaced by `waitForTasks`
 
 ### Added
 - **Added `queue` mechanism**  
