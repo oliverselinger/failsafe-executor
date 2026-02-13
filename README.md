@@ -95,7 +95,7 @@ String taskId = failsafeExecutor.schedule("TaskName", schedule, () -> {
 });
 ```
 
-For a **recurring execution** let your `Schedule` always return the next planned time for execution. For example see [DailySchedule](src/main/java/os/failsafe/executor/schedule/DailySchedule.java).
+For a **recurring execution** let your `Schedule` always return the next planned time for execution. For example see [DailySchedule](src/main/java/os/failsafe/executor/FailsafeExecutor.java).
 
 As before, make sure your business logic is **idempotent**, since it gets executed at least once per scheduled execution.
 
