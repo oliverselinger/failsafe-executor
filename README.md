@@ -195,7 +195,6 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
 | `lockTimeout` | `Duration` |  5 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum recommended lockTimeout is 1 min. |
-| `tableName` | `String` |  `FAILSAFE_TASK` | Name of the database table. |
 
 **Note:** The lockTime is periodically updated by a scheduled heartbeat. It runs every `lockTimeout / 4` duration.   
 
