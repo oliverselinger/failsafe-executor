@@ -1,745 +1,175 @@
 package os.failsafe.executor;
 
-import os.failsafe.executor.schedule.Schedule;
-import os.failsafe.executor.utils.Database;
-import os.failsafe.executor.utils.DefaultSystemClock;
-import os.failsafe.executor.utils.Log;
-import os.failsafe.executor.utils.NamedThreadFactory;
-import os.failsafe.executor.utils.SystemClock;
-import os.failsafe.executor.utils.Throwing;
-import os.failsafe.executor.utils.Transaction;
-
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class FailsafeExecutor {
 
-    public static final int DEFAULT_WORKER_THREAD_COUNT = 5;
-    public static final int DEFAULT_QUEUE_SIZE = DEFAULT_WORKER_THREAD_COUNT * 6;
-    public static final Duration DEFAULT_INITIAL_DELAY = Duration.ofSeconds(10);
-    public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
-    public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
-    public static final String DEFAULT_TABLE_NAME = "FAILSAFE_TASK";
-    public static final int NODE_ID_MAX_LENGTH = 48;
+    private static final Logger log = Logger.getLogger(FailsafeExecutor.class.getName());
+    public static final String QUEUE_PREFIX = "FE_QUEUE_";
 
+    private final SystemClock systemClock;
+    private final Duration initialDelay;
+    final Duration pollingInterval;
+    private final Duration lockTimeout;
+    final Duration heartbeatInterval;
+    final Duration queuePollingInterval;
+    private final String nodeId;
+    private final int maxWorkers;
+    private final int queueSize;
+    private final DataSource dataSource;
 
-    private final Map<String, TaskRegistration> taskRegistrationsByName = new ConcurrentHashMap<>();
-    private final Set<String> taskNamesWithFunctions = new CopyOnWriteArraySet<>();
+    private ExecutorService executor;
+    private ScheduledExecutorService scheduler;
+    private ScheduledExecutorService heartbeatExecutor;
+    private volatile boolean running = false;
+
+    private final Map<String, TaskRegistration> taskRegistry = new ConcurrentHashMap<>();
+    private final Map<String, Schedule> scheduleRegistry = new ConcurrentHashMap<>();
+    final Set<String> activeTaskIds = ConcurrentHashMap.newKeySet();
     private final List<TaskExecutionListener> listeners = new CopyOnWriteArrayList<>();
 
-    private ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-    private final PersistentQueue persistentQueue;
-    private final WorkerPool workerPool;
-    private final TaskRepository taskRepository;
-    private final Duration initialDelay;
-    private final Duration pollingInterval;
-    private final Database database;
-    private final SystemClock systemClock;
-    private final HeartbeatService heartbeatService;
-    private final Duration heartbeatInterval;
+    private volatile Consumer<Throwable> uncaughtErrorHandler = (e) -> {
+    }; // default no-op
 
-    private volatile Exception lastRunException;
-    private volatile String nodeId;
-    private AtomicBoolean running = new AtomicBoolean();
-    
-    private final Log logger = Log.get(FailsafeExecutor.class);
-
-    public FailsafeExecutor(DataSource dataSource) throws SQLException {
-        this(new DefaultSystemClock(), dataSource, DEFAULT_WORKER_THREAD_COUNT, DEFAULT_QUEUE_SIZE, DEFAULT_INITIAL_DELAY, DEFAULT_POLLING_INTERVAL, DEFAULT_LOCK_TIMEOUT);
-    }
-
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout) throws SQLException {
-        this(systemClock, dataSource, workerThreadCount, queueSize, initialDelay, pollingInterval, lockTimeout, DEFAULT_TABLE_NAME);
-    }
-
-    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, String tableName) throws SQLException {
-        logger.info("Initializing FailsafeExecutor with parameters:");
-        logger.info("  - Worker thread count: " + workerThreadCount);
-        logger.info("  - Queue size: " + queueSize);
-        logger.info("  - Initial delay: " + initialDelay);
-        logger.info("  - Polling interval: " + pollingInterval);
-        logger.info("  - Lock timeout: " + lockTimeout);
-        logger.info("  - Table name: " + tableName);
-        
-        if (queueSize < workerThreadCount) {
-            logger.error("QueueSize must be >= workerThreadCount");
-            throw new IllegalArgumentException("QueueSize must be >= workerThreadCount");
-        }
-
-        if (lockTimeout.compareTo(Duration.ofMinutes(1)) < 0) {
-            logger.warn("LockTimeout very short! Recommendation is >= 1 minute");
-        }
-
-        try {
-            this.database = new Database(dataSource);
-            
-            this.systemClock = () -> systemClock.now().truncatedTo(ChronoUnit.MILLIS);
-            
-            this.taskRepository = new TaskRepository(database, tableName, systemClock);
-            
-            this.persistentQueue = new PersistentQueue(database, taskRepository, systemClock, lockTimeout);
-            
-            this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 4);
-            logger.debug("Setting heartbeat interval to: " + heartbeatInterval);
-            
-            this.heartbeatService = new HeartbeatService(heartbeatInterval, systemClock, taskRepository, this);
-            
-            this.workerPool = new WorkerPool(workerThreadCount, queueSize, heartbeatService);
-            
-            this.initialDelay = initialDelay;
-            this.pollingInterval = pollingInterval;
-
-            validateDatabase(dataSource);
-            logger.info("FailsafeExecutor initialized successfully");
-        } catch (Exception e) {
-            logger.error("Failed to initialize FailsafeExecutor", e);
-            throw e;
-        }
+    public FailsafeExecutor(SystemClock systemClock, DataSource dataSource, int workerThreadCount, int queueSize, Duration initialDelay, Duration pollingInterval, Duration lockTimeout, Duration queuePollingInterval, String nodeId) throws SQLException {
+        this.systemClock = systemClock;
+        this.initialDelay = initialDelay;
+        this.pollingInterval = pollingInterval;
+        this.nodeId = nodeId;
+        this.maxWorkers = workerThreadCount;
+        this.lockTimeout = lockTimeout;
+        this.heartbeatInterval = Duration.ofMillis(lockTimeout.toMillis() / 3);
+        this.queuePollingInterval = queuePollingInterval;
+        this.queueSize = queueSize;
+        this.dataSource = dataSource;
+        validateDatabase();
     }
 
     /**
      * Start execution of any submitted tasks.
      */
-    public void start() {
-        start(null);
+    public synchronized void start() {
+        if (running) {
+            FailsafeExecutor.log.warning("FailsafeExecutor already running.");
+            return;
+        }
+        running = true;
+
+        this.executor = Executors.newFixedThreadPool(maxWorkers);
+        this.scheduler = Executors.newSingleThreadScheduledExecutor();
+        this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
+
+        scheduler.scheduleWithFixedDelay(this::pollAndSubmit, initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
+        heartbeatExecutor.scheduleWithFixedDelay(this::extendLeasesBatch, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
+        log.info("FailsafeExecutor started.");
     }
 
     /**
-     * Start execution of any submitted tasks.
-     * @param nodeId id of the node that locks the given task
+     * Initiates an orderly shutdown in which previously locked tasks are executed, but no new tasks will be locked.
+     * <p>Blocks until all locked tasks have completed execution, or a timeout occurs, or the current thread is interrupted, whichever happens first.</p>
      */
-    public void start(String nodeId) {
+    public synchronized void shutdown() {
+        if (!running) return;
+        running = false;
+        log.info("Shutting down FailsafeExecutor...");
+        scheduler.shutdown();
+        heartbeatExecutor.shutdown();
+        executor.shutdown();
         try {
-            logger.info("Starting FailsafeExecutor" + (nodeId != null ? " with nodeId: " + nodeId : ""));
-            
-            if(nodeId != null && nodeId.length() > NODE_ID_MAX_LENGTH) {
-                String errorMsg = String.format("Length of nodeId can not exceed %d", NODE_ID_MAX_LENGTH);
-                logger.error(errorMsg);
-                throw new IllegalArgumentException(errorMsg);
-            }
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) executor.shutdownNow();
+            if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) scheduler.shutdownNow();
+            if (!heartbeatExecutor.awaitTermination(10, TimeUnit.SECONDS)) heartbeatExecutor.shutdownNow();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        log.info("FailsafeExecutor stopped.");
+    }
 
-            boolean shouldStart = running.compareAndSet(false, true);
-            if (!shouldStart) {
-                logger.warn("FailsafeExecutor already running, ignoring start request");
-                return;
-            }
+    /**
+     * Indicates whether the executor and all its executor services are running.
+     */
+    public boolean isRunning() {
+        return running && !executor.isShutdown() && !scheduler.isShutdown() && !heartbeatExecutor.isShutdown();
+    }
 
-            this.nodeId = nodeId;
+    /**
+     * Registers a custom error handler that will be invoked for uncaught errors encountered during task execution.
+     */
+    public void registerErrorHandler(Consumer<Throwable> handler) {
+        this.uncaughtErrorHandler = handler;
+    }
 
-            logger.debug("Scheduling task execution with initial delay: " + initialDelay + ", polling interval: " + pollingInterval);
-            executor.scheduleWithFixedDelay(
-                    this::executeNextTasks,
-                    initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-
-            workerPool.start();
-
-            logger.debug("Scheduling heartbeat service with initial delay: " + initialDelay + ", heartbeat interval: " + heartbeatInterval);
-            executor.scheduleWithFixedDelay(heartbeatService::heartbeat, initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
-            
-            logger.info("FailsafeExecutor started successfully");
-        } catch (Exception e) {
-            logger.error("Failed to start FailsafeExecutor", e);
-            throw e;
+    /**
+     * Registers the given function under the provided name. The function defines the logic to be executed for the task.
+     */
+    public void registerTask(String name, TaskFunction function) {
+        if (taskRegistry.putIfAbsent(name, new TaskRegistration(function, null)) != null) {
+            throw new IllegalArgumentException("Task '%s' is already registered".formatted(name));
         }
     }
 
     /**
-     * Initiates an orderly shutdown in which previously locked tasks are executed,
-     * but no new tasks will be locked.
-     *
-     * <p>Blocks until all locked tasks have completed execution,
-     * or a timeout of 15 seconds occurs, or the current thread is
-     * interrupted, whichever happens first.</p>
+     * Registers a queue under the provided name. Every task assigned to this queue is executed sequentially.
      */
-    public void stop() {
-        stop(15, TimeUnit.SECONDS);
+    public void registerQueue(String queueName) throws SQLException {
+        schedule(QUEUE_PREFIX + queueName, queueName, new DurationSchedule(queuePollingInterval), this::pollQueue);
     }
-    
+
     /**
-     * Sets the log level for the FailsafeExecutor.
-     * This affects all components (FailsafeExecutor, WorkerPool, HeartbeatService).
-     * 
-     * @param level The log level to set
+     * Registers the given function under the provided name. The function defines the logic to be executed for the task.
+     * <p>Before task execution a transaction is created. This transaction is committed after the given function executes without exceptions. Furthermore, the transaction is used to remove the failsafe_task from the database.</p>
      */
-    public void setLogLevel(Level level) {
-        logger.info("Setting log level to: " + level);
-        Log.setLevel(level);
-    }
-    
-    /**
-     * Enables debug logging for the FailsafeExecutor.
-     * This is a convenience method for troubleshooting issues.
-     */
-    public void enableDebugLogging() {
-        logger.info("Enabling debug logging");
-        Log.enableDebugLogging();
-    }
-    
-    /**
-     * Enables error-only logging for the FailsafeExecutor.
-     * This reduces log output to only show errors.
-     */
-    public void enableErrorOnlyLogging() {
-        logger.info("Enabling error-only logging");
-        Log.enableErrorOnlyLogging();
-    }
-    
-    /**
-     * Loads a custom logging configuration from the specified file path.
-     * This will override the default configuration.
-     *
-     * @param configFilePath Path to the logging properties file
-     * @throws IOException If the file cannot be read
-     */
-    public void loadLoggingConfiguration(String configFilePath) throws IOException {
-        try {
-            Log.loadConfiguration(configFilePath);
-            logger.info("Loaded logging configuration from: " + configFilePath);
-        } catch (IOException e) {
-            logger.error("Failed to load logging configuration", e);
-            throw e;
-        }
-    }
-    
-    /**
-     * Loads a custom logging configuration from the provided properties.
-     * This will override the default configuration.
-     *
-     * @param properties Logging properties
-     * @throws IOException If the properties cannot be loaded
-     */
-    public void loadLoggingConfiguration(Properties properties) throws IOException {
-        try {
-            Log.loadConfiguration(properties);
-            logger.info("Loaded custom logging configuration from properties");
-        } catch (IOException e) {
-            logger.error("Failed to load logging configuration from properties", e);
-            throw e;
+    public void registerTask(String name, TransactionalTaskFunction function) {
+        if (taskRegistry.putIfAbsent(name, new TaskRegistration(null, function)) != null) {
+            throw new IllegalArgumentException("Task '%s' is already registered".formatted(name));
         }
     }
 
     /**
-     * Initiates an orderly shutdown in which previously locked tasks are executed,
-     * but no new tasks will be locked.
-     *
-     * <p>Blocks until all locked tasks have completed execution,
-     * or the provided timeout occurs, or the current thread is
-     * interrupted, whichever happens first.</p>
-     *
-     * @param timeout  maximum time to block until all locked tasks have completed execution
-     * @param timeUnit the unit of the given timeout
-     */
-    public void stop(long timeout, TimeUnit timeUnit) {
-        try {
-            logger.info("Stopping FailsafeExecutor with timeout: " + timeout + " " + timeUnit);
-            
-            logger.debug("Shutting down executor service");
-            executor.shutdown();
-            try {
-                logger.debug("Waiting for executor service to terminate (5 seconds)");
-                boolean terminated = executor.awaitTermination(5, TimeUnit.SECONDS);
-                if (terminated) {
-                    logger.debug("Executor service terminated successfully");
-                } else {
-                    logger.warn("Executor service did not terminate within the timeout period");
-                }
-            } catch (InterruptedException e) {
-                logger.error("Executor service shutdown was interrupted", e);
-                Thread.currentThread().interrupt(); // Preserve interrupt status
-            }
-
-            logger.debug("Stopping worker pool with timeout: " + timeout + " " + timeUnit);
-            workerPool.stop(timeout, timeUnit);
-
-            running.set(false);
-            logger.info("FailsafeExecutor stopped successfully");
-        } catch (Exception e) {
-            logger.error("Error during FailsafeExecutor shutdown", e);
-            throw e;
-        }
-    }
-    
-    /**
-     * Restarts the executor after it has been stopped.
-     * This creates a new ScheduledExecutorService and starts the worker pool again.
-     */
-    public void restart() {
-        restart(null);
-    }
-    
-    /**
-     * Restarts the executor after it has been stopped.
-     * This creates a new ScheduledExecutorService and starts the worker pool again.
-     * If the executor is already running, it will be stopped first.
-     * 
-     * @param nodeId id of the node that locks the given task
-     */
-    public void restart(String nodeId) {
-        try {
-            logger.info("Restarting FailsafeExecutor" + (nodeId != null ? " with nodeId: " + nodeId : ""));
-            
-            if (running.get()) {
-                logger.debug("FailsafeExecutor is currently running, stopping first");
-                stop();
-            } else {
-                logger.debug("FailsafeExecutor is not running, proceeding with restart");
-            }
-            
-            // Create a new executor since the old one cannot be restarted
-            executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-            
-            // Start the executor with the provided nodeId
-            start(nodeId);
-            
-            logger.info("FailsafeExecutor restarted successfully");
-        } catch (Exception e) {
-            logger.error("Failed to restart FailsafeExecutor", e);
-            throw e;
-        }
-    }
-
-    /**
-     * Registers the given function under the provided name.
-     *
-     * <p>Make sure your function is idempotent, since it gets executed at least once per task execution.</p>
-     *
-     * @param name     unique name of the task
-     * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @throws IllegalArgumentException if a task with the given name is already registered
-     */
-    public void registerTask(String name, TaskFunction<String> function) {
-        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, function)) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
-        }
-
-        taskNamesWithFunctions.add(name);
-    }
-
-    /**
-     * Registers the given function under the provided name.
-     *
-     * <p>Before task execution a transaction is created. This transaction is committed after the given function executes without execptions. Furthermore the transaction is used to remove the task execution entry from database.</p>
-     *
-     * @param name     unique name of the task
-     * @param function the function that should be assigned to the unique name, accepting a parameter.
-     * @throws IllegalArgumentException if a task with the given name is already registered
-     */
-    public void registerTask(String name, TransactionalTaskFunction<String> function) {
-        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name, function)) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
-        }
-
-        taskNamesWithFunctions.add(name);
-    }
-
-    /**
-     * Registers a task under the provided name that runs remotely (in another FailsafeExecutor).
-     *
-     * @param name unique name of the task
-     * @throws IllegalArgumentException if a task with the given name is already registered
+     * Registers a task under the provided name that runs remotely on a different node (in another FailsafeExecutor).
      */
     public void registerRemoteTask(String name) {
-        if (taskRegistrationsByName.putIfAbsent(name, new TaskRegistration(name)) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", name));
+        if (taskRegistry.putIfAbsent(name, new TaskRegistration(null, null)) != null) {
+            throw new IllegalArgumentException("Task '%s' is already registered".formatted(name));
         }
-    }
-
-    /**
-     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
-     *
-     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
-     *
-     * @param taskName  the name of the task that should be executed
-     * @param parameter the parameter that should be passed to the function
-     * @return taskId
-     */
-    public String execute(String taskName, String parameter) {
-        return execute(UUID.randomUUID().toString(), taskName, parameter);
-    }
-
-    /**
-     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
-     *
-     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param connection the JDBC connection used to persist the task in the database
-     * @param taskName   the name of the task that should be executed
-     * @param parameter  the parameter that should be passed to the function
-     * @return taskId
-     */
-    public String execute(Connection connection, String taskName, String parameter) {
-        return execute(connection, UUID.randomUUID().toString(), taskName, parameter);
-    }
-
-    /**
-     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * @param taskId    the id of the task used as unique constraint in database
-     * @param taskName  the name of the task that should be executed
-     * @param parameter the parameter that should be passed to the function
-     * @return taskId or null if a task with the given taskId already exists
-     */
-    public String execute(String taskId, String taskName, String parameter) {
-        return database.connect(connection -> execute(connection, taskId, taskName, parameter));
-    }
-
-    /**
-     * Persists a task in the database and executes the function assigned to the taskName at some time in the future.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param connection the JDBC connection used to persist the task in the database
-     * @param taskId     the id of the task used as unique constraint in database
-     * @param taskName   the name of the task that should be executed
-     * @param parameter  the parameter that should be passed to the function
-     * @return taskId or null if a task with the given taskId already exists
-     */
-    public String execute(Connection connection, String taskId, String taskName, String parameter) {
-        TaskRegistration taskRegistration = taskRegistrationsByName.get(taskName);
-        if (taskRegistration == null) {
-            throwTaskNotRegisteredException(taskName);
-        }
-
-        LocalDateTime plannedExecutionTime = systemClock.now();
-        LocalDateTime now = plannedExecutionTime;
-        if (taskRegistration.schedule != null) {
-            plannedExecutionTime = taskRegistration.schedule.nextExecutionTime(plannedExecutionTime)
-                    .orElseThrow(() -> new IllegalArgumentException(String.format("Schedule of task '%s' did not return an execution time for input '%s", taskName, now)));
-        }
-
-        Task taskInstance = new Task(taskId, taskName, parameter, plannedExecutionTime);
-        return enqueue(connection, taskInstance);
-    }
-
-    /**
-     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
-     *
-     * <p>A random taskId is assigned to this task. Thus a new task is definitely persisted in the database.</p>
-     *
-     * @param taskName             the name of the task that should be executed
-     * @param parameter            the parameter that should be passed to the function
-     * @param plannedExecutionTime the time when the task should be executed
-     * @return taskId
-     */
-    public String defer(String taskName, String parameter, LocalDateTime plannedExecutionTime) {
-        return defer(UUID.randomUUID().toString(), taskName, parameter, plannedExecutionTime);
-    }
-
-    /**
-     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * @param taskId               the id of the task used as unique constraint in database
-     * @param taskName             the name of the task that should be executed
-     * @param parameter            the parameter that should be passed to the function
-     * @param plannedExecutionTime the time when the task should be executed
-     * @return taskId or null if a task with the given taskId already exists
-     */
-    public String defer(String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
-        return database.connect(connection -> defer(connection, taskId, taskName, parameter, plannedExecutionTime));
-    }
-
-    /**
-     * Persists a task in the database and defers execution of the function assigned to the taskName to the provided planned execution time.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param connection           the JDBC connection used to persist the task in the database
-     * @param taskId               the id of the task used as unique constraint in database
-     * @param taskName             the name of the task that should be executed
-     * @param parameter            the parameter that should be passed to the function
-     * @param plannedExecutionTime the time when the task should be executed
-     * @return taskId or null if a task with the given taskId already exists
-     */
-    public String defer(Connection connection, String taskId, String taskName, String parameter, LocalDateTime plannedExecutionTime) {
-        Task taskInstance = new Task(taskId, taskName, parameter, plannedExecutionTime);
-        return enqueue(connection, taskInstance);
-    }
-
-    /**
-     * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
-     * defined by the schedule.
-     *
-     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
-     *
-     * <p>If the runnable throws an exception the task is marked as failed and scheduling stops. Once the task successfully finishes by retrying it with {@link FailsafeExecutor#retry(Task)}, it gets scheduled for next execution.</p>
-     *
-     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
-     *
-     * @param taskName the name of the task that should be executed
-     * @param schedule the schedule that defines the planned execution times
-     * @param runnable the runnable
-     * @return taskId
-     */
-    public String schedule(String taskName, Schedule schedule, Throwing.Runnable runnable) {
-        return database.connect(connection -> schedule(connection, taskName, schedule, runnable));
-    }
-
-    /**
-     * Schedules the execution of the provided runnable. The task is then executed at the planned execution times
-     * defined by the schedule.
-     *
-     * <p>With a {@link Schedule} you get a recurring execution as long as Schedule returns a {@link LocalDateTime}.</p>
-     *
-     * <p>If the runnable throws an exception the task is marked as failed and scheduling stops. Once the task successfully finishes by retrying it with {@link FailsafeExecutor#retry(Task)}, it gets scheduled for next execution.</p>
-     *
-     * <p>Make sure your runnable is idempotent, since it gets executed at least once per scheduled execution time.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param connection the JDBC connection used to persist the task in the database
-     * @param taskName   the name of the task that should be executed
-     * @param schedule   the schedule that defines the planned execution times
-     * @param runnable   the runnable to execute
-     * @return taskId
-     */
-    public String schedule(Connection connection, String taskName, Schedule schedule, Throwing.Runnable runnable) {
-        if (taskRegistrationsByName.putIfAbsent(taskName, new TaskRegistration(taskName, schedule, ignore -> runnable.run())) != null) {
-            throw new IllegalArgumentException(String.format("Task '%s' is already registered", taskName));
-        }
-
-        taskNamesWithFunctions.add(taskName);
-
-        LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
-                .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
-
-        Task task = new Task(taskName, taskName, null, plannedExecutionTime);
-        return enqueue(connection, task);
-    }
-
-    /**
-     * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
-     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param taskId    the id of the task used as unique constraint in database
-     * @param taskName  the name of the task that should be executed
-     * @param parameter the parameter that should be passed to the function
-     * @param exception the exception to store
-     * @return taskId
-     */
-    public String recordFailure(String taskId, String taskName, String parameter, Exception exception) {
-        return database.connect(con -> recordFailure(con, taskId, taskName, parameter, exception));
-    }
-
-    /**
-     * Persists a task in the database and marks it as failed, so this task does not get executed. But it provides the possibility to retry or cancel the task.
-     * This can be useful to make incidents during synchronous execution visible in the FailsafeExecutor context and reuse its retry mechanism.
-     *
-     * <p>The taskId is used as unique constraint of this task. On conflict (task with this id already exists in database) insertion is simply skipped.
-     * In this case no exception will be thrown. Method returns gracefully.</p>
-     *
-     * <p>The provided connection is used for persisting the task in the database. Neither commit
-     * nor rollback is triggered. The control of the transactional behavior is completely up to the caller.</p>
-     *
-     * @param connection the JDBC connection used to persist the task in the database
-     * @param taskId     the id of the task used as unique constraint in database
-     * @param taskName   the name of the task that should be executed
-     * @param parameter  the parameter that should be passed to the function
-     * @param exception  the exception to store
-     * @return taskId
-     */
-    public String recordFailure(Connection connection, String taskId, String taskName, String parameter, Exception exception) {
-        LocalDateTime now = systemClock.now();
-        Task toSave = new Task(taskId, taskName, parameter, now, now, null, new ExecutionFailure(now, exception), 0, 0L);
-        return taskRepository.add(connection, toSave);
-    }
-
-    /**
-     * Returns the newest persisted tasks with a limit of 1000 rows.
-     * <p>
-     * The result set is ordered by CREATED_DATE DESC, ID DESC.
-     *
-     * @return list of all persisted tasks
-     */
-    public List<Task> findAll() {
-        return taskRepository.findAll(null, null, null, 0, 1000);
-    }
-
-    /**
-     * Returns all failed tasks with a limit of 1000 rows.
-     * <p>
-     * The result set is ordered by CREATED_DATE DESC, ID DESC.
-     *
-     * @return list of all failed tasks
-     */
-    public List<Task> findAllFailed() {
-        return taskRepository.findAll(null, null, true, 0, 1000);
-    }
-
-    /**
-     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
-     * <p>
-     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
-     *
-     * @param taskName  finds the tasks by constraining the taskName
-     * @param parameter finds the tasks by constraining the parameter
-     * @param failed    finds the tasks by constraining if they are failed or not failed.
-     * @param offset    offset to start from
-     * @param limit     limit of the result set
-     * @param sorts     sort order of the result set. See {@link Sort} for available sort criteria.
-     * @return list of all persisted tasks
-     */
-    public List<Task> findAll(String taskName, String parameter, Boolean failed, int offset, int limit, Sort... sorts) {
-        return taskRepository.findAll(taskName, parameter, failed, offset, limit, sorts);
-    }
-
-    /**
-     * Returns all tasks matching the criteria. A null value as parameter means not constraining the result.
-     * <p>
-     * If no sort order is specified then result set is ordered by CREATED_DATE DESC, ID DESC.
-     *
-     * @param taskName          finds the tasks by constraining the taskName
-     * @param parameter         finds the tasks by constraining the parameter
-     * @param failed            finds the tasks by constraining if they are failed or not failed.
-     * @param errorMessage      finds the tasks by constraining the error message contains text (case-insensitive)
-     * @param createdDateFromInclusive   finds the tasks by constraining from created date (inclusive).
-     * @param createdDateToExclusive     finds the tasks by constraining to created date (exclusive).
-     * @param failureDateFromInclusive   finds the tasks by constraining from failure date (inclusive).
-     * @param failureDateToExclusive     finds the tasks by constraining to failure date (exclusive).
-     * @param offset            offset to start from
-     * @param limit             limit of the result set
-     * @param sorts             sort order of the result set. See {@link Sort} for available sort criteria.
-     * @return                  list of all persisted tasks
-     */
-    public List<Task> findAll(String taskName,
-                              String parameter,
-                              Boolean failed,
-                              String errorMessage,
-                              LocalDateTime createdDateFromInclusive,
-                              LocalDateTime createdDateToExclusive,
-                              LocalDateTime failureDateFromInclusive,
-                              LocalDateTime failureDateToExclusive,
-                              int offset,
-                              int limit,
-                              Sort... sorts) {
-        return taskRepository.findAll(
-                taskName,
-                parameter,
-                failed,
-                errorMessage,
-                createdDateFromInclusive,
-                createdDateToExclusive,
-                failureDateFromInclusive,
-                failureDateToExclusive,
-                offset,
-                limit,
-                sorts);
-    }
-
-    /**
-     * Returns a single task.
-     *
-     * @param taskId the id of the task
-     * @return the task
-     */
-    public Optional<Task> findOne(String taskId) {
-        return Optional.ofNullable(taskRepository.findOne(taskId));
-    }
-
-    /**
-     * Returns the count of all tasks.
-     *
-     * @return count of all tasks
-     */
-    public int count() {
-        return taskRepository.count(null, null, null);
-    }
-
-    /**
-     * Returns the count of all failed tasks.
-     *
-     * @return count of all failed tasks
-     */
-    public int countFailedTasks() {
-        return taskRepository.count(null, null, true);
-    }
-
-    /**
-     * Returns the count of all tasks matching the criteria. A null value as parameter means not constraining the result.
-     *
-     * @param taskName  counts the tasks by constraining the taskName
-     * @param parameter counts the tasks by constraining the parameter
-     * @param failed    counts the tasks by constraining if they are failed or not failed.
-     * @return count of all tasks
-     */
-    public int count(String taskName, String parameter, Boolean failed) {
-        return taskRepository.count(taskName, parameter, failed);
-    }
-
-    public boolean retry(Task failedTask) {
-        return database.connect(con -> retry(con, failedTask));
-    }
-
-    public boolean retry(Connection con, Task failedTask) {
-        if (failedTask.isRetryable()) {
-            listeners.forEach(listener -> listener.retrying(failedTask.getName(), failedTask.getId(), failedTask.getParameter()));
-            taskRepository.deleteFailure(con, failedTask);
-            return true;
-        }
-
-        return false;
-    }
-
-    public boolean cancel(Task failedTask) {
-        return database.connect(con -> cancel(con, failedTask));
-    }
-
-    public boolean cancel(Connection con, Task failedTask) {
-        if (failedTask.isCancelable()) {
-            taskRepository.delete(con, failedTask);
-            return true;
-        }
-
-        return false;
     }
 
     /**
      * Registers a listener to observe task execution.
-     *
-     * @param listener the listener to register
      */
     public void subscribe(TaskExecutionListener listener) {
         listeners.add(listener);
@@ -747,211 +177,727 @@ public class FailsafeExecutor {
 
     /**
      * Removes the given listener from the list of observers.
-     *
-     * @param listener the listener to remove
      */
     public void unsubscribe(TaskExecutionListener listener) {
         listeners.remove(listener);
     }
 
     /**
-     * Returns if last run of {@link FailsafeExecutor} was successful.
-     *
-     * @return true if no exception occured during last run of {@link FailsafeExecutor}
+     * Schedules a task for execution based on the provided schedule.
      */
-    public boolean isLastRunFailed() {
-        return lastRunException != null;
+    public void schedule(String name, Schedule schedule, ThrowingRunnable runnable) throws SQLException {
+        schedule(name, null, schedule, ignore -> runnable.run());
     }
 
     /**
-     * Returns the exception of last run of {@link FailsafeExecutor} if an error occured.
-     *
-     * @return the exception of last run or null if last run was successful.
+     * Schedules a task for execution based on the provided schedule.
      */
-    public Exception lastRunException() {
-        return lastRunException;
-    }
-
-    /**
-     * Register an observer to make selection/query behavior of the persistent queue visible.
-     *
-     * @param observer the callback method that receives the latest queue selection results.
-     */
-    public void observeQueue(PersistentQueueObserver observer) {
-        persistentQueue.setObserver(observer);
-    }
-
-    /**
-     * Removes the queue observer. Callbacks are stopped.
-     */
-    public void stopQueueObservation() {
-        persistentQueue.setObserver(null);
-    }
-
-    private String enqueue(Connection connection, Task task) {
-        if (!taskRegistrationsByName.containsKey(task.getName())) {
-            throwTaskNotRegisteredException(task.getName());
+    public void schedule(String name, String parameter, Schedule schedule, TaskFunction fn) throws SQLException {
+        registerTask(name, fn);
+        if (scheduleRegistry.putIfAbsent(name, schedule) != null) {
+            throw new IllegalArgumentException("Task '%s' is already registered".formatted(name));
         }
 
-        notifyPersisting(task, task.getId());
-        return persistentQueue.add(connection, task);
+        LocalDateTime plannedExecutionTime = schedule.nextExecutionTime(systemClock.now())
+                .orElseThrow(() -> new IllegalArgumentException("Schedule must return at least one execution time"));
+
+        try (Connection connection = dataSource.getConnection()) {
+            execute(connection, null, name, name, parameter, plannedExecutionTime);
+        }
     }
 
-    private void executeNextTasks() {
+    /**
+     * Defers the execution of a task to a specified planned execution time.
+     */
+    public String defer(String taskName, String parameter, LocalDateTime plannedExecutionTime) throws SQLException {
+        String id = UUID.randomUUID().toString();
+        try (Connection conn = dataSource.getConnection()) {
+            execute(conn, null, id, taskName, parameter, plannedExecutionTime);
+        }
+        return id;
+    }
+
+    /**
+     * Defers the execution of a task to a specified planned execution time.
+     */
+    public void defer(String id, String taskName, String parameter, LocalDateTime plannedExecutionTime) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            execute(conn, null, id, taskName, parameter, plannedExecutionTime);
+        }
+    }
+
+    /**
+     * Defers the execution of a task to a specified planned execution time.
+     */
+    public void defer(Connection conn, String id, String taskName, String parameter, LocalDateTime plannedExecutionTime) throws SQLException {
+        execute(conn, null, id, taskName, parameter, plannedExecutionTime);
+    }
+
+    /**
+     * Submits a task for execution with the provided task name and parameter.
+     * This method generates a unique identifier for the task and assigns the current system time as the planned execution time.
+     */
+    public String execute(String taskName, String parameter) throws SQLException {
+        String id = UUID.randomUUID().toString();
+        try (Connection conn = dataSource.getConnection()) {
+            execute(conn, null, id, taskName, parameter, systemClock.now());
+        }
+        return id;
+    }
+
+    /**
+     * Submits a task for execution with the provided task name and parameter.
+     * This method generates a unique identifier for the task and assigns the current system time as the planned execution time.
+     */
+    public String execute(Connection conn, String taskName, String parameter) throws SQLException {
+        String id = UUID.randomUUID().toString();
+        execute(conn, null, id, taskName, parameter, systemClock.now());
+        return id;
+    }
+
+    /**
+     * Submits a task for execution with the specified task identifier, name, and parameter values.
+     * The planned execution time is set to the current system time during the invocation. If a task with the given identifier already exists, it will not
+     * create a new one in the database.
+     */
+    public void execute(String id, String taskName, String parameter) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            execute(conn, null, id, taskName, parameter, systemClock.now());
+        }
+    }
+
+    /**
+     * Submits a task for execution with the specified task identifier, name, and parameter values.
+     * The planned execution time is set to the current system time during the invocation. If a task with the given identifier already exists, it will not
+     * create a new one in the database.
+     */
+    public void execute(Connection conn, String id, String taskName, String parameter) throws SQLException {
+        execute(conn, null, id, taskName, parameter, systemClock.now());
+    }
+
+    /**
+     * Submits a task for execution to the provided queue with the specified task identifier, name, and parameter values.
+     * The planned execution time is set to the current system time during the invocation. If a task with the given identifier already exists, it will not
+     * create a new one in the database.
+     */
+    public void execute(Connection conn, String queueName, String id, String taskName, String parameter) throws SQLException {
+        execute(conn, queueName, id, taskName, parameter, systemClock.now());
+    }
+
+    /**
+     * Submits a task for execution with the specified task identifier, name, parameter values,
+     * and planned execution time. If a task with the given identifier already exists, it will not
+     * create a new one in the database.
+     */
+    public void execute(Connection conn, String id, String taskName, String parameter, LocalDateTime plannedExecutionTime) throws SQLException {
+        execute(conn, null, id, taskName, parameter, plannedExecutionTime);
+    }
+
+    /**
+     * Submits a task for execution with the specified task identifier, name, parameter values,
+     * and planned execution time. If a task with the given identifier already exists, it will not
+     * create a new one in the database.
+     */
+    public void execute(Connection conn, String queueName, String id, String taskName, String parameter, LocalDateTime plannedExecutionTime) throws SQLException {
+        if(queueName != null && !scheduleRegistry.containsKey(QUEUE_PREFIX + queueName)) {
+            throw new IllegalArgumentException("Queue '%s' is not registered".formatted(queueName));
+        }
+        notifyPersisting(taskName, id, parameter, plannedExecutionTime);
+        String sql = """
+                INSERT INTO FAILSAFE_TASK (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, QUEUE_NAME)
+                    SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP, ? FROM DUAL
+                    WHERE NOT EXISTS (SELECT 1 FROM FAILSAFE_TASK WHERE ID = ?)
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, id);
+            stmt.setString(2, taskName);
+            stmt.setString(3, parameter);
+            stmt.setTimestamp(4, Timestamp.valueOf(plannedExecutionTime.truncatedTo(ChronoUnit.MICROS)));
+            stmt.setString(5, queueName);
+            stmt.setString(6, id);
+            stmt.executeUpdate();
+        }
+        log.info("Task submitted: " + taskName + " (" + id + ") - parameter: " +  parameter + (queueName != null ? " - queue: " + queueName : ""));
+    }
+
+    public boolean retry(Task task) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            return retry(conn, task);
+        }
+    }
+
+    public boolean retry(Connection tx, Task task) throws SQLException {
+        String sql = """
+                UPDATE FAILSAFE_TASK
+                   SET FAIL_TIME = NULL,
+                       LOCK_TIME = NULL,
+                       NODE_ID = NULL,
+                       RETRY_COUNT = RETRY_COUNT + 1,
+                       EXCEPTION_MESSAGE = NULL,
+                       STACK_TRACE = NULL
+                 WHERE ID = ? AND FAIL_TIME IS NOT NULL
+                """;
+
+        notifyRetrying(new Task(task.id, task.name, task.parameter));
+
+        try (PreparedStatement stmt = tx.prepareStatement(sql)) {
+            stmt.setString(1, task.id);
+            int updated = stmt.executeUpdate();
+
+            return updated == 1;
+        }
+    }
+
+    /**
+     * Records a task failure in the database table if it is not already present.
+     *  <p>This task does not get executed. But it provides the possibility to retry or cancel the task.</p>
+     */
+    public boolean recordFailure(String taskId, String taskName, String parameter, Exception exception) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(true);
+            return recordFailure(connection, taskId, taskName, parameter, exception);
+        }
+    }
+
+    /**
+     * Records a task failure in the database table if it is not already present.
+     * <p>This task does not get executed. But it provides the possibility to retry or cancel the task.</p>
+     */
+    public boolean recordFailure(Connection tx, String taskId, String taskName, String parameter, Exception exception) throws SQLException {
+        String sql = """
+                INSERT INTO FAILSAFE_TASK (ID, NAME, PARAMETER, CREATED_DATE, PLANNED_EXECUTION_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE)
+                    SELECT ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ? FROM DUAL
+                    WHERE NOT EXISTS (SELECT 1 FROM FAILSAFE_TASK WHERE ID = ?)
+                """;
+
+        try (PreparedStatement stmt = tx.prepareStatement(sql)) {
+            LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
+            stmt.setString(1, taskId);
+            stmt.setString(2, taskName);
+            stmt.setString(3, parameter);
+            stmt.setTimestamp(4, Timestamp.valueOf(now));
+            stmt.setTimestamp(5, Timestamp.valueOf(now));
+            stmt.setString(6, exception != null ? exception.getMessage() : null);
+            stmt.setString(7, exception != null ? stackTraceToString(exception) : null);
+            stmt.setString(8, taskId);
+            int updated = stmt.executeUpdate();
+            return updated == 1;
+        }
+    }
+
+    public void cancel(Task task) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            delete(conn, task.id);
+        }
+    }
+
+    public Optional<Task> findOne(String id) throws SQLException {
+        String sql = "SELECT * FROM FAILSAFE_TASK WHERE ID=?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, id);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return Optional.of(Task.from(rs));
+            }
+        }
+        return Optional.empty();
+    }
+
+    public List<Task> findAll(Boolean failed) throws SQLException {
+        List<Task> tasks = new ArrayList<>();
+        String sql = "SELECT * FROM FAILSAFE_TASK";
+        if (failed != null && failed) sql += " WHERE FAIL_TIME IS NOT NULL";
+        if (failed != null && !failed) sql += " WHERE FAIL_TIME IS NULL";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                tasks.add(Task.from(rs));
+            }
+        }
+        return tasks;
+    }
+
+    // -------------------- INTERNAL EXECUTION --------------------
+
+    private void pollAndSubmit() {
+        if (!running) return;
         try {
-            // Check if the executor service has been terminated unexpectedly
-            if (executor.isShutdown() || executor.isTerminated()) {
-                logger.error("Executor service has been terminated unexpectedly. Attempting to restart...");
-                // Create a new executor since the old one cannot be restarted
-                executor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Failsafe-Executor-"));
-                
-                // Reschedule the tasks
-                logger.info("Rescheduling tasks after executor service restart");
-                executor.scheduleWithFixedDelay(
-                        this::executeNextTasks,
-                        initialDelay.toMillis(), pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-                
-                executor.scheduleWithFixedDelay(heartbeatService::heartbeat, 
-                        initialDelay.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
-                
-                logger.info("Executor service restarted successfully");
-                return;
+            int freeSlots = Math.max(0, queueSize - activeTaskIds.size());
+            if (freeSlots > 0) {
+                pickTasks(queueSize).forEach(task -> {
+                    activeTaskIds.add(task.id);
+                    executor.submit(() -> {
+                        try {
+                            executeTask(task);
+                        } catch (Exception e) {
+                            uncaughtErrorHandler.accept(e);
+                        }
+                    });
+                });
             }
-            
-            int idleWorkerCount = workerPool.spareQueueCount();
-            if (idleWorkerCount == 0) {
-                logger.debug("No idle workers available, skipping task execution");
-                return;
+        } catch (Exception e) {
+            log.log(Level.SEVERE, "Polling error", e);
+            uncaughtErrorHandler.accept(e);
+        }
+    }
+
+    private List<Task> pickTasks(int limit) throws SQLException {
+        if (taskRegistry.isEmpty()) return Collections.emptyList();
+        Set<String> registeredTaskNames = taskRegistry.keySet().stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new));
+        String processableTasksPlaceHolder = IntStream.range(0, registeredTaskNames.size()).mapToObj(s -> "?").collect(Collectors.joining(","));
+
+        List<Task> tasks = new ArrayList<>();
+        String sql = """
+                SELECT ID, NAME, PARAMETER, LOCK_TIME, NODE_ID
+                  FROM FAILSAFE_TASK
+                 WHERE (LOCK_TIME IS NULL OR LOCK_TIME < ?)
+                   AND FAIL_TIME IS NULL
+                   AND QUEUE_NAME IS NULL
+                   AND PLANNED_EXECUTION_TIME <= ?
+                   AND NAME IN (%s) 
+                   AND ROWNUM <= ? 
+                 ORDER BY PLANNED_EXECUTION_TIME
+                 FOR UPDATE SKIP LOCKED
+                """;
+
+        sql = sql.formatted(processableTasksPlaceHolder);
+
+        String updateSql = "UPDATE FAILSAFE_TASK SET LOCK_TIME = ?, NODE_ID = ? WHERE ID = ?";
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql);
+             PreparedStatement updateStmt = connection.prepareStatement(updateSql)) {
+            connection.setAutoCommit(false);
+
+            LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
+            stmt.setTimestamp(1, Timestamp.valueOf(now.minus(lockTimeout)));
+            stmt.setTimestamp(2, Timestamp.valueOf(now));
+            int cnt = 3;
+            for (String taskName : registeredTaskNames) {
+                stmt.setString(cnt++, taskName);
+            }
+            stmt.setInt(cnt, limit);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String id = rs.getString("ID");
+                String name = rs.getString("NAME");
+                String parameter = rs.getString("PARAMETER");
+                updateStmt.setTimestamp(1, Timestamp.valueOf(now));
+                updateStmt.setString(2, nodeId);
+                updateStmt.setString(3, id);
+                updateStmt.addBatch();
+                tasks.add(new Task(id, name, parameter));
             }
 
-            List<Task> toExecute = persistentQueue.peekAndLock(taskNamesWithFunctions, idleWorkerCount, nodeId);
-            if (toExecute.isEmpty()) {
-                logger.debug("No tasks to execute");
-                return;
+            if (!tasks.isEmpty()) updateStmt.executeBatch();
+
+            connection.commit();
+        }
+
+        if (!tasks.isEmpty()) log.fine("Picked " + tasks.size() + " task(s).");
+        return tasks;
+    }
+
+    private void executeTask(Task task) throws SQLException {
+        LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
+        log.info("Executing task: " + task.name + " (" + task.id + ")");
+        try {
+            String sql = "UPDATE FAILSAFE_TASK SET START_TIME = ? WHERE ID = ?";
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setTimestamp(1, Timestamp.valueOf(now));
+                stmt.setString(2, task.id);
+                stmt.executeUpdate();
             }
 
-            logger.info("Executing " + toExecute.size() + " tasks");
-            for (Task task : toExecute) {
-                try {
-                    TaskRegistration registration = taskRegistrationsByName.get(task.getName());
-                    Execution execution = new Execution(database, task, registration, listeners, systemClock, taskRepository);
-                    logger.debug("Submitting task: " + task.getName() + " (ID: " + task.getId() + ")");
-                    workerPool.execute(task, execution::perform);
-                } catch (Exception e) {
-                    logger.error("Failed to submit task: " + task.getName() + " (ID: " + task.getId() + ")", e);
-                    // Continue with other tasks even if one fails
+            TaskRegistration taskRegistration = taskRegistry.get(task.name);
+
+            if (taskRegistration.function != null) {
+                taskRegistration.function.accept(task.parameter);
+            }
+
+            try (Connection connection = dataSource.getConnection()) {
+                connection.setAutoCommit(false);
+
+                if (taskRegistration.trxConsumingFunction != null) {
+                    taskRegistration.trxConsumingFunction.accept(connection, task.parameter);
                 }
+
+                Schedule schedule = scheduleRegistry.get(task.name);
+                if (schedule != null) {
+                    Optional<LocalDateTime> next = schedule.nextExecutionTime(systemClock.now());
+                    if (next.isPresent()) rescheduleTask(connection, task.id, Timestamp.valueOf(next.get()));
+                    else delete(connection, task.id);
+                } else delete(connection, task.id);
+
+                connection.commit();
             }
 
-            clearException();
+            notifySucceeded(task);
 
         } catch (Exception e) {
-            storeException(e);
+            markFailed(task.id, e);
+            notifyFailed(task, e);
+        } finally {
+            activeTaskIds.remove(task.id);
         }
     }
 
-    void storeException(Exception e) {
-        logger.error("An error occurred in FailsafeExecutor", e);
-        lastRunException = e;
-    }
-
-    void clearException() {
-        lastRunException = null;
-    }
-
-    private void notifyPersisting(Task task, String taskId) {
-        String name = task.getName();
-        String parameter = task.getParameter();
-        listeners.forEach(listener -> listener.persisting(name, taskId, parameter));
-    }
-
-    private void validateDatabase(DataSource dataSource) throws SQLException {
-        List<Task> tasks = new ArrayList<>();
-
-        // validate table structure (with persist)
+    private void extendLeasesBatch() {
+        if (activeTaskIds.isEmpty() || !running) return;
+        String sql = "UPDATE FAILSAFE_TASK SET LOCK_TIME = ? WHERE NODE_ID = ? AND ID = ?";
         try (Connection connection = dataSource.getConnection();
-             Transaction transaction = new Transaction(connection)) { // no commit of trx
-            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
-            tasks.add(new Task(UUID.randomUUID().toString(), "validateDatabaseTableTaskName", null, systemClock.now()));
-            for (Task task : tasks) {
-                if (taskRepository.add(connection, task) == null) {
-                    throw new IllegalStateException("Validation of database failed! Unable to persist tasks!");
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+
+            LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
+            for (String id : activeTaskIds) {
+                stmt.setTimestamp(1, Timestamp.valueOf(now));
+                stmt.setString(2, nodeId);
+                stmt.setString(3, id);
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+            connection.commit();
+        } catch (SQLException e) {
+            log.log(Level.WARNING, "Heartbeat extension failed", e);
+            uncaughtErrorHandler.accept(e);
+        }
+    }
+
+
+    private void pollQueue(String queueName) {
+        if (!running) return;
+
+        try {
+            List<Task> tasks;
+            while (!(tasks = fetchQueuedTasks(queueName)).isEmpty()) {
+                for (Task task : tasks) {
+                    if(!running) { // break out if shutdown got called
+                        return;
+                    }
+
+                    try {
+                        executeTask(task);
+                    } catch (Exception e) {
+                        log.log(Level.SEVERE, "Queue execution error", e);
+                        uncaughtErrorHandler.accept(e);
+                    }
                 }
             }
-            transaction.commit();
-        }
-
-        // validate execute batch return result (with lock)
-        // check SUCCESS_NO_INFO is not returned by jdbc driver
-        // see https://jira.mariadb.org/browse/CONJ-920
-        try (Connection connection = dataSource.getConnection();
-             Transaction transaction = new Transaction(connection)) { // no commit of trx
-            tasks = taskRepository.lock(connection, tasks, null);
-            if (tasks.size() != 2) {
-                throw new IllegalStateException("Validation of database failed! Unable to lock tasks!");
-            }
-            transaction.commit();
-        }
-
-        // cleanup
-        try (Connection connection = dataSource.getConnection();
-             Transaction transaction = new Transaction(connection)) { // no commit of trx
-            for (Task task : tasks) {
-                taskRepository.delete(connection, task);
-            }
-            transaction.commit();
+        } catch (Exception e) {
+            log.log(Level.SEVERE, "Queue polling error", e);
+            uncaughtErrorHandler.accept(e);
         }
     }
 
-    private String throwTaskNotRegisteredException(String taskName) {
-        throw new IllegalArgumentException(String.format("Task '%s' not registered. Use 'registerTask' if the task should run locally or 'registerRemoteTask' if the task should run remotely.", taskName));
+    private List<Task> fetchQueuedTasks(String queueName) throws SQLException {
+        Set<String> registeredTaskNames = taskRegistry.keySet().stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new));
+        String processableTasksPlaceHolder = IntStream.range(0, registeredTaskNames.size()).mapToObj(s -> "?").collect(Collectors.joining(","));
+
+        List<Task> tasks = new ArrayList<>();
+
+        String sql = """
+                SELECT ID, NAME, PARAMETER 
+                    FROM FAILSAFE_TASK
+                WHERE QUEUE_NAME = ?
+                    AND FAIL_TIME IS NULL
+                    AND PLANNED_EXECUTION_TIME <= ?
+                    AND NAME IN (%s) 
+                ORDER BY PLANNED_EXECUTION_TIME
+                """;
+
+        sql = sql.formatted(processableTasksPlaceHolder);
+
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(sql)) {
+
+            LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
+
+            stmt.setString(1, queueName);
+            stmt.setTimestamp(2, Timestamp.valueOf(now));
+            int cnt = 3;
+            for (String taskName : registeredTaskNames) {
+                stmt.setString(cnt++, taskName);
+            }
+
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String id = rs.getString("ID");
+                String name = rs.getString("NAME");
+                String parameter = rs.getString("PARAMETER");
+                tasks.add(new Task(id, name, parameter));
+            }
+        }
+        return tasks;
     }
 
-    static class TaskRegistration {
+    // -------------------- TASK STATE --------------------
 
-        final String name;
-        final Schedule schedule;
-        final TaskFunction<String> function;
-        final TransactionalTaskFunction<String> transactionalFunction;
+    private void rescheduleTask(Connection connection, String taskId, Timestamp nextRun) throws SQLException {
+        String sql = "UPDATE FAILSAFE_TASK SET PLANNED_EXECUTION_TIME=?, LOCK_TIME=NULL, NODE_ID=NULL WHERE ID=?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setTimestamp(1, nextRun);
+            stmt.setString(2, taskId);
+            stmt.executeUpdate();
+        }
+    }
 
-        TaskRegistration(String name) {
-            this.name = name;
-            this.schedule = null;
-            this.function = null;
-            this.transactionalFunction = null;
+    private void delete(Connection connection, String taskId) throws SQLException {
+        String sql = "DELETE FROM FAILSAFE_TASK WHERE ID=?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, taskId);
+            stmt.executeUpdate();
+        }
+    }
+
+    private void markFailed(String taskId, Exception ex) throws SQLException {
+        String sql = """
+                UPDATE FAILSAFE_TASK
+                   SET FAIL_TIME = ?,
+                       EXCEPTION_MESSAGE = ?,
+                       STACK_TRACE = ?
+                 WHERE ID = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(true);
+            stmt.setTimestamp(1, Timestamp.valueOf(systemClock.now().truncatedTo(ChronoUnit.MICROS)));
+            stmt.setString(2, ex.getMessage());
+            stmt.setString(3, stackTraceToString(ex));
+            stmt.setString(4, taskId);
+            stmt.executeUpdate();
+        }
+    }
+
+    // -------------------- HELPERS --------------------
+
+    private String stackTraceToString(Throwable t) {
+        StringWriter sw = new StringWriter();
+        t.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private void validateDatabase() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            execute(connection, UUID.randomUUID().toString(), "validateDatabaseTable", null);
+            connection.rollback();
+        }
+    }
+
+    // -------------------- OBSERVER CALLS --------------------
+
+    private void notifyPersisting(String name, String id, String param, LocalDateTime plannedExecutionTime) {
+        listeners.forEach(l -> safeInvoke(() -> l.persisting(name, id, param, plannedExecutionTime)));
+    }
+
+    private void notifyRetrying(Task task) {
+        listeners.forEach(l -> safeInvoke(() -> l.retrying(task.name, task.id, task.parameter)));
+    }
+
+    private void notifySucceeded(Task task) {
+        listeners.forEach(l -> safeInvoke(() -> l.succeeded(task.name, task.id, task.parameter)));
+    }
+
+    private void notifyFailed(Task task, Exception ex) {
+        listeners.forEach(l -> safeInvoke(() -> l.failed(task.name, task.id, task.parameter, ex)));
+    }
+
+    private void safeInvoke(Runnable r) {
+        try {
+            r.run();
+        } catch (Exception e) {
+            log.log(Level.WARNING, "Listener threw exception", e);
+            uncaughtErrorHandler.accept(e);
+        }
+    }
+
+    // -------------------- STRUCTS --------------------
+
+    private record TaskRegistration(TaskFunction function, TransactionalTaskFunction trxConsumingFunction) {
+    }
+
+    public interface SystemClock {
+        LocalDateTime now();
+    }
+
+    public interface Schedule {
+        /**
+         * Defines a schedule for executing a task, which can be either a one-time or a recurring execution.
+         * <p><b>One-time execution:</b> Return {@link Optional#empty()} after the task has been executed, indicating that no further executions are planned.</p>
+         * <p><b>Recurring execution:</b> Always return an {@link Optional} containing the next scheduled execution time. For an example, see {@link DailySchedule}.</p>
+         */
+        Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime);
+    }
+
+    public interface TaskExecutionListener {
+        void persisting(String name, String id, String parameter, LocalDateTime plannedExecutionTime);
+        void retrying(String name, String id, String parameter);
+        void succeeded(String name, String id, String parameter);
+        void failed(String name, String id, String parameter, Exception exception);
+    }
+
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    public interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
+
+    public interface TaskFunction {
+        void accept(String param) throws Exception;
+    }
+
+    public interface TransactionalTaskFunction {
+        void accept(Connection connection, String param) throws Exception;
+    }
+
+    public record Task(String id, String name, String parameter, String nodeId, String queueName, LocalDateTime creationTime,
+                       LocalDateTime plannedExecutionTime, LocalDateTime lockTime, LocalDateTime startTime, ExecutionFailure executionFailure,
+                       int retryCount) {
+
+        public Task(String id, String name, String parameter) {
+            this(id, name, parameter, null, null, null, null, null, null, null, 0);
         }
 
-        TaskRegistration(String name, TaskFunction<String> function) {
-            this.name = name;
-            this.schedule = null;
-            this.function = function;
-            this.transactionalFunction = null;
+        public boolean isLocked() {
+            return lockTime != null;
         }
 
-        TaskRegistration(String name, TransactionalTaskFunction<String> transactionalFunction) {
-            this.name = name;
-            this.schedule = null;
-            this.function = null;
-            this.transactionalFunction = transactionalFunction;
+        public boolean isExecutionFailed() {
+            return executionFailure != null;
         }
 
-        TaskRegistration(String name, Schedule schedule, TaskFunction<String> function) {
-            this.name = name;
-            this.schedule = schedule;
-            this.function = function;
-            this.transactionalFunction = null;
+        public boolean isCancelable() {
+            return !isLocked();
         }
 
-        boolean requiresTransaction() {
-            return transactionalFunction != null;
+        public boolean isRetryable() {
+            return isExecutionFailed();
         }
 
-        boolean isScheduled() {
-            return schedule != null;
+        public static Task from(ResultSet rs) throws SQLException {
+            Timestamp lockTime = rs.getTimestamp("LOCK_TIME");
+            Timestamp plannedExecutionTime = rs.getTimestamp("PLANNED_EXECUTION_TIME");
+            Timestamp startTime = rs.getTimestamp("START_TIME");
+            return new Task(
+                    rs.getString("ID"),
+                    rs.getString("NAME"),
+                    rs.getString("PARAMETER"),
+                    rs.getString("NODE_ID"),
+                    rs.getString("QUEUE_NAME"),
+                    rs.getTimestamp("CREATED_DATE").toLocalDateTime(),
+                    plannedExecutionTime != null ? plannedExecutionTime.toLocalDateTime() : null,
+                    lockTime != null ? lockTime.toLocalDateTime() : null,
+                    startTime != null ? startTime.toLocalDateTime() : null,
+                    ExecutionFailure.from(rs),
+                    rs.getInt("RETRY_COUNT"));
         }
+    }
 
-        boolean isRegularTask() {
-            return !isScheduled() && !requiresTransaction();
+    public record ExecutionFailure(LocalDateTime failTime, String exceptionMessage, String stackTrace) {
+
+        public static ExecutionFailure from(ResultSet rs) throws SQLException {
+            Timestamp failTime = rs.getTimestamp("FAIL_TIME");
+            if (rs.wasNull()) {
+                return null;
+            }
+            String exceptionMessage = rs.getString("EXCEPTION_MESSAGE");
+            StringWriter writer = new StringWriter();
+            try {
+                rs.getCharacterStream("STACK_TRACE").transferTo(writer);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            String stackTrace = writer.toString();
+
+            return new ExecutionFailure(failTime.toLocalDateTime(), exceptionMessage, stackTrace);
+        }
+    }
+
+    public static <T> TaskWaitResult<T> waitForTasks(FailsafeExecutor failsafeExecutor,  Duration timeout, ThrowingRunnable taskProducer) throws Exception {
+        return waitForTasks(failsafeExecutor, timeout, () -> { taskProducer.run(); return null;});
+    }
+
+    public static <T> TaskWaitResult<T> waitForTasks(FailsafeExecutor failsafeExecutor, Duration timeout, ThrowingSupplier<T> taskProducer) throws Exception {
+        Map<String, LocalDateTime> activeTasks = new ConcurrentHashMap<>();
+        List<Task> failures = Collections.synchronizedList(new ArrayList<>());
+        Object lock = new Object();
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+
+        TaskExecutionListener listener = new TaskExecutionListener() {
+            public void persisting(String n, String i, String p, LocalDateTime plannedExecutionTime) {
+                synchronized (lock) {
+                    activeTasks.put(i+n, plannedExecutionTime.truncatedTo(ChronoUnit.MICROS));
+                }
+            }
+            public void retrying(String n, String i, String p) {
+                synchronized (lock) {
+                    activeTasks.put(i+n, failsafeExecutor.systemClock.now().truncatedTo(ChronoUnit.MICROS));
+                }
+            }
+            public void succeeded(String n, String i, String p) { done(i+n); }
+            public void failed(String n, String i, String p, Exception e) {
+                failures.add(new Task(i, n, p));
+                done(i+n);
+            }
+            private void done(String id) {
+                synchronized (lock) {
+                    if(activeTasks.remove(id) != null) {
+                        var now = failsafeExecutor.systemClock.now();
+                        if (!hasDueTasks(activeTasks, now))
+                            lock.notifyAll();
+                    }
+                }
+            }
+        };
+
+        failsafeExecutor.findAll(false).stream().filter(task -> failsafeExecutor.taskRegistry.containsKey(task.name)).forEach(task -> listener.persisting(task.name, task.id, task.parameter, task.plannedExecutionTime));
+
+        failsafeExecutor.subscribe(listener);
+        try {
+            T value = taskProducer.get();
+            synchronized (lock) {
+                while (hasDueTasks(activeTasks, failsafeExecutor.systemClock.now().truncatedTo(ChronoUnit.MICROS))) {
+                    long remaining = deadline - System.currentTimeMillis();
+                    if (remaining <= 0) {
+                        throw new TimeoutException("Timed out waiting for tasks to complete.");
+                    }
+                    lock.wait(remaining);
+                }
+            }
+
+            return new TaskWaitResult<>(value, failures);
+        } finally {
+            failsafeExecutor.unsubscribe(listener);
+        }
+    }
+
+    private static boolean hasDueTasks(Map<String, LocalDateTime> activeTasks, LocalDateTime now) {
+        return activeTasks.entrySet().stream()
+                .anyMatch(entry -> entry.getValue().isBefore(now) || entry.getValue().isEqual(now));
+    }
+
+    public record TaskWaitResult<T> (T value, List<Task> failures){}
+
+    public record DailySchedule(LocalTime dailyTime) implements Schedule {
+        @Override
+        public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+            LocalDate date = currentTime.toLocalDate();
+            if (!dailyTime.isAfter(currentTime.toLocalTime()))
+                date = date.plusDays(1);
+            return Optional.of(LocalDateTime.of(date, dailyTime));
+        }
+    }
+
+    public record DurationSchedule(Duration duration) implements Schedule {
+        @Override
+        public Optional<LocalDateTime> nextExecutionTime(LocalDateTime currentTime) {
+            return Optional.of(currentTime.plus(duration));
         }
     }
 }
