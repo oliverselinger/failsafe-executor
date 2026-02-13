@@ -6,10 +6,16 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import os.failsafe.executor.db.testcontainers.*;
-import os.failsafe.executor.utils.Database;
+import os.failsafe.executor.db.testcontainers.H2TestContainer;
+import os.failsafe.executor.db.testcontainers.MariaDbTestContainer;
+import os.failsafe.executor.db.testcontainers.MySqlTestContainer;
+import os.failsafe.executor.db.testcontainers.OracleTestContainer;
+import os.failsafe.executor.db.testcontainers.PostgresTestContainer;
+import os.failsafe.executor.db.testcontainers.TestDatabaseContainer;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 /**
@@ -21,7 +27,6 @@ public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCa
     private final static Logger log = LoggerFactory.getLogger(TestcontainersDbExtension.class);
 
     private final TestDatabaseContainer databaseContainer;
-    private Database database;
     private DataSource dataSource;
 
     /**
@@ -45,12 +50,11 @@ public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCa
     public void beforeAll(ExtensionContext extensionContext) throws SQLException {
         databaseContainer.start();
         dataSource = databaseContainer.createDataSource();
-        database = new Database(dataSource);
         createTable();
     }
 
     @Override
-    public void afterEach(ExtensionContext extensionContext) {
+    public void afterEach(ExtensionContext extensionContext) throws SQLException {
         truncateTable();
     }
 
@@ -70,39 +74,34 @@ public class TestcontainersDbExtension implements BeforeAllCallback, AfterEachCa
         return dataSource;
     }
 
-    public Database database() {
-        return database;
-    }
-
-    public void createTable() {
+    public void createTable() throws SQLException {
         String createTableScript = databaseContainer.getCreateTableScript();
         String[] statements = createTableScript.split("\\r\\n\\r\\n|\\n\\n");
         
         // First drop the table if it exists
-        try {
-            database.execute("DROP TABLE FAILSAFE_TASK");
-        }catch (Exception e) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("DROP TABLE FAILSAFE_TASK")) {
+            stmt.execute();
+        } catch (Exception e) {
             // intentionally left empty
         }
         
         // Then execute each statement in the script
         for (String statement : statements) {
             if (!statement.trim().isEmpty()) {
-                database.execute(statement);
+                try (Connection connection = dataSource.getConnection();
+                     PreparedStatement stmt = connection.prepareStatement(statement)) {
+                    stmt.execute();
+                }
             }
         }
     }
 
-    public void truncateTable() {
-        database.update(databaseContainer.getTruncateTableStatement());
-    }
-
-    public void dropTable() {
-        database.execute("DROP TABLE FAILSAFE_TASK");
-    }
-
-    public void deleteColumn(String columnName) {
-        database.execute("ALTER TABLE FAILSAFE_TASK DROP COLUMN " + columnName);
+    public void truncateTable() throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(databaseContainer.getTruncateTableStatement())) {
+            stmt.execute();
+        }
     }
 
     private static TestDatabaseContainer createDatabaseContainer(DatabaseType databaseType) {

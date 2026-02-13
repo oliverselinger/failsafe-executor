@@ -14,6 +14,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 * **Multi-node compatible**. Coordination between nodes with optimistic locking.
 * **Retry-able**. Exceptions are captured. Failed tasks can be retried.
 * **Routing** tasks amongst different nodes. An executor only picks up registered tasks.
+* **Queues** ensure tasks are executed sequentially when applied. 
 * **Lightweight**. Small code base.
 * **No dependencies**.
 * **No reflection**.
@@ -25,7 +26,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 <dependency>
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>2.2.2</version>
+    <version>3.0.0</version>
 </dependency>
 ```
 
@@ -98,6 +99,17 @@ For a **recurring execution** let your `Schedule` always return the next planned
 
 As before, make sure your business logic is **idempotent**, since it gets executed at least once per scheduled execution.
 
+## Queue Tasks
+
+You can submit tasks to a **queue** for **serial execution**. Tasks are executed in the order they are queued, ensuring one task completes before the next starts. 
+You have to that register the queue once like tasks.
+
+```java
+// Enqueue tasks
+failsafeExecutor.registerQueue("QueueA");
+failsafeExecutor.execute(..., "QueueA", ...);
+```
+
 ## Task failures
 
 Any exceptions occurring during the execution of a task are captured. The exception's message and stacktrace are saved to the task. The task itself is marked as failed.
@@ -146,52 +158,27 @@ failsafeExecutor.subscribe(executionListener);
 The `persisting` method gets called before a task gets persisted in database. At the end of the execution, depending on the outcome either `succeeded` or `failed` is called.
 A retry of a failed task causes a call of method `retrying` before failure state gets deleted in database.
 
-### Monitoring the persistent queue with its lock mechanism
+### Handling uncaught exceptions
 
-You can pass an implementation of the `PersistentQueue.Observer` interface to the following method:
-
-```java
-failsafeExecutor.observeQueue(observer);
-```
-
-On each select/lock run of the persistent queue the observer is called back. Three parameters are passed, indicating the limit used for the select query (spare space in queue), the result count of the select query for the next tasks and the lock count. The lock count states how many tasks of the select result got locked for execution.
-
-## Metrics
-
-The `FailsafeExecutor` provides a utility class to collect metrics which get you the sum and the rate of persisted, failed and finished (failed and succeeded) tasks.
-
-Create an instance of class `FailsafeExecutorMetricsCollector` and register it as subscriber:
-
-```java
-FailsafeExecutorMetricsCollector metricsCollector = new FailsafeExecutorMetricsCollector();
-failsafeExecutor.subscribe(metricsCollector);
-```
-
-The default time unit for the rate calculation is seconds. You can override it by passing your `TimeUnit` as parameter to the constructor.
+You can register an error handler `FailsafeExecutor.registerErrorHandler(...)` to get notified in case some uncaught exception happens within the process of handling tasks.
 
 ## Health check
 
-The `FailsafeExecutor` provides a health check through two methods. One that returns if last run of `FailsafeExecutor` was successful.
+The `FailsafeExecutor` provides a health check.
 
 ```java
-failsafeExecutor.isLastRunFailed();
-```
-
-And another method to retrieve the exception of the last run.
-
-```java
-Exception e = failsafeExecutor.lastRunException();
+failsafeExecutor.isRunning();
 ```
 
 ## Shutdown of the executor
 
-It is important to shutdown the FailsafeExecutor properly by calling the `stop` method. E.g. create a shutdownHook
+It is important to shutdown the FailsafeExecutor properly by calling the `shutdown` method. E.g. create a shutdownHook
 
 ```java
 Runtime.getRuntime().addShutdownHook(new Thread() {
     @Override
     public void run() {
-        failsafeExecutor.stop(15, TimeUnit.SECONDS);
+        failsafeExecutor.shutdown();
     }
 });
 ```
@@ -208,47 +195,12 @@ The `FailsafeExecutor` can be created using the all-args constructor. The follow
 | `initialDelay` | `Duration` |  10 sec | The time to delay first execution to fetch tasks of the `FailsafeExecutor`. |
 | `pollingInterval` | `Duration` |  5 sec | How often the `FailsafeExecutor` checks for tasks to execute. |
 | `lockTimeout` | `Duration` |  5 min | If a task is locked for execution, but is not deleted nor updated due to e.g. a system crash, it will again be considered for execution after this timeout. Minimum recommended lockTimeout is 1 min. |
-| `tableName` | `String` |  `FAILSAFE_TASK` | Name of the database table. |
 
 **Note:** The lockTime is periodically updated by a scheduled heartbeat. It runs every `lockTimeout / 4` duration.   
 
 ## Logging Configuration
 
-The `FailsafeExecutor` uses Java's built-in logging (java.util.logging). By default, no configuration is defined. You can provide a configuration in two ways:
-
-### 1. Using a custom properties file
-
-```java
-// Load custom configuration from a file
-failsafeExecutor.loadLoggingConfiguration("/path/to/custom-logging.properties");
-```
-
-### 2. Using Properties object
-
-```java
-// Create custom logging properties
-Properties props = new Properties();
-props.setProperty("handlers", "java.util.logging.ConsoleHandler");
-props.setProperty(".level", "INFO");
-props.setProperty("os.failsafe.executor.level", "FINE");
-props.setProperty("java.util.logging.ConsoleHandler.level", "FINE");
-props.setProperty("java.util.logging.ConsoleHandler.formatter", "java.util.logging.SimpleFormatter");
-props.setProperty("java.util.logging.SimpleFormatter.format", 
-                  "[CUSTOM] %1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS.%1$tL %4$s [%3$s] %5$s%6$s%n");
-
-// Load custom configuration from properties
-failsafeExecutor.loadLoggingConfiguration(props);
-```
-
-### 3. Using system property
-
-You can also set the system property `java.util.logging.config.file` to point to your custom configuration file:
-
-```
-java -Djava.util.logging.config.file=/path/to/custom-logging.properties -jar your-application.jar
-```
-
-### 4. Redirecting Logs with JavaLoggingBridgeHandler
+The `FailsafeExecutor` uses Java's built-in logging (java.util.logging). By default, no configuration is defined. We suggest to redirecting logs via a JavaLoggingBridgeHandler.
 
 Use an implementation of java.util.logging.Handler to route Java Util Logging (java.util.logging) messages into your preferred logging framework. This is how you install the handler:
 
@@ -256,35 +208,18 @@ Use an implementation of java.util.logging.Handler to route Java Util Logging (j
 LogManager.getLogManager().getLogger("").addHandler(new JavaLoggingBridgeHandler());
 ```
 
-For convenience, the `FailsafeExecutor` also provides methods to quickly change log levels:
-
-```java
-// Set specific log level
-failsafeExecutor.setLogLevel(Level.INFO);
-
-// Enable debug logging (FINE level)
-failsafeExecutor.enableDebugLogging();
-
-// Enable error-only logging (SEVERE level)
-failsafeExecutor.enableErrorOnlyLogging();
-```
-
 ## Testability
 
-In class `FailsafeExecutorTestUtility` you find some static methods to support you with your integration tests. Just wrap your business logic with `awaitAllTasks`. This registers a listener before executing your business logic.
+There is a static method to support you with your integration tests. Just wrap your business logic with `waitForTasks`. This registers a listener before executing your business logic.
 With it all created tasks during the execution of your business logic are registered. After execution finishes, a barrier blocks the calling thread until all tasks got executed.
 
 ```java
-awaitAllTasks(failsafeExecutor, () -> {
-    ... // your business logic
-}, failedTasks -> {
-    ... // e.g. let your unit test case fail immediately
-});
+waitForTasks(failsafeExecutor, ...);
 ```
 
-After all tasks finished execution, failed tasks are collected and are passed to the callback consumer function. E.g. with that call you can let your test case fail immediately.
+After all tasks finished execution, failed tasks are collected and are passed back as return result. E.g. with that you can let your test case fail immediately.
 
-In some cases you don't want to wait for certain tasks to finish, like deferred ones. You can ignore certain tasks by passing a `NoWaitPredicate` as parameter.
+The method ignores tasks where the planned execution date is in future, which means it does not wait for such tasks.
 
 ## FAQ
 
@@ -298,7 +233,7 @@ on different nodes.
 #### Are tasks executed in the insertion order?
 
 No. Basically, the `FailsafeExecutor` orders tasks by creation date for locking. However then locked tasks are executed by a pool of threads. So execution order can not be guaranteed. Furthermore more randomness is applied
-if the `FailsafeExecutor` is running on multiple nodes.
+if the `FailsafeExecutor` is running on multiple nodes. If you FIFO execution, register and use a queue.
 
 #### Is there any retry mechanism?
 
@@ -311,7 +246,7 @@ Yes. Wrap your `dataSource` object with a `TransactionAwareDataSourceProxy` befo
 ```java
 @Bean(destroyMethod = "stop")
 public FailsafeExecutor failsafeExecutor(DataSource dataSource) {
-    FailsafeExecutor failsafeExecutor = new FailsafeExecutor(new TransactionAwareDataSourceProxy(dataSource));
+    FailsafeExecutor failsafeExecutor = new FailsafeExecutor(...., new TransactionAwareDataSourceProxy(dataSource), ...);
     failsafeExecutor.start();
     return failsafeExecutor;
 }
@@ -323,7 +258,7 @@ Yes.
 
 #### What Java versions are supported?
 
-Requires Java 8+.
+Requires Java 17+.
 
 #### Are the artifacts available in other repositories than Maven Central Repository?
 
@@ -353,11 +288,3 @@ Example usage:
 ```
 TEST_DB=MARIADB mvn test
 ```
-
-#### What should you do in case you experience an exception with "CAUTION! JDBC driver returns SUCCESS_NO_INFO..." ?
-
-This states that your JDBC driver cannot return the effected row count of batch executed statements. Locking of tasks is performed via batch updates
-plus it utilizes optimistic locking. So it depends on the effected row count to work properly. 
-
-We experienced this issue with MariaDB JDBC driver verions > 3. See https://jira.mariadb.org/browse/CONJ-920. In this case, a simple change of the JDBC driver configuration changes the behavior to return the effected row count.
-
