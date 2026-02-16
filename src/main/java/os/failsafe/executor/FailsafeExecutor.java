@@ -56,6 +56,7 @@ public class FailsafeExecutor {
     private ScheduledExecutorService scheduler;
     private ScheduledExecutorService heartbeatExecutor;
     private volatile boolean running = false;
+    private final boolean isOracle;
 
     private final Map<String, TaskRegistration> taskRegistry = new ConcurrentHashMap<>();
     private final Map<String, Schedule> scheduleRegistry = new ConcurrentHashMap<>();
@@ -77,6 +78,10 @@ public class FailsafeExecutor {
         this.queueSize = queueSize;
         this.dataSource = dataSource;
         validateDatabase();
+        try (var conn = dataSource.getConnection()) {
+            String dbName = conn.getMetaData().getDatabaseProductName();
+            isOracle = dbName.toLowerCase().contains("oracle");
+        }
     }
 
     /**
@@ -305,9 +310,9 @@ public class FailsafeExecutor {
         notifyPersisting(taskName, id, parameter, plannedExecutionTime);
         String sql = """
                 INSERT INTO FAILSAFE_TASK (ID, NAME, PARAMETER, PLANNED_EXECUTION_TIME, CREATED_DATE, QUEUE_NAME)
-                    SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP, ? FROM DUAL
+                    SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP, ? %s
                     WHERE NOT EXISTS (SELECT 1 FROM FAILSAFE_TASK WHERE ID = ?)
-                """;
+                """.formatted(isOracle ? "FROM DUAL" : "");
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, id);
             stmt.setString(2, taskName);
@@ -366,9 +371,9 @@ public class FailsafeExecutor {
     public boolean recordFailure(Connection tx, String taskId, String taskName, String parameter, Exception exception) throws SQLException {
         String sql = """
                 INSERT INTO FAILSAFE_TASK (ID, NAME, PARAMETER, CREATED_DATE, PLANNED_EXECUTION_TIME, FAIL_TIME, EXCEPTION_MESSAGE, STACK_TRACE)
-                    SELECT ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ? FROM DUAL
+                    SELECT ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ? %s
                     WHERE NOT EXISTS (SELECT 1 FROM FAILSAFE_TASK WHERE ID = ?)
-                """;
+                """.formatted(isOracle ? "FROM DUAL" : "");;
 
         try (PreparedStatement stmt = tx.prepareStatement(sql)) {
             LocalDateTime now = systemClock.now().truncatedTo(ChronoUnit.MICROS);
@@ -457,12 +462,13 @@ public class FailsafeExecutor {
                    AND QUEUE_NAME IS NULL
                    AND PLANNED_EXECUTION_TIME <= ?
                    AND NAME IN (%s) 
-                   AND ROWNUM <= ? 
+                   %s
                  ORDER BY PLANNED_EXECUTION_TIME
+                 %s
                  FOR UPDATE SKIP LOCKED
                 """;
 
-        sql = sql.formatted(processableTasksPlaceHolder);
+        sql = sql.formatted(processableTasksPlaceHolder, isOracle ? "AND ROWNUM <= ?" : "", isOracle ? "" : "LIMIT ?");
 
         String updateSql = "UPDATE FAILSAFE_TASK SET LOCK_TIME = ?, NODE_ID = ? WHERE ID = ?";
 
@@ -600,13 +606,13 @@ public class FailsafeExecutor {
         List<Task> tasks = new ArrayList<>();
 
         String sql = """
-                SELECT ID, NAME, PARAMETER 
+                SELECT *
                     FROM FAILSAFE_TASK
                 WHERE QUEUE_NAME = ?
                     AND FAIL_TIME IS NULL
                     AND PLANNED_EXECUTION_TIME <= ?
                     AND NAME IN (%s) 
-                ORDER BY PLANNED_EXECUTION_TIME
+                ORDER BY PLANNED_EXECUTION_TIME 
                 """;
 
         sql = sql.formatted(processableTasksPlaceHolder);
@@ -625,10 +631,7 @@ public class FailsafeExecutor {
 
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                String id = rs.getString("ID");
-                String name = rs.getString("NAME");
-                String parameter = rs.getString("PARAMETER");
-                tasks.add(new Task(id, name, parameter));
+                tasks.add(Task.from(rs));
             }
         }
         return tasks;

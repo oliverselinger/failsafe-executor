@@ -2,12 +2,8 @@ package os.failsafe.executor;
 
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import os.failsafe.executor.db.TestcontainersDbExtension;
 
@@ -39,9 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class FailsafeExecutorTest {
 
     protected final static boolean IS_DEBUG = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp");
@@ -799,8 +793,11 @@ public class FailsafeExecutorTest {
         String id3 = UUID.randomUUID().toString();
         try (Connection conn = dataSource.getConnection()) {
             failsafeExecutor.execute(conn, queueName, id1, taskName, "");
+            systemClock.timeTravelBy(Duration.ofMillis(10));
             failsafeExecutor.execute(conn, queueName, id2, taskName, "");
+            systemClock.timeTravelBy(Duration.ofMillis(10));
             failsafeExecutor.execute(conn, queueName, id3, taskName, "");
+            systemClock.timeTravelBy(Duration.ofMillis(10));
         }
 
         // Start queue and wait for execution

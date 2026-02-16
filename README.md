@@ -18,6 +18,7 @@ Persistent executor service for Java that was inspired by the need for a reliabl
 * **Lightweight**. Small code base.
 * **No dependencies**.
 * **No reflection**.
+* **Single file**.
 
 ## Getting started
 
@@ -102,7 +103,7 @@ As before, make sure your business logic is **idempotent**, since it gets execut
 ## Queue Tasks
 
 You can submit tasks to a **queue** for **serial execution**. Tasks are executed in the order they are queued, ensuring one task completes before the next starts. 
-You have to that register the queue once like tasks.
+You have to register the queue once.
 
 ```java
 // Enqueue tasks
