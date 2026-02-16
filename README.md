@@ -1,7 +1,6 @@
 # failsafe-executor
 
 [![](https://img.shields.io/maven-central/v/com.github.oliverselinger/failsafe-executor)]()
-[![](https://jitpack.io/v/oliverselinger/failsafe-executor.svg)](https://jitpack.io/#oliverselinger/failsafe-executor)
 [![Build and Test](https://github.com/oliverselinger/failsafe-executor/actions/workflows/build.yml/badge.svg)](https://github.com/oliverselinger/failsafe-executor/actions/workflows/build.yml)
 [![codecov](https://codecov.io/gh/oliverselinger/failsafe-executor/branch/master/graph/badge.svg)](https://codecov.io/gh/oliverselinger/failsafe-executor)
 
@@ -260,19 +259,6 @@ Yes.
 #### What Java versions are supported?
 
 Requires Java 17+.
-
-#### Are the artifacts available in other repositories than Maven Central Repository?
-
-Yes, in the JitPack repository. For usage add the JitPack repository to your build file:
-
-```xml
-<repositories>
-    <repository>
-        <id>jitpack.io</id>
-        <url>https://jitpack.io</url>
-    </repository>
-</repositories>
-```
 
 #### How to test against a specific database?
 

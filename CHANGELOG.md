@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Added `queue` mechanism**  
   A built‑in queuing API that allows tasks to be processed **serially** in the order submitted.
 
+### Removed
+- Jitpack build/release
+
 ## [2.2.2] - 2025-08-26
 ### Fixed
 - Jitpack build
