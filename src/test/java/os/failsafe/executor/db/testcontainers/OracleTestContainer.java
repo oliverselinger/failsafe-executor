@@ -14,7 +14,7 @@ import java.util.Map;
  */
 public class OracleTestContainer implements TestDatabaseContainer {
 
-    private final org.testcontainers.oracle.OracleContainer container;
+    private final OracleContainer container;
 
     public OracleTestContainer() {
         container = new OracleContainer("gvenzl/oracle-free:23.4-slim-faststart")
