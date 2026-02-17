@@ -4,7 +4,7 @@
 
     <groupId>com.github.oliverselinger</groupId>
     <artifactId>failsafe-executor</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.0.0</version>
 
     <name>failsafe-executor</name>
     <description>Persistent executor service for Java</description>
